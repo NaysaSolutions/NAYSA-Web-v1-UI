@@ -1915,10 +1915,11 @@ console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
       const qtyBalance = parseFormattedNumber(d.qtyBalance || poQty - prevRrQty);
       const unitCost = parseFormattedNumber(d.unitCost || 0);
 
-      const gross = parseFormattedNumber(d.grossAmount || qtyBalance * unitCost);
+      const gross = qtyBalance * unitCost;
       const discAmt = parseFormattedNumber(d.discAmount || 0);
-      const vatAmt = parseFormattedNumber(d.vatAmount || 0);
-      const net = parseFormattedNumber(d.netAmount || gross - discAmt);
+      const vatRate = d.vatCode ? parseFormattedNumber(vatRateMap?.[d.vatCode] ?? 0) : 0;
+      const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
+      const net = gross - vatAmt - discAmt;
 
       const rrStatus =
         getPOField(d, "rrStatus", "RR_STATUS", "RrStatus") ||
@@ -1984,12 +1985,13 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         currCode: d.currCode || summary.currCode || "PHP",
         unitCost: formatNumber(unitCost, 6),
 
-        amount: formatNumber(d.itemAmount || gross, 2),
+        amount: formatNumber(gross, 2),
+        itemAmount: formatNumber(gross, 2),
         grossAmount: formatNumber(gross, 2),
         discRate: formatNumber(d.discRate || 0, 2),
         discAmount: formatNumber(discAmt, 2),
         vatCode: d.vatCode || "",
-        vatRate: d.vatCode ? formatNumber(vatRateMap?.[d.vatCode] ?? 0, 2) : "",
+        vatRate: d.vatCode ? formatNumber(vatRate, 2) : "",
         vatAmount: formatNumber(vatAmt, 2),
         netAmount: formatNumber(net, 2),
 
@@ -4271,6 +4273,18 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         const sourceLots = getRowLotEntriesForSave(r);
         const firstLot = sourceLots[0] || {};
         const stableLotGroupId = getStableLotGroupId(r, index);
+        const rowQuantity = Math.max(parseFormattedNumber(r.rrQty || r.quantity || 0), 0);
+        const rowFreeQuantity = Math.max(parseFormattedNumber(r.freeQty || r.freeQuantity || 0), 0);
+        const rowUnitCost = Math.max(parseFormattedNumber(r.unitCost || 0), 0);
+        const rowCurrCode = r.currCode || state.currCode || "PHP";
+        const rowCurrRate = Number(r.currRate || state.currRate || 1) || 1;
+        const rowItemAmount = rowQuantity * rowUnitCost;
+        const rowVatRate = parseFormattedNumber(r.vatRate || 0);
+        const rowVatAmount = rowVatRate
+          ? rowItemAmount - rowItemAmount / (1 + rowVatRate / 100)
+          : 0;
+        const rowNetAmountFx = rowItemAmount - rowVatAmount;
+        const rowNetAmount = rowCurrCode !== "PHP" ? rowNetAmountFx * rowCurrRate : rowNetAmountFx;
 
         return {
           lnNo: String(index + 1),
@@ -4285,21 +4299,31 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           convertedUomCode: r.convertedUomCode || r.uomCode || "",
           convertedQuantity: parseFormattedNumber(r.convertedQuantity ?? r.rrQty ?? r.quantity ?? 0),
           conversionFactor: parseFormattedNumber(r.conversionFactor) || 1,
-          quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
+          quantity: rowQuantity,
           poNo: r.poNo || state.poNo || "",
           poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || r.lineNo || "",
           poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
           poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
-          freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
-          unitCost: parseFormattedNumber(r.unitCost || 0),
+          freeQuantity: rowFreeQuantity,
+          free_quantity: rowFreeQuantity,
+          unitCost: rowUnitCost,
+          unit_cost: rowUnitCost,
           unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
-          itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+          unit_cost_fx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
+          itemAmount: rowItemAmount,
+          item_amount: rowItemAmount,
           vatCode: r.vatCode || "",
-          vatAmount: parseFormattedNumber(r.vatAmount || 0),
-          currCode: r.currCode || state.currCode || "PHP",
-          currRate: Number(state.currRate || 1),
-          fxAmount: parseFormattedNumber(r.fxAmount || r.itemAmount || r.grossAmount || 0),
-          netAmount: parseFormattedNumber(r.netAmount || 0),
+          vat_code: r.vatCode || "",
+          vatAmount: rowVatAmount,
+          vat_amount: rowVatAmount,
+          currCode: rowCurrCode,
+          curr_code: rowCurrCode,
+          currRate: rowCurrRate,
+          curr_rate: rowCurrRate,
+          fxAmount: rowNetAmountFx,
+          fx_amount: rowNetAmountFx,
+          netAmount: rowNetAmount,
+          net_amount: rowNetAmount,
           whouseCode: r.whouseCode || r.whCode || state.WHCode || state.WHcode || "",
           locCode: r.locCode || r.LocCode || state.LocCode || "",
           lotNo: firstLot.lotNo || r.lotNo || "",

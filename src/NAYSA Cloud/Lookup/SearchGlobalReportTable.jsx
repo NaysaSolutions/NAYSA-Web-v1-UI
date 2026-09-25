@@ -78,6 +78,7 @@ const SearchGlobalReportTable = forwardRef(
       initialState,
       onStateChange,
       totalExemptions = ["rate", "percent", "ratio", "id", "code", "ROW_NO"],
+      totalOverrides = {},
       isLoading = false,
       isFetching = false,
       onRefresh,
@@ -544,8 +545,8 @@ const SearchGlobalReportTable = forwardRef(
     ]);
 
     const grandTotals = useMemo(
-      () => calculateAggregates(filteredData),
-      [filteredData, visibleCols],
+      () => ({ ...calculateAggregates(filteredData), ...totalOverrides }),
+      [filteredData, visibleCols, totalOverrides],
     );
 
     const hasGrandTotalColumns = useMemo(

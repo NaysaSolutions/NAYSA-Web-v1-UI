@@ -2114,10 +2114,11 @@ if (openRows.length === 0) {
       const qtyBalance = parseFormattedNumber(d.qtyBalance || poQty - prevRrQty);
       const unitCost = parseFormattedNumber(d.unitCost || 0);
 
-      const gross = parseFormattedNumber(d.grossAmount || qtyBalance * unitCost);
+      const gross = qtyBalance * unitCost;
       const discAmt = parseFormattedNumber(d.discAmount || 0);
-      const vatAmt = parseFormattedNumber(d.vatAmount || 0);
-      const net = parseFormattedNumber(d.netAmount || gross - discAmt);
+      const vatRate = d.vatCode ? parseFormattedNumber(vatRateMap?.[d.vatCode] ?? 0) : 0;
+      const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
+      const net = gross - vatAmt - discAmt;
       const rowCurrRate =
         parseFormattedNumber(
           getPOField(d, "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
@@ -2189,7 +2190,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         unitCost: formatNumber(unitCost, 6),
         unitCostPhp: formatNumber(unitCostPhp, decUcost),
 
-        amount: formatNumber(d.itemAmount || gross, 2),
+        amount: formatNumber(gross, 2),
+        itemAmount: formatNumber(gross, 2),
         grossAmount: formatNumber(gross, 2),
         amountPhp: formatNumber(grossPhp, 2),
         itemAmountPhp: formatNumber(grossPhp, 2),
@@ -2197,7 +2199,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         discRate: formatNumber(d.discRate || 0, 2),
         discAmount: formatNumber(discAmt, 2),
         vatCode: d.vatCode || "",
-        vatRate: d.vatCode ? formatNumber(vatRateMap?.[d.vatCode] ?? 0, 2) : "",
+        vatRate: d.vatCode ? formatNumber(vatRate, 2) : "",
         vatAmount: formatNumber(vatAmt, 2),
         netAmount: formatNumber(net, 2),
 
@@ -4493,6 +4495,20 @@ const recalcFGRRRow = (row) => {
         const sourceLots = getRowLotEntriesForSave(r);
         const firstLot = sourceLots[0] || {};
         const stableLotGroupId = getStableLotGroupId(r, index);
+        const rowQuantity = Math.max(parseFormattedNumber(r.rrQty || r.quantity || 0), 0);
+        const rowFreeQuantity = Math.max(parseFormattedNumber(r.freeQty || r.freeQuantity || 0), 0);
+        const rowUnitCost = Math.max(parseFormattedNumber(r.unitCost || 0), 0);
+        const rowCurrCode = r.currCode || state.currCode || "PHP";
+        const rowCurrRate = Number(r.currRate || state.currRate || 1) || 1;
+        const rowItemAmount = rowQuantity * rowUnitCost;
+        const rowVatRate = parseFormattedNumber(r.vatRate || 0);
+        const rowVatAmount = rowVatRate
+          ? rowItemAmount - rowItemAmount / (1 + rowVatRate / 100)
+          : 0;
+        const rowNetAmountFx = rowItemAmount - rowVatAmount;
+        const rowNetAmount = rowCurrCode !== "PHP" ? rowNetAmountFx * rowCurrRate : rowNetAmountFx;
+        const rowUnitCostPhp = rowCurrCode !== "PHP" ? rowUnitCost * rowCurrRate : rowUnitCost;
+        const rowItemAmountPhp = rowCurrCode !== "PHP" ? rowItemAmount * rowCurrRate : rowItemAmount;
 
         return {
           lnNo: String(index + 1),
@@ -4513,27 +4529,41 @@ const recalcFGRRRow = (row) => {
           ),
           conversionFactor: parseFormattedNumber(r.conversionFactor) || 1,
 
-          quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
-          freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
+          quantity: rowQuantity,
+          freeQuantity: rowFreeQuantity,
+          free_quantity: rowFreeQuantity,
 
           poNo: r.poNo || state.poNo || "",
           poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || "",
           poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
           poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
 
-          unitCost: parseFormattedNumber(r.unitCost || 0),
+          unitCost: rowUnitCost,
+          unit_cost: rowUnitCost,
           unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
-          unitCostPhp: parseFormattedNumber(r.unitCostPhp || 0),
-          itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
-          itemAmountPhp: parseFormattedNumber(r.itemAmountPhp || r.grossAmountPhp || 0),
+          unit_cost_fx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
+          unitCostPhp: rowUnitCostPhp,
+          unit_cost_php: rowUnitCostPhp,
+          itemAmount: rowItemAmount,
+          item_amount: rowItemAmount,
+          itemAmountPhp: rowItemAmountPhp,
+          item_amount_php: rowItemAmountPhp,
           vatCode: r.vatCode || "",
-          vatAmount: parseFormattedNumber(r.vatAmount || 0),
-          currCode: r.currCode || state.currCode || "PHP",
-          currRate: Number(r.currRate || state.currRate || 1),
-          fxAmount: parseFormattedNumber(r.fxAmount || r.itemAmount || r.grossAmount || 0),
-          netAmount: parseFormattedNumber(r.netAmount || 0),
-          grossAmountPhp: parseFormattedNumber(r.grossAmountPhp || r.amountPhp || 0),
-          pesoAmount: parseFormattedNumber(r.grossAmountPhp || r.amountPhp || 0),
+          vat_code: r.vatCode || "",
+          vatAmount: rowVatAmount,
+          vat_amount: rowVatAmount,
+          currCode: rowCurrCode,
+          curr_code: rowCurrCode,
+          currRate: rowCurrRate,
+          curr_rate: rowCurrRate,
+          fxAmount: rowNetAmountFx,
+          fx_amount: rowNetAmountFx,
+          netAmount: rowNetAmount,
+          net_amount: rowNetAmount,
+          grossAmountPhp: rowItemAmountPhp,
+          gross_amount_php: rowItemAmountPhp,
+          pesoAmount: rowItemAmountPhp,
+          peso_amount: rowItemAmountPhp,
 
           whouseCode: r.whouseCode || r.whCode || state.WHCode || state.WHcode || "",
           locCode: r.locCode || r.LocCode || state.LocCode || "",

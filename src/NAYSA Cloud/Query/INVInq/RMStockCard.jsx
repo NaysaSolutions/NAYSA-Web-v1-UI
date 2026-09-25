@@ -812,6 +812,10 @@ function RMStockCardQuery() {
           : toNumber(stockCardRows[stockCardRows.length - 1]?.runBal),
     };
   }, [stockCardQuery.data, stockCardRows]);
+  const stockCardTotalOverrides = useMemo(() => {
+    const lastRow = stockCardRows[stockCardRows.length - 1];
+    return lastRow?.stockVal === undefined ? {} : { amount: toNumber(lastRow.stockVal) };
+  }, [stockCardRows]);
 
   const stockStatusRows = safeArray(stockStatusQuery.data?.[stockStatusTab]);
 
@@ -1415,6 +1419,7 @@ function RMStockCardQuery() {
             rightActionLabel="View"
             onRowAction={viewStockCardDocument}
             tableHeight="2000px"
+            totalOverrides={stockCardTotalOverrides}
             totalExemptions={["rate", "percent", "ratio", "id", "code", "ROW_NO", "runbal", "unitcost", "wac", "stockval"]}
             // autoFillGrid
           />
