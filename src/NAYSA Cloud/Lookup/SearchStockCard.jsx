@@ -64,6 +64,12 @@ const MODULE_CONFIG = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const safeArray = (value) => (Array.isArray(value) ? value : []);
+const normalizeInventorySetup = (value, fallback = "FIFO") => {
+  const setup = String(value || "").trim().toUpperCase();
+  if (setup === "FEFO") return "FIFO";
+  if (setup === "FIFO" || setup === "WAC" || setup === "SPID") return setup;
+  return fallback;
+};
 const toNumber = (value) => Number(value || 0);
 const sumBy = (rows, key) => safeArray(rows).reduce((total, row) => total + toNumber(row?.[key]), 0);
 const fmt4 = (n) => toNumber(n).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
@@ -160,6 +166,11 @@ const MAIN_TABS = {
   ],
   WAC: [
     { key: "location", label: "Location Balance", icon: Boxes },
+    { key: "stockCard", label: "Stock Card", icon: ClipboardList },
+    { key: "stockStatus", label: "Stock Status", icon: FileBarChart2 },
+  ],
+  SPID: [
+    { key: "spid", label: "SPID Balance", icon: Package },
     { key: "stockCard", label: "Stock Card", icon: ClipboardList },
     { key: "stockStatus", label: "Stock Status", icon: FileBarChart2 },
   ],
@@ -328,9 +339,9 @@ function StockCardInquiryBody({ moduleKey }) {
   const defaultCutoffName = companyInfo?.cutoffName || "";
   const defaultReferenceDate = useGetCurrentDayV2();
   const defaultReportType = companyInfo?.stockStatusReportType || companyInfo?.reportType || "Daily";
-  const defaultInventorySetup = String(
+  const defaultInventorySetup = normalizeInventorySetup(
     getFirstDefined(companyInfo, config.inventorySetupKeys, companyInfo?.inventorySetup || companyInfo?.costingMethod || "FIFO")
-  ).toUpperCase();
+  );
 
   const defaultBalanceFilters = useMemo(
     () => ({
@@ -430,7 +441,7 @@ function StockCardInquiryBody({ moduleKey }) {
   }, [defaultInventorySetup, inventorySetup]);
 
   useEffect(() => {
-    setActiveMainTab(inventorySetup === "WAC" ? "location" : "fifo");
+    setActiveMainTab(inventorySetup === "SPID" ? "spid" : inventorySetup === "WAC" ? "location" : "fifo");
   }, [inventorySetup]);
 
   // ── Endpoints (module-aware via MODULE_CONFIG.base) ─────────────────────
@@ -448,10 +459,18 @@ function StockCardInquiryBody({ moduleKey }) {
   });
 
   useEffect(() => {
-    if (setupQuery.data?.inventorySetup) setInventorySetup(setupQuery.data.inventorySetup);
-  }, [setupQuery.data]);
+    if (setupQuery.data?.inventorySetup) {
+      const setup = normalizeInventorySetup(setupQuery.data.inventorySetup, defaultInventorySetup);
+      setInventorySetup(defaultInventorySetup === "SPID" && setup === "FIFO" ? defaultInventorySetup : setup);
+    }
+  }, [defaultInventorySetup, setupQuery.data]);
 
-  const balanceEndpoint = inventorySetup === "FIFO" ? `${config.base}/fifo-balance` : `${config.base}/location-balance`;
+  const balanceEndpoint =
+    inventorySetup === "SPID"
+      ? `${config.base}/spid-balance`
+      : inventorySetup === "FIFO"
+        ? `${config.base}/fifo-balance`
+        : `${config.base}/location-balance`;
 
   const balanceRequestParams = useMemo(
     () => ({
@@ -748,8 +767,8 @@ function StockCardInquiryBody({ moduleKey }) {
 
   // ── Tab renders ───────────────────────────────────────────────────────────
   const renderBalanceTab = () => {
-    const detailColumns = inventorySetup === "FIFO" ? fifoDetailColumnsForTable : locationDetailColumnsForTable;
-    const tabLabel = inventorySetup === "FIFO" ? "FIFO Balance" : "Location Balance";
+    const detailColumns = inventorySetup === "WAC" ? locationDetailColumnsForTable : fifoDetailColumnsForTable;
+    const tabLabel = inventorySetup === "SPID" ? "SPID Balance" : inventorySetup === "FIFO" ? "FIFO Balance" : "Location Balance";
 
     return (
       <div className="space-y-2">
@@ -900,7 +919,7 @@ function StockCardInquiryBody({ moduleKey }) {
       </div>
 
       <div className="p-1">
-        {(activeMainTab === "fifo" || activeMainTab === "location") && renderBalanceTab()}
+          {(activeMainTab === "fifo" || activeMainTab === "location" || activeMainTab === "spid") && renderBalanceTab()}
         {activeMainTab === "stockCard" && renderStockCardTab()}
         {activeMainTab === "stockStatus" && renderStockStatusTab()}
       </div>
