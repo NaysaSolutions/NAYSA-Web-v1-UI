@@ -537,7 +537,7 @@ const VSO = () => {
   }, []);
 
   const displayStatus = String(state.status || "OPEN").trim().toUpperCase();
-  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus) || Boolean(state.siNo);
 
   const getSalesVatRate = useCallback(() => {
     try {
@@ -1367,7 +1367,7 @@ const VSO = () => {
           isResetDisabled={false}
           isAttachDisabled={!state.documentID}
           isPrintDisabled={!state.documentID || displayStatus === "CANCELLED"}
-          isCancelDisabled={!state.documentID || displayStatus !== "OPEN"}
+          isCancelDisabled={!state.documentID || displayStatus !== "OPEN" || Boolean(state.siNo)}
         />
       </div>
 

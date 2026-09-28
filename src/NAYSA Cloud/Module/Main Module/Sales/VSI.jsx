@@ -193,6 +193,7 @@ const VSI = () => {
     siTranTypeOptions: [],
     siStatusOptions: [],
     refSiNo1: "",
+    vsoNo: "",
     refSiNo2: "",
     vdrId: "",
     vsoId: "",
@@ -240,7 +241,8 @@ const VSI = () => {
     showAttachModal:false,
     showSignatoryModal:false,
     showAllTranDocNo:false,
-    showOpenDRModal:false
+    showOpenDRModal:false,
+    showOpenVSOModal:false
    });
 
   const updateState = (updates) => {
@@ -295,6 +297,7 @@ const VSI = () => {
   siStatus,
   siStatusOptions = [],
   refSiNo1,
+  vsoNo,
   refSiNo2,
   vdrId,
   vsoId,
@@ -342,6 +345,7 @@ const VSI = () => {
   showSignatoryModal,
   showAllTranDocNo,
   showOpenDRModal,
+  showOpenVSOModal,
   showATCModal,
   showVatModal
 
@@ -370,6 +374,7 @@ const VSI = () => {
   const isPosted = ["FINALIZED", "POSTED"].includes(normalizedDisplayStatus);
   const isCancelled = normalizedDisplayStatus === "CANCELLED";
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "POSTED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);  
+  const isVdrLookupDisabled = isFormDisabled || (Boolean(documentID) && Boolean(vsoId));
   const isCwvatEnabled = String(companyInfo?.oeCWVat || "").toUpperCase() === "E";
   const isHeaderSiStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
   const totalSiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.siQuantity || 0) || 0),0);
@@ -1111,6 +1116,7 @@ useEffect(() => {
       currName:companyInfo?.currName||"",
       currRate:formatNumber(companyInfo?.currRate||1,6),
       refSiNo1: "",
+      vsoNo: "",
       refSiNo2: "",
       vdrId: "",
       vsoId: "",
@@ -1157,6 +1163,7 @@ useEffect(() => {
       showSlModal: false,
       showSalesRepModal: false,
       showOpenDRModal: false,
+      showOpenVSOModal: false,
     });
 
     updateTotalsDisplay(0, 0, 0, 0, 0, 0, 0);
@@ -1264,6 +1271,7 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       documentID: data.vsiId,
       documentNo: data.vsiNo,
       refSiNo1: data.drNo || "",
+      vsoNo: data.vsoNo || data.dt1?.[0]?.soNo || "",
       refSiNo2: data.refSiNo2 || "",
       vdrId: data.vdrId || "",
       vsoId: data.vsoId || "",
@@ -1441,7 +1449,7 @@ const handleActivityOption = async (action) => {
           netAmt: parseFormattedNumber(row.netAmount || row.netAmt || 0),
           soNo: row.vsoNo || row.soNo || "",
           soDate: row.vsoDate || row.soDate || null,
-          drLineno: row.drLineno || "1",
+          drLineno: row.vdrId || vdrId ? row.drLineno || "1" : null,
         })),
         dt2: glRows.map((entry, index) => ({
           recNo: String(index + 1),
@@ -1836,6 +1844,11 @@ const handleActivityOption = async (action) => {
   const selectedVatRow = getAllTopVatRow(selectedVatCode);
   const selectedAtcCode = selectedRecord.atcCode || atcCode || "";
   const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
+  const selectedSalesRepCode = selectedRecord.repCode || "";
+  const selectedSalesRepRow = selectedSalesRepCode ? await useTopSalesRepRow(selectedSalesRepCode) : null;
+  const selectedBillTermCode = selectedRecord.billTerm || "";
+  const selectedBillTermRow = selectedBillTermCode ? await useTopBillTermRow(selectedBillTermCode) : null;
+  if (selectedRecord.currCode) await handleSelectCurrency(selectedRecord.currCode);
 
   const row = calculateRowAmountsFromRates(createSIDetailRow({
     ...selectedRecord,
@@ -1854,21 +1867,28 @@ const handleActivityOption = async (action) => {
 
   updateState({
     refSiNo1: selectedRecord.drNo || "",
+    vsoNo: selectedRecord.vsoNo || "",
     vdrId: selectedRecord.vdrId || "",
     vsoId: selectedRecord.vsoId || "",
     veId: selectedRecord.veId || "",
     billToCustCode: selectedRecord.custCode || "",
     billToCustName: selectedRecord.custName || "",
-    salesRepCode: selectedRecord.repCode || "",
-    billtermCode: selectedRecord.billTerm || "",
-    billtermName: selectedRecord.billTerm || "",
+    contactPerson: selectedRecord.contactPerson || "",
+    salesRepCode: selectedSalesRepCode,
+    salesRepName: selectedSalesRepRow?.salesRepName || "",
+    billtermCode: selectedBillTermCode,
+    billtermName: selectedBillTermRow?.billtermName || selectedBillTermCode,
+    daysDue: selectedBillTermRow?.daysDue ?? "",
+    dueDate: selectedBillTermRow ? calculateDueDate(documentDate, selectedBillTermRow.daysDue) : "",
     remarks: selectedRecord.remarks || remarks || "",
     vatCode: selectedVatCode,
     vatName: selectedVatRow?.vatName || vatName || "",
     atcCode: selectedAtcCode,
     atcName: selectedAtcRow?.atcName || atcName || "",
     detailRows: [row],
+    detailRowsGL: [],
     showOpenDRModal: false,
+    showOpenVSOModal: false,
     openDRSI_Data_Summary: [],
     openDRSI_Col_Summary: [],
     insertAfterIndex: null,
@@ -1878,6 +1898,76 @@ const handleActivityOption = async (action) => {
 
   setTopTab("details");
 };
+
+  const handleInsertSelectedOpenVSO = async (payload) => {
+    const selectedRecord = Array.isArray(payload?.records) ? payload.records[0] : null;
+    if (!selectedRecord) {
+      updateState({ showOpenVSOModal: false });
+      return;
+    }
+
+    updateState({ isLoading: true, showSpinner: true });
+    try {
+    const selectedSalesRepCode = selectedRecord.repCode || "";
+    const selectedSalesRepRow = selectedSalesRepCode ? await useTopSalesRepRow(selectedSalesRepCode) : null;
+    const selectedBillTermCode = selectedRecord.billTerm || "";
+    const selectedBillTermRow = selectedBillTermCode ? await useTopBillTermRow(selectedBillTermCode) : null;
+    const selectedVatCode = selectedRecord.vatCode || "";
+    const selectedAtcCode = selectedRecord.atcCode || "";
+    const selectedVatRow = getAllTopVatRow(selectedVatCode);
+    const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
+    if (selectedRecord.currCode) await handleSelectCurrency(selectedRecord.currCode);
+
+    const row = calculateRowAmountsFromRates(createSIDetailRow({
+      ...selectedRecord,
+      soId: selectedRecord.vsoId || "",
+      groupId: selectedRecord.vsoId || "",
+      drId: "",
+      drNo: "",
+      siQuantity: formatNumber(1, quantityDecimals),
+      quantityPicked: formatNumber(0, quantityDecimals),
+      unitPrice: formatNumber(selectedRecord.sellingPrice || 0, sellingPriceDecimals),
+      vatCode: selectedVatCode,
+      vatRate: formatNumber(selectedRecord.vatRate ?? selectedVatRow?.vatRate ?? 0),
+      vatAmount: formatNumber(selectedRecord.vatAmt || 0),
+      totDiscount: formatNumber(selectedRecord.discAmt || 0),
+    }));
+
+    updateState({
+      vsoId: selectedRecord.vsoId || "",
+      vsoNo: selectedRecord.vsoNo || "",
+      vdrId: "",
+      veId: selectedRecord.veId || "",
+      refSiNo1: "",
+      billToCustCode: selectedRecord.custCode || "",
+      billToCustName: selectedRecord.custName || "",
+      contactPerson: selectedRecord.contactPerson || "",
+      salesRepCode: selectedSalesRepCode,
+      salesRepName: selectedSalesRepRow?.salesRepName || "",
+      billtermCode: selectedBillTermCode,
+      billtermName: selectedBillTermRow?.billtermName || selectedBillTermCode,
+      daysDue: selectedBillTermRow?.daysDue ?? "",
+      dueDate: selectedBillTermRow ? calculateDueDate(documentDate, selectedBillTermRow.daysDue) : "",
+      vatCode: selectedVatCode,
+      vatName: selectedVatRow?.vatName || "",
+      atcCode: selectedAtcCode,
+      atcName: selectedAtcRow?.atcName || "",
+      remarks: selectedRecord.remarks || "",
+      detailRows: [row],
+      detailRowsGL: [],
+      showOpenVSOModal: false,
+      openDRSI_Data_Summary: [],
+      openDRSI_Col_Summary: [],
+    });
+    updateTotals([row], selectedAtcCode, "");
+    setTopTab("details");
+    } catch (error) {
+      console.error("Failed to select VSO:", error);
+      useSwalErrorAlert("Select VSO", getApiErrorMessage(error));
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
 
 
 
@@ -2685,6 +2775,7 @@ const handlePrint = async () => {
   };
 
   const handleOpenDRLookup = async (overrides = {}) => {
+    if (isVdrLookupDisabled) return;
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
     const fieldsToCheck = { "Header : Branch": lookupBranchCode };
 
@@ -2695,7 +2786,7 @@ const handlePrint = async () => {
       updateState({ isLoading: true, showSpinner: true });
 
       const endpoint = "getVSI_OpenVDR";
-      const payload = { branchCode: lookupBranchCode };
+      const payload = { branchCode: lookupBranchCode, vsoId: vsoId || "" };
       const response = await fetchData(endpoint, payload);
 
       const drRows = response?.data?.[0]?.result
@@ -2705,7 +2796,9 @@ const handlePrint = async () => {
       if (!drRows.length) {
         useSwalErrorAlert(
           "Open DR",
-          "There are no posted Vehicle Delivery Receipt records available for invoicing in this branch."
+          vsoId
+            ? "There is no posted, uninvoiced Vehicle Delivery Receipt for the selected VSO."
+            : "There are no posted Vehicle Delivery Receipt records available for invoicing in this branch."
         );
         return;
       }
@@ -2723,6 +2816,36 @@ const handlePrint = async () => {
         openDRSI_Data_Summary: [],
         openDRSI_Col_Summary: [],
       });
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  const handleOpenVSOLookup = async () => {
+    const lookupBranchCode = String(branchCode ?? "").trim();
+    const isValid = await useSwalvalidateRequiredFields({ "Header : Branch": lookupBranchCode }, "Open VSO Lookup");
+    if (!isValid) return;
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+      const response = await fetchData("getVSI_OpenVSO", { branchCode: lookupBranchCode });
+      const rows = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
+        : [];
+      if (!rows.length) {
+        useSwalErrorAlert("Open VSO", "There are no uninvoiced Vehicle Sales Orders in this branch.");
+        return;
+      }
+
+      const columns = await selectedHSColConfig("getVSI_OpenVSO");
+      updateState({
+        openDRSI_Data_Summary: rows,
+        openDRSI_Col_Summary: columns,
+        showOpenVSOModal: true,
+      });
+    } catch (error) {
+      console.error("Failed to fetch Open VSO:", error);
+      useSwalErrorAlert("Open VSO", getApiErrorMessage(error));
     } finally {
       updateState({ isLoading: false, showSpinner: false });
     }
@@ -2768,6 +2891,7 @@ const handleCopy = async () => {
       siStatus: "O",
       documentDate: nextDocumentDate,
       refSiNo1: "",
+      vsoNo: "",
       refSiNo2: "",
       noReprints: "0",
       detailRows: copiedDetailRows,
@@ -4583,14 +4707,24 @@ return (
             </div>
 
             <FieldRenderer
-              id="vdrNo"
-              label="VDR No."
-              required
+              id="vsoNo"
+              label="VSO No."
               type="lookup"
-              value={refSiNo1 || ""}
+              value={vsoNo || ""}
               disabled={isFormDisabled || isFetchDisabled}
               readOnly
               lookupDisabled={isFormDisabled || isFetchDisabled}
+              onLookup={handleOpenVSOLookup}
+            />
+
+            <FieldRenderer
+              id="vdrNo"
+              label="VDR No."
+              type="lookup"
+              value={refSiNo1 || ""}
+              disabled={isVdrLookupDisabled}
+              readOnly
+              lookupDisabled={isVdrLookupDisabled}
               onLookup={() => handleOpenDRLookup()}
             />
 
@@ -5276,6 +5410,19 @@ return (
             openDRSI_Col_Summary: [],
           })
         }
+      />
+    )}
+
+    {showOpenVSOModal && (
+      <GlobalLookupModalv1
+        isOpen={showOpenVSOModal}
+        title="Open Vehicle Sales Order Summary"
+        endpoint={openDRSI_Col_Summary}
+        data={openDRSI_Data_Summary}
+        btnCaption="Get Selected VSO"
+        singleSelect
+        onClose={handleInsertSelectedOpenVSO}
+        onCancel={() => updateState({ showOpenVSOModal: false, openDRSI_Data_Summary: [], openDRSI_Col_Summary: [] })}
       />
     )}
 
