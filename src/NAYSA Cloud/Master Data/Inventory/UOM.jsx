@@ -597,7 +597,7 @@ const UOM = () => {
                 maxLength={getMax("UOM_NAME") || 100}
               />
               <FieldRenderer
-                label="Active?"
+                label="Active"
                 type="select"
                 value={form.active}
                 options={[
