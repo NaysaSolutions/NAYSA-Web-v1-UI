@@ -395,7 +395,7 @@ const BudgetInquiry = () => {
 
       <div className="mt-32 px-0 sm:mt-24">
         <div className="flex items-stretch gap-3">
-          <aside className={`hidden transition-all duration-200 lg:block ${hideNav ? "w-[88px]" : "w-[290px]"}`}>
+          <aside className={`hidden transition-all duration-200 lg:block ${hideNav ? "w-[120px]" : "w-[290px]"}`}>
             <div className="global-tran-tab-div-ui h-full !m-0 !p-4">
               <div className="h-full overflow-hidden rounded-2xl border bg-white shadow-sm">
                 <div className="border-b px-4 py-4">
@@ -551,14 +551,14 @@ const MainTabList = ({ activeMainTab, onSelect, collapsed }) => (
           type="button"
           title={collapsed ? tab.label : undefined}
           onClick={() => onSelect(key)}
-          className={`w-full rounded-xl border text-left transition ${
+          className={`group w-full rounded-xl border text-left transition ${
             activeMainTab === key
               ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
               : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-          } ${collapsed ? "flex justify-center px-2 py-3" : "flex items-center px-3 py-2.5"}`}
+          } ${collapsed ? "flex flex-col items-center justify-center gap-1 px-1 py-2" : "flex items-center px-3 py-2.5"}`}
         >
-          <FontAwesomeIcon icon={tab.icon} className={`${collapsed ? "" : "mr-2"} text-[13px]`} />
-          {!collapsed && <span className="truncate text-xs font-medium sm:text-sm">{tab.label}</span>}
+          <FontAwesomeIcon icon={tab.icon} className={`${collapsed ? "" : "mr-2"} text-[13px] transition-transform duration-200 group-hover:scale-125`} />
+          <span className={collapsed ? "w-full text-center text-[9px] font-medium leading-tight" : "truncate text-xs font-medium sm:text-sm"}>{tab.label}</span>
         </button>
       </li>
     ))}

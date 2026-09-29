@@ -236,13 +236,20 @@ const COLUMNS_BY_PAGE = {
   performance: PERFORMANCE_COLUMNS,
 };
 
+const formatLocalDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const getDefaultStartDate = () => {
   const dt = new Date();
   dt.setDate(dt.getDate() - 30);
-  return dt.toISOString().slice(0, 10);
+  return formatLocalDate(dt);
 };
 
-const getDefaultEndDate = () => new Date().toISOString().slice(0, 10);
+const getDefaultEndDate = () => formatLocalDate(new Date());
 
 const normalizeDate = (value) => (value ? String(value).slice(0, 10) : "");
 const toNumber = (value) => {
@@ -595,15 +602,17 @@ const SalesTracker = () => {
 
       <div className="mb-6 mt-[8.25rem] px-0 sm:mt-[6.25rem]">
         <div className="flex gap-4">
-          <aside className={`hidden shrink-0 transition-all duration-200 lg:block ${hideNav ? "w-[68px]" : "w-[290px]"}`}>
-            <div className={`global-tran-tab-div-ui h-full !m-0 ${hideNav ? "!p-1.5" : "!p-4"}`}>
+          <aside className={`hidden shrink-0 transition-all duration-200 lg:block ${hideNav ? "w-[120px]" : "w-[290px]"}`}>
+            <div className={`global-tran-tab-div-ui h-full !m-0 ${hideNav ? "!p-3" : "!p-4"}`}>
               <div className={`h-full overflow-hidden border bg-white shadow-sm ${hideNav ? "rounded-xl" : "rounded-2xl"}`}>
-                {!hideNav && (
-                  <div className="border-b px-4 py-4">
+                <div className="border-b px-4 py-4">
+                  {hideNav ? (
+                    <div className="text-center text-[11px] font-semibold text-blue-700">SO</div>
+                  ) : (
                     <div className="text-sm font-semibold text-gray-800">Sales Query</div>
-                  </div>
-                )}
-                <div className={hideNav ? "p-1.5" : "p-3"}>
+                  )}
+                </div>
+                <div className={hideNav ? "p-2" : "p-3"}>
                   <SalesQueryNav activePage={activePage} collapsed={hideNav} onSelect={handleNavSelect} />
                 </div>
               </div>
@@ -716,22 +725,20 @@ const SalesQueryNav = ({ activePage, collapsed, onSelect }) => (
           type="button"
           onClick={() => onSelect(item.key)}
           title={collapsed ? item.label : undefined}
-          className={`w-full border text-left transition ${
+          className={`group w-full border text-left transition ${
             activePage === item.key
               ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
               : collapsed
                 ? "border-transparent bg-transparent text-gray-700 hover:border-slate-200 hover:bg-slate-50"
                 : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-          } ${collapsed ? "flex h-11 items-center justify-center rounded-lg p-1" : "flex items-center gap-3 rounded-xl px-3 py-2.5"}`}
+          } ${collapsed ? "flex flex-col items-center justify-center gap-1 rounded-lg px-1 py-2" : "flex items-center gap-3 rounded-xl px-3 py-2.5"}`}
         >
-          <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activePage === item.key ? "bg-blue-100 text-blue-700" : collapsed ? "bg-transparent text-slate-500" : "bg-slate-100 text-slate-500"}`}>
+          <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110 ${activePage === item.key ? "bg-blue-100 text-blue-700" : collapsed ? "bg-transparent text-slate-500" : "bg-slate-100 text-slate-500"}`}>
             <FontAwesomeIcon icon={item.icon} />
           </span>
-          {!collapsed && (
-            <span className="min-w-0">
-              <span className="block truncate text-xs font-bold">{item.label}</span>
-            </span>
-          )}
+          <span className={collapsed ? "w-full text-center text-[9px] font-medium leading-tight" : "min-w-0"}>
+            <span className={collapsed ? "block" : "block truncate text-xs font-bold"}>{item.label}</span>
+          </span>
         </button>
       </li>
     ))}

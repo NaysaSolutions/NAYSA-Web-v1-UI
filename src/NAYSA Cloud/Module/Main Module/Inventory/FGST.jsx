@@ -36,7 +36,7 @@ import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.js
 import ReactDOM from "react-dom";
 
 // Configuration
-import { postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import { apiClient, postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -674,6 +674,7 @@ const FGST = () => {
 
   // Helper Functions for strict Branch Flow identification
   const isInterBranch = (tranTypeCode = selectedTranType, list = tranTypes) => {
+    if (["FGST06", "IB"].includes(normalizeCode(tranTypeCode))) return true;
     const row = (list || []).find(
       (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
     );
@@ -691,6 +692,7 @@ const FGST = () => {
     tranTypeCode = selectedTranType,
     list = tranTypes,
   ) => {
+    if (["FGST05", "INB"].includes(normalizeCode(tranTypeCode))) return true;
     const row = (list || []).find(
       (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
     );
@@ -1024,6 +1026,42 @@ const FGST = () => {
     loadTranTypes();
   }, [docType, refsLoaded]);
 
+  // Some transaction responses contain the branch code without its name.
+  // Resolve the display name from the same reference used by the branch lookup.
+  useEffect(() => {
+    const code = String(toBranchCode || "").trim();
+    if (!code || String(toBranchName || "").trim()) return;
+    let cancelled = false;
+
+    const loadBranchName = async () => {
+      try {
+        const { data: result } = await apiClient.get("/lookupBranch", {
+          params: {
+            PARAMS: JSON.stringify({ search: "", page: 1, pageSize: 5000 }),
+          },
+        });
+        const raw = result?.data?.[0]?.result || "[]";
+        const branches = Array.isArray(raw) ? raw : JSON.parse(raw);
+        const branch = branches.find(
+          (row) => String(row.branchCode || "").trim().toUpperCase() === code.toUpperCase(),
+        );
+        const name = String(branch?.branchName || "").trim();
+        if (cancelled || !name) return;
+        setState((prev) =>
+          String(prev.toBranchCode || "").trim() === code &&
+          !String(prev.toBranchName || "").trim()
+            ? { ...prev, toBranchName: name }
+            : prev,
+        );
+      } catch (error) {
+        console.error("Unable to load To Branch name:", error);
+      }
+    };
+
+    loadBranchName();
+    return () => { cancelled = true; };
+  }, [toBranchCode, toBranchName]);
+
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "F1") {
@@ -1035,7 +1073,7 @@ const FGST = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const handleReset = () => {
+  const handleReset = (preserveToBranch = false) => {
     clearFgstDetailSorting();
     clearFgstGlSorting();
 
@@ -1049,8 +1087,8 @@ const FGST = () => {
       fromWhName: "",
       toWhCode: "",
       toWhName: "",
-      toBranchCode: "",
-      toBranchName: "",
+      toBranchCode: preserveToBranch ? toBranchCode : "",
+      toBranchName: preserveToBranch ? toBranchName : "",
       refDocNo1: "",
       refDocNo2: "",
       remarks: "",
@@ -1061,7 +1099,9 @@ const FGST = () => {
       detailRowsGL: [],
       documentStatus: "",
       itemSingleSelect: false,
-      selectedTranType: getDefaultTranType(),
+      selectedTranType: preserveToBranch
+        ? selectedTranType
+        : getDefaultTranType(),
 
       activeTab: "basic",
       GLactiveTab: "invoice",
@@ -1141,7 +1181,12 @@ const FGST = () => {
     });
   };
 
-  const fetchTranData = async (documentNo, branchCode, direction = "") => {
+  const fetchTranData = async (
+    documentNo,
+    branchCode,
+    direction = "",
+    savedHeader = null,
+  ) => {
     const resetState = () => {
       updateState({
         documentNo: "",
@@ -1203,8 +1248,17 @@ const FGST = () => {
         documentDate: useformatToDatev2(data.fgstDate),
         selectedTranType:
           data.tranType || data.tran_type || getDefaultTranType(),
-        toBranchCode: data.toBranchCode || data.to_branch_code || "",
-        toBranchName: data.toBranchName || data.to_branch_name || "",
+        toBranchCode:
+          data.toBranchCode ||
+          data.to_branch_code ||
+          savedHeader?.toBranchCode ||
+          "",
+
+        toBranchName:
+          String(data.toBranchName || "").trim() ||
+          String(data.to_branch_name || "").trim() ||
+          String(savedHeader?.toBranchName || "").trim() ||
+          "",
         fromWhCode: data.frmwhouseCode || data.fromWhCode || data.from_wh || "",
         fromWhName:
           data.frmwhouseName || data.fromWhName || data.from_wh_name || "",
@@ -1248,6 +1302,13 @@ const FGST = () => {
     }
 
     if (action === "Upsert") {
+      if (requiresBranchSelection() && !String(toBranchCode || "").trim()) {
+        useSwalErrorAlert(
+          "Validation Error",
+          `${isIntransitToBranch() ? "From" : "To"} Branch is required.`,
+        );
+        return;
+      }
       for (let i = 0; i < detailRows.length; i++) {
         const row = detailRows[i];
         if (row.whouseCode && !row.locCode?.trim()) {
@@ -1416,7 +1477,10 @@ const FGST = () => {
             getFGSTSaveResult(response);
 
           if (responseDocNo) {
-            await fetchTranData(responseDocNo, branchCode);
+            await fetchTranData(responseDocNo, branchCode, "", {
+              toBranchCode: savePayload.toBranchCode,
+              toBranchName: savePayload.toBranchName,
+            });
           }
 
           const isZero = Number(noReprints) === 0;
@@ -1424,7 +1488,7 @@ const FGST = () => {
             ? () => updateState({ showSignatoryModal: true })
             : () => handleSaveAndPrint(responseDocId);
 
-          useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+          useSwalshowSaveSuccessDialog(() => handleReset(true), onSaveAndPrint);
         }
 
         const { documentNo: savedDocumentNo, documentID: savedDocumentID } =
