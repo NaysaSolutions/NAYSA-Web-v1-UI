@@ -1418,8 +1418,8 @@ const VSO = () => {
                   <div className="mb-3 text-xs font-semibold text-slate-700 dark:text-slate-200">Customer Registration</div>
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                   <Field label="Birth Date" type="date" value={state.custBirthdate} max={yesterdayISO()} required disabled={isFormDisabled} onChange={(v) => updateState({ custBirthdate: v && v >= todayISO() ? yesterdayISO() : v })} />
-                  <Field label="LTO Client ID" value={state.custLtoclid} disabled={isFormDisabled} onChange={(v) => updateState({ custLtoclid: v })} />
-                  <Field label="LTO Business ID" value={state.custLtobussid} disabled={isFormDisabled} onChange={(v) => updateState({ custLtobussid: v })} />
+                  <Field label="LTO Client ID" value={state.custLtoclid} disabled={isFormDisabled} required onChange={(v) => updateState({ custLtoclid: v })} />
+                  <Field label="LTO Business ID" value={state.custLtobussid} disabled={isFormDisabled} required onChange={(v) => updateState({ custLtobussid: v })} />
                   </div>
                 </section>
                 <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
@@ -1494,7 +1494,7 @@ const VSO = () => {
                       value: option.DROPDOWN_CODE,
                     }))}
                   />
-                  <Field id="sellerVendname" label="Actual Seller" type="lookup" value={state.sellerVendname} required disabled={isFormDisabled} readOnly onLookup={() => updateState({ payeeLookupOpen: true })} />
+                  <Field id="sellerVendname" label="Actual Seller" type="lookup" value={state.sellerVendname} disabled={isFormDisabled} readOnly onLookup={() => updateState({ payeeLookupOpen: true })} />
                   <Field id="billTermName" label="Billing Term" type="lookup" value={state.billTermName} disabled={isFormDisabled} readOnly onLookup={() => updateState({ billTermLookupOpen: true })} />
                   <Field label="Mode of Payment" value={state.modePayment} disabled={isFormDisabled} onChange={(v) => updateState({ modePayment: v })} />
                   </div>

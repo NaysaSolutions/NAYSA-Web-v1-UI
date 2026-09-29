@@ -17,7 +17,7 @@ import {
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
 
-const ITEM_LIST_ENDPOINT = "/rmMast";
+const ITEM_LIST_ENDPOINT = "/fgMast";
 const BRAND_LIST_ENDPOINT = "/brand";
 const ITEM_BRAND_MATCHING_ENDPOINT = "/itemBrandMatrix";
 const ITEM_BRAND_MATCHING_UPSERT_ENDPOINT = "/upsertItemBrandMatrix";
@@ -78,7 +78,7 @@ const normalizeItemRow = (row, index) => {
     pick(row, ["itemCode", "ITEM_CODE", "item_code", "code", "CODE"])
   ).trim();
   const itemName = String(
-    pick(row, ["itemName", "itemDesc", "ITEM_NAME", "item_name", "rmName", "RM_NAME"])
+    pick(row, ["itemName", "itemDesc", "ITEM_NAME", "item_name", "fgName", "FG_NAME"])
   ).trim();
   const categoryCode = String(
     pick(row, ["categoryCode", "categCode", "CATEG_CODE", "category_code"])
@@ -470,11 +470,11 @@ export default function ItemBrandMatrix({ embedded = false }) {
         <div className="flex min-w-0 w-full xl:w-[50%]">
           <div className="flex h-full w-full flex-col rounded-xl border border-gray-100 bg-white p-4 shadow-lg dark:border-gray-700 dark:bg-gray-800">
             <div className="mb-3 text-sm font-semibold text-blue-700">
-              RM Inventory Item Master Data
+              Finished Goods Master Data
             </div>
 
             <SearchGlobalReferenceTable
-              docType="RM Inventory Item Master Data"
+              docType="Finished Goods Master Data"
               columns={itemColumns}
               data={itemRows}
               isLoading={itemQuery.isLoading}

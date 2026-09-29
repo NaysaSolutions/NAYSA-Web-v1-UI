@@ -140,7 +140,7 @@ const pickDocAndBranch = (row) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Finalize MS Receiving Report"
+          title="Finalize FG Receiving Report"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
