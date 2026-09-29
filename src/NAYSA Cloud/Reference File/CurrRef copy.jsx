@@ -62,6 +62,7 @@ const CurrencyCode = ({ onSelect }) => {
   const [currCode, setCurrCode] = useState("");
   const [currName, setCurrName] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const [activeRow, setActiveRow] = useState(null); // Track the active row for highlighting
 
   // Refs
   const guideRef = useRef(null);
@@ -204,6 +205,7 @@ const CurrencyCode = ({ onSelect }) => {
     // Set form fields with the selected currency data
     setCurrCode(curr.CURR_CODE ?? curr.currCode ?? "");
     setCurrName(curr.CURR_NAME ?? curr.currName ?? "");
+    setActiveRow(curr.active ?? curr.ACTIVE ?? "Y");
     setEditingId(getId(curr));
 
     // Call the onSelect callback if provided
