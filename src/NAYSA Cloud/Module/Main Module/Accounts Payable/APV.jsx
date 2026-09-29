@@ -2837,6 +2837,14 @@ const APV = () => {
   };
 
 
+  const handleDeleteRowGL = (index) => {
+    if (isFormDisabled) return;
+    setState((prev) => ({
+      ...prev,
+      detailRowsGL: prev.detailRowsGL.filter((_, rowIndex) => rowIndex !== index),
+    }));
+  };
+
   const handleDeleteRow = async (index) => {
     const updatedRows = [...detailRows];
     updatedRows.splice(index, 1);
@@ -2922,6 +2930,8 @@ const APV = () => {
         ...row,
         poNo: "",
         siNo: "",
+        rrNo: "",
+        invType: "",
         siDate: useGetCurrentDayV2(),
         sourceId: "",
         apAdvId: "",
@@ -5826,7 +5836,7 @@ const APV = () => {
                               <FontAwesomeIcon icon={faPlus} />
                             </button>
 
-                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(index)}>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(index)}>
                               <FontAwesomeIcon icon={faTrashAlt} />
                             </button>
                           </div>
