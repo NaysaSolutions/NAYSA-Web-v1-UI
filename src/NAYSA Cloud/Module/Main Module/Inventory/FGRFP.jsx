@@ -40,6 +40,7 @@ import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
@@ -330,6 +331,7 @@ const isViewDocumentUrl = isViewDocument;
     locationLookupOpen: false,
     accountModalSource: null,
     showQstatModal: false,
+    brandLookupOpen: false,
 
     rmLookupModalOpen: false,
     tblFieldArray: [],
@@ -457,6 +459,7 @@ groupId,
     showSignatoryModal,
     showPostModal,
     showQstatModal,
+    brandLookupOpen,
     openPODataSummary,
     openPORRColSummary,
     openPORRColDetail,
@@ -516,6 +519,7 @@ rrQty: "",
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Description", width: 300 },
+    { key: "brandCode", label: "Brand", width: 150 },
     { key: "uomCode", label: "UOM", width: 80 },
     { key: "rrQty", label: "Quantity", width: 130 },
     { key: "unitCost", label: "Unit Cost", width: 120 },
@@ -1747,6 +1751,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         itemCode: d.itemCode || "",
         itemName: d.itemName || "",
+        brandCode: d.brandCode || d.brand_code || "",
+        brandName: d.brandName || d.brand_name || "",
         itermpecs: d.itermpecs || "",
 
         uomCode: d.uomCode || "",
@@ -1825,6 +1831,10 @@ if (shouldAutoGenerateGLOnSave) {
     invType: r.invType || "rm",
     itemCode: r.itemCode || "",
     itemName: r.itemName || "",
+    brandCode: r.brandCode || "",
+    brand_code: r.brandCode || "",
+    brandName: r.brandName || "",
+    brand_name: r.brandName || "",
     uomCode: r.uomCode || "",
     quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
     rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
@@ -2422,6 +2432,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           poNo: r.poNo || parsed.poNo || "",
           itemCode: r.itemCode || r.itemNo || "",
           itemName: r.itemName || r.itemDesc || "",
+          brandCode: r.brandCode || r.brand_code || "",
+          brandName: r.brandName || r.brand_name || "",
           itermpecs: r.itermpecs || r.itermpec || "",
 
           rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
@@ -2710,6 +2722,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         poStatus: status || "",
         itemCode: selectedItem.itemCode || "",
         itemName: selectedItem.itemName || "",
+        brandCode: "",
+        brandName: "",
         uomCode: getSelectedUomCode(selectedItem),
         qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
         qtyAlloc: "0.000000",
@@ -2833,6 +2847,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         acctName: defaultFGRFPAccount.name || currentRow.acctName || "",
         itemCode: selectedItem.itemCode || "",
         itemName: selectedItem.itemName || "",
+        brandCode: "",
+        brandName: "",
         uomCode: getSelectedUomCode(selectedItem),
         qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
         dateNeeded: currentRow.dateNeeded || today,
@@ -2870,6 +2886,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       poStatus: status || "",
       itemCode: selectedItem.itemCode || "",
       itemName: selectedItem.itemName || "",
+      brandCode: "",
+      brandName: "",
       uomCode: getSelectedUomCode(selectedItem),
       qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
       qtyAlloc: "0.000000",
@@ -2976,6 +2994,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       poStatus: status || "",
       itemCode: "",
       itemName: "",
+      brandCode: "",
+      brandName: "",
       uomCode: "",
       qtyOnHand: "0.000000",
       qtyAlloc: "0.000000",
@@ -3217,6 +3237,25 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     updateState({ showQstatModal: false, accountModalSource: "" });
   };
+
+  const handleCloseBrandLookup = (selectedBrand) => {
+    const rowIndex = selectedRowIndex;
+    updateState({ brandLookupOpen: false, selectedRowIndex: null });
+
+    if (!selectedBrand || rowIndex === null || rowIndex === undefined) return;
+
+    const rows = [...(detailRowsRef.current || detailRows || [])];
+    if (!rows[rowIndex]) return;
+
+    rows[rowIndex] = {
+      ...rows[rowIndex],
+      brandCode: selectedBrand.brandCode || "",
+      brandName: selectedBrand.brandName || "",
+    };
+
+    detailRowsRef.current = rows;
+    updateState({ detailRows: rows });
+  };
 
   const getLotBreakdownQty = (rows = lotEntryRows) =>
     rows.reduce(
@@ -3846,6 +3885,10 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           invType: r.invType || "rm",
           itemCode: r.itemCode || "",
           itemName: r.itemName || "",
+          brandCode: r.brandCode || "",
+          brand_code: r.brandCode || "",
+          brandName: r.brandName || "",
+          brand_name: r.brandName || "",
           uomCode: r.uomCode || "",
           quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
           rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
@@ -4995,6 +5038,27 @@ const handleClosePayeeLookup = async (row) => {
       itemName: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("itemName", { readOnly: isFormDisabled })}
+        </td>
+      ),
+      brandCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex iterm-center">
+            <input
+              type="text"
+              id={`brandCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+              value={row.brandCode || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {lookupIcon(() => {
+              if (!row.itemCode) {
+                Swal.fire({ icon: "info", title: "Brand", text: "Select an FG item first." });
+                return;
+              }
+              updateState({ selectedRowIndex: index, brandLookupOpen: true });
+            })}
+          </div>
         </td>
       ),
       itermpecs: () => (
@@ -6589,7 +6653,15 @@ const handleClosePayeeLookup = async (row) => {
         />
       )}
 
-      {state.specsModalOpen && (
+      {brandLookupOpen && (
+        <ItemBrandMatrixLookupModal
+          isOpen={brandLookupOpen}
+          itemCode={detailRows?.[selectedRowIndex]?.itemCode || ""}
+          onClose={handleCloseBrandLookup}
+        />
+      )}
+
+      {state.specsModalOpen && (
         <div className="fixed inset-0 z-[9999] flex iterm-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700">

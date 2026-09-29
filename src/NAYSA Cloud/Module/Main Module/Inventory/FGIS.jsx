@@ -31,6 +31,7 @@ import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.jsx";
 
 // Configuration
 import { postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
@@ -216,6 +217,7 @@ useEffect(() => {
     locationLookupOpen: false,
     drAcctLookupOpen: false,
     drAcctRowIndex: null,
+    brandLookupOpen: false,
 
     // RC Lookup modal (table)
     rcLookupModalOpen: false,
@@ -328,6 +330,7 @@ useEffect(() => {
     showRcModal,
     showSlModal,
     accountModalSource,
+    brandLookupOpen,
 
     // RC Lookup
     rcLookupModalOpen,
@@ -886,6 +889,8 @@ useEffect(() => {
           lnNo: item.lnNo ?? item.lineNo ?? item.line_no ?? index + 1,
           itemCode: item.itemCode || item.item_code || "",
           itemName: item.itemName || item.itemDesc || item.item_name || "",
+          brandCode: item.brandCode || item.brand_code || "",
+          brandName: item.brandName || item.brand_name || "",
           categCode: item.categCode || item.categ_code || "",
           uomCode: item.uomCode || item.uom_code || "",
           quantity: formatNumber(qtyValue, 6),
@@ -1186,6 +1191,8 @@ useEffect(() => {
         return {
           itemCode: item?.itemCode ?? "",
           itemName: item?.itemName ?? "",
+          brandCode: "",
+          brandName: "",
           categCode: getItemCategoryCode(item),
           uomCode: item?.uomCode ?? item?.uom ?? "",
 
@@ -1336,6 +1343,8 @@ useEffect(() => {
       poStatus: status || "",
       itemCode: "",
       itemName: "",
+      brandCode: "",
+      brandName: "",
       uomCode: "",
       qtyOnHand: "0.000000",
       qtyAlloc: "0.000000",
@@ -1790,6 +1799,10 @@ useEffect(() => {
 
             itemCode: row.itemCode || "",
             itemName: row.itemName || "",
+            brandCode: row.brandCode || "",
+            brand_code: row.brandCode || "",
+            brandName: row.brandName || "",
+            brand_name: row.brandName || "",
             categCode: row.categCode || "",
             uomCode: row.uomCode || "",
 
@@ -2206,6 +2219,7 @@ useEffect(() => {
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 130 },
     { key: "itemName", label: "Item Description", width: 300 },
+    { key: "brandCode", label: "Brand", width: 150 },
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "quantity", label: "Quantity", width: 130 },
     { key: "unitCost", label: "Unit Cost", width: 130 },
@@ -2336,6 +2350,8 @@ useEffect(() => {
     const blankRow = {
       itemCode: "",
       itemName: "",
+      brandCode: "",
+      brandName: "",
       uomCode: "",
       quantity: formatNumber(0, 6),
       unitCost: formatNumber(0, 6),
@@ -2365,6 +2381,24 @@ useEffect(() => {
       0
     );
     updateTotalsDisplay(totalQty);
+  };
+
+  const handleCloseBrandLookup = (selectedBrand) => {
+    const rowIndex = selectedRowIndex;
+    updateState({ brandLookupOpen: false, selectedRowIndex: null });
+
+    if (!selectedBrand || rowIndex === null || rowIndex === undefined) return;
+
+    const rows = [...(detailRows || [])];
+    if (!rows[rowIndex]) return;
+
+    rows[rowIndex] = {
+      ...rows[rowIndex],
+      brandCode: selectedBrand.brandCode || "",
+      brandName: selectedBrand.brandName || "",
+    };
+
+    updateState({ detailRows: rows, detailRowsGL: [] });
   };
 
   const renderFGISDetailCell = (columnKey, row, index) => {
@@ -2489,6 +2523,13 @@ useEffect(() => {
       ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
       itemCode: () => lookupCell("itemCode", row.itemCode || "", () => handleOpenFGLookup()),
       itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
+      brandCode: () => lookupCell("brandCode", row.brandCode || "", () => {
+        if (!row.itemCode) {
+          Swal.fire({ icon: "info", title: "Brand", text: "Select an FG item first." });
+          return;
+        }
+        updateState({ selectedRowIndex: index, brandLookupOpen: true });
+      }),
       uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true })}</td>,
       quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("quantity", { value: row.quantity ?? row.qtyNeeded ?? "0.000000" })}</td>,
       unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("unitCost", { value: row.unitCost ?? "0.000000" })}</td>,
@@ -3234,6 +3275,13 @@ useEffect(() => {
           onClose={handleCloseFGLookup}
           onCancel={() => updateState({ msLookupModalOpen: false })}
           singleSelect={false}
+        />
+      )}
+      {brandLookupOpen && (
+        <ItemBrandMatrixLookupModal
+          isOpen={brandLookupOpen}
+          itemCode={detailRows?.[selectedRowIndex]?.itemCode || ""}
+          onClose={handleCloseBrandLookup}
         />
       )}
 

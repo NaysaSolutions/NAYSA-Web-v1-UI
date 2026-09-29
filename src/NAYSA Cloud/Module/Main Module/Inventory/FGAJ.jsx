@@ -23,6 +23,7 @@ import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
+import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.jsx";
 
 
 // Configuration
@@ -253,6 +254,7 @@ const FGAJ = () => {
     showSlModal:false,
     msLookupModalOpen:false,
     itemMastLookupOpen:false,
+    brandLookupOpen:false,
     warehouseLookupOpen:false,
 
     branchModalOpen:false,
@@ -361,6 +363,7 @@ const FGAJ = () => {
   showQstatModal,
   msLookupModalOpen,
   itemMastLookupOpen,
+  brandLookupOpen,
   warehouseLookupOpen,
   locationLookupOpen
 
@@ -654,6 +657,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
+      brandCode: item.brandCode || item.brand_code || "",
+      brandName: item.brandName || item.brand_name || "",
       quantity: formatNumber(item.quantity,decQty),
       unitCost: formatNumber(item.unitCost,decUcost),
       itemAmount: formatNumber(item.itemAmount,2),
@@ -766,6 +771,10 @@ const handleActivityOption = async (action) => {
         lnNo: String(index + 1),
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
+        brandCode: row.brandCode || "",
+        brand_code: row.brandCode || "",
+        brandName: row.brandName || "",
+        brand_name: row.brandName || "",
         categCode: row.categCode || "",
         oldValue: row.oldValue || "",
         quantity: parseFormattedNumber(row.quantity || 0),
@@ -1028,6 +1037,8 @@ const createEmptyDetailRow = () => ({
   lnNo: "",
   itemCode: "",
   itemName: "",
+  brandCode: "",
+  brandName: "",
   categCode: "",
   oldValue: "",
   quantity: formatNumber(1, decQty),
@@ -1306,6 +1317,7 @@ const handleColumnLabel = (columnName) =>{
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Name", width: 260 },
+    { key: "brandCode", label: "Brand", width: 150 },
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "quantity", label: "Quantity", width: 120 },
     { key: "unitCost", label: handleColumnLabel("UnitCost"), width: 130 },
@@ -1415,6 +1427,10 @@ const handleColumnLabel = (columnName) =>{
         lnNo: index + 1,
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
+        brandCode: row.brandCode || "",
+        brand_code: row.brandCode || "",
+        brandName: row.brandName || "",
+        brand_name: row.brandName || "",
         categCode: row.categCode || "",
         quantity: parseFormattedNumber(row.quantity || 0) || 0,
         uomCode: row.uomCode || "",
@@ -1541,6 +1557,8 @@ const handleColumnLabel = (columnName) =>{
         lnNo: index + 1,
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
+        brandCode: row.brandCode || "",
+        brandName: row.brandName || "",
         categCode: row.categCode || "",
         oldValue: row.oldValue || row.itemCode || "",
         quantity: formatNumber(parseFormattedNumber(row.quantity || 0), decQty),
@@ -1896,6 +1914,8 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
  if (field === 'itemCode') {
     row["itemCode"] = value.itemCode;
     row["itemName"] = value.itemName;
+    row["brandCode"] = "";
+    row["brandName"] = "";
     row["uomCode"] = value.uomCode;
     row["categCode"] = value.categCode;   
   }
@@ -2379,6 +2399,8 @@ const handleAddBlankRow = (index) => {
     itemCode: "",
     oldValue: "",
     itemName: "",
+    brandCode: "",
+    brandName: "",
     categCode: "",
     uomCode: "",
     unitCost: formatNumber(0, decUcost),
@@ -2442,6 +2464,8 @@ const handleCloseMSLookup = (selectedItems) => {
       itemCode: item?.itemCode ?? "",
       oldValue: item?.itemCode ?? "",
       itemName: item?.itemName ?? "",
+      brandCode: "",
+      brandName: "",
       categCode: item?.categCode ?? "",
       uomCode: item?.uomCode ?? "",
       unitCost: formatNumber(rawUnitCost, decUcost),     
@@ -2528,6 +2552,24 @@ const handleCloseItemMastLookup = (selectedItems) => {
   updateState({ itemMastLookupOpen: false });
 };
 
+const handleCloseBrandLookup = (selectedBrand) => {
+  const rowIndex = selectedRowIndex;
+  updateState({ brandLookupOpen: false, selectedRowIndex: null });
+
+  if (!selectedBrand || rowIndex === null || rowIndex === undefined) return;
+
+  const rows = [...(detailRowsRef.current || detailRows || [])];
+  if (!rows[rowIndex]) return;
+
+  rows[rowIndex] = {
+    ...rows[rowIndex],
+    brandCode: selectedBrand.brandCode || "",
+    brandName: selectedBrand.brandName || "",
+  };
+
+  detailRowsRef.current = rows;
+  updateState({ detailRows: rows });
+};
 
 
 
@@ -2572,6 +2614,13 @@ const renderFgajDetailColumn = (columnKey, row, index) => {
     ln: () => <td key={columnKey} className={`global-tran-td-ui text-center ${textColorClass}`} style={style}>{index + 1}</td>,
     itemCode: () => lookupCell("itemCode", () => handleAddItem(index), { hideIcon: !(["BB", "IG"].includes(selectedAJType) || (row.operation === "A" && selectedAJType === "IR")) }),
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
+    brandCode: () => lookupCell("brandCode", () => {
+      if (!row.itemCode) {
+        useSwalInfoAlert("Brand", "Select an FG item first.");
+        return;
+      }
+      updateState({ selectedRowIndex: index, brandLookupOpen: true });
+    }),
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true, className: "text-center" })}</td>,
     quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { allowNegative: true, decimals: decQty })}</td>,
     unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitCost", { allowNegative: selectedAJType === "CA", decimals: decUcost, readOnly: isFormDisabled || selectedAJType === "IL" || (selectedAJType === "IR" && row.operation === "S") })}</td>,
@@ -3259,6 +3308,13 @@ return (
           onCancel={() => updateState({ itemMastLookupOpen: false, itemSingleSelect: false })}
           enableMultiSelect={!itemSingleSelect}
           docType="PRFG"
+        />
+      )}
+      {brandLookupOpen && (
+        <ItemBrandMatrixLookupModal
+          isOpen={brandLookupOpen}
+          itemCode={detailRows?.[selectedRowIndex]?.itemCode || ""}
+          onClose={handleCloseBrandLookup}
         />
       )}
         

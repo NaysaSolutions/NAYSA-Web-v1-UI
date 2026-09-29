@@ -26,6 +26,7 @@ import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
+import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.jsx";
 
 
 // Configuration
@@ -275,6 +276,7 @@ const FGSR = () => {
     showCustomerModal:false,
     msLookupModalOpen:false,
     itemMastLookupOpen:false,
+    brandLookupOpen:false,
     warehouseLookupOpen:false,
 
     branchModalOpen:false,
@@ -386,6 +388,7 @@ const FGSR = () => {
   showQstatModal,
   msLookupModalOpen,
   itemMastLookupOpen,
+  brandLookupOpen,
   warehouseLookupOpen,
   locationLookupOpen
 
@@ -637,6 +640,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
+      brandCode: item.brandCode || item.brand_code || "",
+      brandName: item.brandName || item.brand_name || "",
       qtyIn: formatNumber(item.qtyIn,decQty),
       unitCost: formatNumber(item.unitCost,decUcost),
       itemAmount: formatNumber(item.itemAmount,2),
@@ -763,6 +768,10 @@ const handleActivityOption = async (action) => {
         lnNo: String(index + 1),
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
+        brandCode: row.brandCode || "",
+        brand_code: row.brandCode || "",
+        brandName: row.brandName || "",
+        brand_name: row.brandName || "",
         categCode: row.categCode || "",
         oldValue: row.oldValue || "",
         qtyIn: parseFormattedNumber(row.qtyIn || 0),
@@ -917,6 +926,8 @@ const createEmptyDetailRow = () => ({
   lnNo: "",
   itemCode: "",
   itemName: "",
+  brandCode: "",
+  brandName: "",
   categCode: "",
   oldValue: "",
   qtyIn: formatNumber(0, decQty),
@@ -1161,6 +1172,7 @@ const handleColumnLabel = (columnName) => {
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Name", width: 260 },
+    { key: "brandCode", label: "Brand", width: 150 },
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "qtyIn", label: "Quantity", width: 120 },
     { key: "unitCost", label: "Unit Cost", width: 130 },
@@ -1503,6 +1515,10 @@ const handleColumnLabel = (columnName) => {
         lnNo: index + 1,
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
+        brandCode: row.brandCode || "",
+        brand_code: row.brandCode || "",
+        brandName: row.brandName || "",
+        brand_name: row.brandName || "",
         categCode: row.categCode || "",
         qtyIn: parseFormattedNumber(row.qtyIn || 0) || 0,
         uomCode: row.uomCode || "",
@@ -1601,6 +1617,8 @@ const handleColumnLabel = (columnName) => {
         lnNo: index + 1,
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
+        brandCode: row.brandCode || "",
+        brandName: row.brandName || "",
         categCode: row.categCode || "",
         oldValue: row.oldValue || row.itemCode || "",
         qtyIn: formatNumber(parseFormattedNumber(row.qtyIn || 0), decQty),
@@ -2369,6 +2387,8 @@ const mapFgItemToDetailRow = (item, existingRow = {}) => {
     itemCode: item?.itemCode ?? item?.fgCode ?? existingRow.itemCode ?? "",
     oldValue: item?.itemCode ?? item?.fgCode ?? existingRow.oldValue ?? "",
     itemName: item?.itemName ?? item?.fgName ?? existingRow.itemName ?? "",
+    brandCode: "",
+    brandName: "",
     categCode: item?.categCode ?? existingRow.categCode ?? "",
     uomCode: item?.uomCode ?? existingRow.uomCode ?? "",
     qtyIn: formatNumber(finalQtyIn, decQty),
@@ -2460,6 +2480,25 @@ const handleCloseItemMastLookup = (selectedItems) => {
   updateTotals(updatedRows);
 };
 
+const handleCloseBrandLookup = (selectedBrand) => {
+  const rowIndex = selectedRowIndex;
+  updateState({ brandLookupOpen: false, selectedRowIndex: null });
+
+  if (!selectedBrand || rowIndex === null || rowIndex === undefined) return;
+
+  const rows = [...(detailRowsRef.current || detailRows || [])];
+  if (!rows[rowIndex]) return;
+
+  rows[rowIndex] = {
+    ...rows[rowIndex],
+    brandCode: selectedBrand.brandCode || "",
+    brandName: selectedBrand.brandName || "",
+  };
+
+  detailRowsRef.current = rows;
+  updateState({ detailRows: rows });
+};
+
 
 
 
@@ -2505,6 +2544,13 @@ const renderFgsrDetailColumn = (columnKey, row, index) => {
     ln: () => <td key={columnKey} className={`global-tran-td-ui text-center ${textColorClass}`} style={style}>{index + 1}</td>,
     itemCode: () => lookupCell("itemCode", () => handleAddItem(index)),
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
+    brandCode: () => lookupCell("brandCode", () => {
+      if (!row.itemCode) {
+        useSwalInfoAlert("Brand", "Select an FG item first.");
+        return;
+      }
+      updateState({ selectedRowIndex: index, brandLookupOpen: true });
+    }),
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true, className: "text-center" })}</td>,
     qtyIn: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("qtyIn", { decimals: decQty })}</td>,
     unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitCost", { decimals: decUcost, readOnly: isFormDisabled })}</td>,
@@ -3226,6 +3272,13 @@ return (
           onCancel={() => updateState({ itemMastLookupOpen: false, itemSingleSelect: false })}
           enableMultiSelect={!itemSingleSelect}
           docType="PRFG"
+        />
+      )}
+      {brandLookupOpen && (
+        <ItemBrandMatrixLookupModal
+          isOpen={brandLookupOpen}
+          itemCode={detailRows?.[selectedRowIndex]?.itemCode || ""}
+          onClose={handleCloseBrandLookup}
         />
       )}
         
