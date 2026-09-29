@@ -2916,6 +2916,8 @@ const handleSaveAndPrint = async (documentID) => {
     updateState({ custModalOpen: false });
     updateState({ isLoading: true });
 
+
+
     try {
 
         const address = selectedData?.addr || "";
@@ -2923,8 +2925,14 @@ const handleSaveAndPrint = async (documentID) => {
         const selectedVatRow = getAllTopVatRow(selectedVatCode);
         const selectedVatName = selectedVatRow?.vatName || selectedData?.vatName || "";
         const selectedAtcCode = selectedData?.atcCode || "";
+        
+       
+
         const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
         const selectedAtcName = selectedAtcRow?.atcName || selectedData?.atcName || "";
+
+ 
+
         const custDetails = {            custCode: selectedData?.custCode || '',
             custName: selectedData?.custName || '',
             currCode: selectedData?.currCode || '',
@@ -2937,6 +2945,8 @@ const handleSaveAndPrint = async (documentID) => {
             vatName: selectedVatName,
             atcCode: selectedAtcCode,
             atcName: selectedAtcName,
+            cwvatCode: "",
+            cwvatName: "" 
 
         };
         const nextBillToCustCode = selectedData?.custCode || "";
@@ -2971,9 +2981,16 @@ const handleSaveAndPrint = async (documentID) => {
                 custDetails.vatCode = customerRow?.vatCode || custDetails.vatCode;
                 const customerVatRow = getAllTopVatRow(custDetails.vatCode);
                 custDetails.vatName = customerVatRow?.vatName || customerRow?.vatName || custDetails.vatName;
+                
                 custDetails.atcCode = customerRow?.atcCode || custDetails.atcCode;
                 const customerAtcRow = getAllTopATCRow(custDetails.atcCode);
                 custDetails.atcName = customerAtcRow?.atcName || customerRow?.atcName || custDetails.atcName;
+
+                custDetails.cwvatCode = customerRow?.atcCodeGV || custDetails.atcCodeGV;
+                const customerCwvatRow = getAllTopATCRow(custDetails.cwvatCode);
+                custDetails.cwvatName = customerCwvatRow?.atcName || customerRow?.cwvatName || custDetails.cwvatName;
+            
+                
             } else {
                 console.warn("API call for getCustomer returned success: false", response.message);
             }
@@ -3001,6 +3018,8 @@ const handleSaveAndPrint = async (documentID) => {
             vatName: custDetails.vatName,
             atcCode: custDetails.atcCode,
             atcName: custDetails.atcName,
+            cwvatCode: custDetails.cwvatCode,
+            cwvatName: custDetails.cwvatName,
           })
         ]);
 

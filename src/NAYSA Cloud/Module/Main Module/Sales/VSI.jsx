@@ -1899,75 +1899,100 @@ const handleActivityOption = async (action) => {
   setTopTab("details");
 };
 
-  const handleInsertSelectedOpenVSO = async (payload) => {
-    const selectedRecord = Array.isArray(payload?.records) ? payload.records[0] : null;
-    if (!selectedRecord) {
-      updateState({ showOpenVSOModal: false });
-      return;
-    }
 
-    updateState({ isLoading: true, showSpinner: true });
-    try {
-    const selectedSalesRepCode = selectedRecord.repCode || "";
-    const selectedSalesRepRow = selectedSalesRepCode ? await useTopSalesRepRow(selectedSalesRepCode) : null;
-    const selectedBillTermCode = selectedRecord.billTerm || "";
-    const selectedBillTermRow = selectedBillTermCode ? await useTopBillTermRow(selectedBillTermCode) : null;
-    const selectedVatCode = selectedRecord.vatCode || "";
-    const selectedAtcCode = selectedRecord.atcCode || "";
-    const selectedVatRow = getAllTopVatRow(selectedVatCode);
-    const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
-    if (selectedRecord.currCode) await handleSelectCurrency(selectedRecord.currCode);
 
-    const row = calculateRowAmountsFromRates(createSIDetailRow({
-      ...selectedRecord,
-      soId: selectedRecord.vsoId || "",
-      groupId: selectedRecord.vsoId || "",
-      drId: "",
-      drNo: "",
-      siQuantity: formatNumber(1, quantityDecimals),
-      quantityPicked: formatNumber(0, quantityDecimals),
-      unitPrice: formatNumber(selectedRecord.sellingPrice || 0, sellingPriceDecimals),
-      vatCode: selectedVatCode,
-      vatRate: formatNumber(selectedRecord.vatRate ?? selectedVatRow?.vatRate ?? 0),
-      vatAmount: formatNumber(selectedRecord.vatAmt || 0),
-      totDiscount: formatNumber(selectedRecord.discAmt || 0),
-    }));
 
-    updateState({
-      vsoId: selectedRecord.vsoId || "",
-      vsoNo: selectedRecord.vsoNo || "",
-      vdrId: "",
-      veId: selectedRecord.veId || "",
-      refSiNo1: "",
-      billToCustCode: selectedRecord.custCode || "",
-      billToCustName: selectedRecord.custName || "",
-      contactPerson: selectedRecord.contactPerson || "",
-      salesRepCode: selectedSalesRepCode,
-      salesRepName: selectedSalesRepRow?.salesRepName || "",
-      billtermCode: selectedBillTermCode,
-      billtermName: selectedBillTermRow?.billtermName || selectedBillTermCode,
-      daysDue: selectedBillTermRow?.daysDue ?? "",
-      dueDate: selectedBillTermRow ? calculateDueDate(documentDate, selectedBillTermRow.daysDue) : "",
-      vatCode: selectedVatCode,
-      vatName: selectedVatRow?.vatName || "",
-      atcCode: selectedAtcCode,
-      atcName: selectedAtcRow?.atcName || "",
-      remarks: selectedRecord.remarks || "",
-      detailRows: [row],
-      detailRowsGL: [],
-      showOpenVSOModal: false,
-      openDRSI_Data_Summary: [],
-      openDRSI_Col_Summary: [],
-    });
-    updateTotals([row], selectedAtcCode, "");
-    setTopTab("details");
-    } catch (error) {
-      console.error("Failed to select VSO:", error);
-      useSwalErrorAlert("Select VSO", getApiErrorMessage(error));
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
-    }
-  };
+
+  const handleInsertSelectedOpenVSO = async (payload) => { 
+    const selectedRecord = Array.isArray(payload?.records) ? payload.records[0] : null; 
+    if (!selectedRecord) { 
+      updateState({ showOpenVSOModal: false }); 
+      return; 
+    } 
+ 
+    updateState({ isLoading: true, showSpinner: true }); 
+    try { 
+    const selectedSalesRepCode = selectedRecord.repCode || ""; 
+    const selectedSalesRepRow = selectedSalesRepCode ? await useTopSalesRepRow(selectedSalesRepCode) : null; 
+    const selectedBillTermCode = selectedRecord.billTerm || ""; 
+    const selectedBillTermRow = selectedBillTermCode ? await useTopBillTermRow(selectedBillTermCode) : null; 
+    const selectedVatCode = selectedRecord.vatCode || ""; 
+    const selectedAtcCode = selectedRecord.atcCode || ""; 
+    const selectedVatRow = getAllTopVatRow(selectedVatCode); 
+    const selectedAtcRow = getAllTopATCRow(selectedAtcCode); 
+
+    let selectedCwvatCode = ""; 
+    let selectedCwvatName = ""; 
+
+    if (selectedRecord.custCode) { 
+      const customerPayload = { CUST_CODE: selectedRecord.custCode }; 
+      const customerResponse = await postRequest("getCustomer", JSON.stringify(customerPayload)); 
+
+      if (customerResponse.success) { 
+        const customerRow = JSON.parse(customerResponse.data[0].result)?.[0] || {}; 
+
+        selectedCwvatCode = customerRow?.atcCodeGV || ""; 
+
+        const selectedCwvatRow = selectedCwvatCode ? getAllTopATCRow(selectedCwvatCode) : null; 
+
+        selectedCwvatName = selectedCwvatRow?.atcName || customerRow?.cwvatName || ""; 
+      } 
+    } 
+
+    if (selectedRecord.currCode) await handleSelectCurrency(selectedRecord.currCode); 
+ 
+    const row = calculateRowAmountsFromRates(createSIDetailRow({ 
+      ...selectedRecord, 
+      soId: selectedRecord.vsoId || "", 
+      groupId: selectedRecord.vsoId || "", 
+      drId: "", 
+      drNo: "", 
+      siQuantity: formatNumber(1, quantityDecimals), 
+      quantityPicked: formatNumber(0, quantityDecimals), 
+      unitPrice: formatNumber(selectedRecord.sellingPrice || 0, sellingPriceDecimals), 
+      vatCode: selectedVatCode, 
+      vatRate: formatNumber(selectedRecord.vatRate ?? selectedVatRow?.vatRate ?? 0), 
+      vatAmount: formatNumber(selectedRecord.vatAmt || 0), 
+      totDiscount: formatNumber(selectedRecord.discAmt || 0), 
+    })); 
+ 
+    updateState({ 
+      vsoId: selectedRecord.vsoId || "", 
+      vsoNo: selectedRecord.vsoNo || "", 
+      vdrId: "", 
+      veId: selectedRecord.veId || "", 
+      refSiNo1: "", 
+      billToCustCode: selectedRecord.custCode || "", 
+      billToCustName: selectedRecord.custName || "", 
+      contactPerson: selectedRecord.contactPerson || "", 
+      salesRepCode: selectedSalesRepCode, 
+      salesRepName: selectedSalesRepRow?.salesRepName || "", 
+      billtermCode: selectedBillTermCode, 
+      billtermName: selectedBillTermRow?.billtermName || selectedBillTermCode, 
+      daysDue: selectedBillTermRow?.daysDue ?? "", 
+      dueDate: selectedBillTermRow ? calculateDueDate(documentDate, selectedBillTermRow.daysDue) : "", 
+      vatCode: selectedVatCode, 
+      vatName: selectedVatRow?.vatName || "", 
+      atcCode: selectedAtcCode, 
+      atcName: selectedAtcRow?.atcName || "", 
+      cwvatCode: selectedCwvatCode, 
+      cwvatName: selectedCwvatName, 
+      remarks: selectedRecord.remarks || "", 
+      detailRows: [row], 
+      detailRowsGL: [], 
+      showOpenVSOModal: false, 
+      openDRSI_Data_Summary: [], 
+      openDRSI_Col_Summary: [], 
+    }); 
+    updateTotals([row], selectedAtcCode, selectedCwvatCode); 
+    setTopTab("details"); 
+    } catch (error) { 
+      console.error("Failed to select VSO:", error); 
+      useSwalErrorAlert("Select VSO", getApiErrorMessage(error)); 
+    } finally { 
+      updateState({ isLoading: false, showSpinner: false }); 
+    } 
+  }; 
 
 
 
@@ -2987,6 +3012,8 @@ const handleSaveAndPrint = async (documentID) => {
         return;
     }
 
+
+
     updateState({ custModalOpen: false });
     updateState({ isLoading: true });
 
@@ -3011,6 +3038,8 @@ const handleSaveAndPrint = async (documentID) => {
             vatName: selectedVatName,
             atcCode: selectedAtcCode,
             atcName: selectedAtcName,
+            cwvatCode: "",
+            cwvatName: "" 
 
         };
         const nextBillToCustCode = selectedData?.custCode || "";
@@ -3048,6 +3077,15 @@ const handleSaveAndPrint = async (documentID) => {
                 custDetails.atcCode = customerRow?.atcCode || custDetails.atcCode;
                 const customerAtcRow = getAllTopATCRow(custDetails.atcCode);
                 custDetails.atcName = customerAtcRow?.atcName || customerRow?.atcName || custDetails.atcName;
+
+                custDetails.cwvatCode = customerRow?.atcCodeGV || custDetails.atcCodeGV;
+                const customerCwvatRow = getAllTopATCRow(custDetails.cwvatCode);
+                custDetails.cwvatName = customerCwvatRow?.atcName || customerRow?.cwvatName || custDetails.cwvatName;
+
+
+    
+
+
             } else {
                 console.warn("API call for getCustomer returned success: false", response.message);
             }
@@ -3075,6 +3113,8 @@ const handleSaveAndPrint = async (documentID) => {
             vatName: custDetails.vatName,
             atcCode: custDetails.atcCode,
             atcName: custDetails.atcName,
+            cwvatCode: custDetails.cwvatCode,
+            cwvatName: custDetails.cwvatName,
           })
         ]);
 
