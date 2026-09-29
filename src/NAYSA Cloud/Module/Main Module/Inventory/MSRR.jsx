@@ -2042,7 +2042,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         rrQty: formatNumber(qtyBalance, 6),
         poBalance: formatNumber(
   parseFormattedNumber(
-    r.poBalance ?? r.po_balance ?? r.PO_BALANCE ?? r.qtyBalance ?? 0
+    d.poBalance ?? d.po_balance ?? d.PO_BALANCE ?? d.qtyBalance ?? d.QtyBalance ?? 0
   ),
   decQty
 ),
