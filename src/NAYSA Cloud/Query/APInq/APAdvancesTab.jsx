@@ -15,6 +15,7 @@ import { exportGenericHistoryExcel } from "@/NAYSA Cloud/Global/report";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import PayeeMastLookupModal from "@/NAYSA Cloud/Lookup/SearchVendMast";
 import BankMastLookupModal from "@/NAYSA Cloud/Lookup/SearchBankMast.jsx";
+import COAMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 import { useTopUserRow, useTopBranchRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import {
@@ -129,6 +130,9 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
   const [refundAmount, setRefundAmount] = useState("");
   const [refundDate, setRefundDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [refundBank, setRefundBank] = useState(null);
+  const [refundMethod, setRefundMethod] = useState("AR");
+  const [refundDebitAccount, setRefundDebitAccount] = useState(null);
+  const [showRefundAccount, setShowRefundAccount] = useState(false);
   const [refundRequestId, setRefundRequestId] = useState(null);
   const [showRefundBank, setShowRefundBank] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
@@ -576,6 +580,8 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
     setRefundAmount(formatNumber(balance));
     setRefundDate(new Date().toLocaleDateString("en-CA"));
     setRefundBank(null);
+    setRefundDebitAccount(null);
+    setRefundMethod("AR");
     setRefundRequestId(crypto.randomUUID());
   }, []);
 
@@ -617,18 +623,23 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
       useSwalErrorAlert("Invalid Refund Amount", `Refund Amount cannot exceed the available balance of ${formatNumber(balance)}.`);
       return;
     }
-    if (!refundBank?.bankCode || refundBank.currCode !== refund.currCode) {
+    if (refundMethod === "AR" && (!refundBank?.bankCode || refundBank.currCode !== refund.currCode)) {
       useSwalErrorAlert("Bank Account Required", `Select a bank account in ${refund.currCode}.`);
       return;
     }
-    if (!refundDate) {
-      useSwalErrorAlert("Refund Date Required", "Select the date of the Acknowledgement Receipt.");
+    if (refundMethod === "JV" && !refundDebitAccount?.acctCode) {
+      useSwalErrorAlert("Debit Account Required", "Select the debit account for the Journal Voucher.");
       return;
     }
+    if (!refundDate) {
+      useSwalErrorAlert("Refund Date Required", `Select the date of the ${refundMethod === "JV" ? "Journal Voucher" : "Acknowledgement Receipt"}.`);
+      return;
+    }
+    const isJV = refundMethod === "JV";
     const confirmation = await useSwalProceedConfirm(
-      "Create Acknowledgement Receipt?",
+      `Create ${isJV ? "Journal Voucher" : "Acknowledgement Receipt"}?`,
       `Refund ${refund.currCode} ${formatNumber(amount)} from ${refund.docCode} ${refund.docNo}?`,
-      "Create and Post AR",
+      `Create and Post ${refundMethod}`,
       "Cancel"
     );
     if (!confirmation.isConfirmed) return;
@@ -637,18 +648,19 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
     let completed = null;
     let failureMessage = "";
     try {
-      const response = await postRequest("refundAPAdvance", {
+      const response = await postRequest(isJV ? "upsertJV" : "refundAPAdvance", {
         json_data: {
+          ...(isJV ? { advanceRefund: true, debitAcctCode: refundDebitAccount.acctCode } : {}),
           apAdvId: refund.apAdvId,
           branchCode: refund.branchCode,
           amount,
           refundDate,
-          bankCode: refundBank.bankCode,
+          ...(!isJV ? { bankCode: refundBank.bankCode } : {}),
           userCode: currentUserRow?.userCode || user?.USER_CODE,
           requestId: refundRequestId,
         },
       });
-      if (!response?.success) throw new Error(response?.message || "The refund could not be saved.");
+      if (!response?.success) throw new Error(response?.details || response?.message || "The refund could not be saved.");
       completed = response.data;
       setRefund(null);
       clearRows();
@@ -661,15 +673,18 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
     } catch (error) {
       const details = error?.response?.data?.errors;
       failureMessage = details ? Object.values(details).flat().join("\n") : error?.response?.data?.details || error?.response?.data?.message || error.message;
+      if (isJV && /selected debit account is inactive or was not found/i.test(failureMessage)) {
+        setRefundDebitAccount(null);
+      }
     } finally {
       setIsRefunding(false);
     }
     if (completed) {
-      useSwalSuccessAlert("Refund Recorded", `Acknowledgement Receipt ${completed.arNo} was created and posted. Remaining balance: ${formatNumber(completed.balance)}.`);
+      useSwalSuccessAlert("Refund Recorded", `${isJV ? `Journal Voucher ${completed.jvNo}` : `Acknowledgement Receipt ${completed.arNo}`} was created and posted. Remaining balance: ${formatNumber(completed.balance)}.`);
     } else if (failureMessage) {
       useSwalErrorAlert("Refund Failed", failureMessage);
     }
-  }, [refund, isRefunding, refundAmount, refundDate, refundBank, refundRequestId, currentUserRow?.userCode, user?.USER_CODE, clearRows, fetchRecord, fetchRecordperPayee]);
+  }, [refund, isRefunding, refundAmount, refundDate, refundBank, refundMethod, refundDebitAccount, refundRequestId, currentUserRow?.userCode, user?.USER_CODE, clearRows, fetchRecord, fetchRecordperPayee]);
 
   const handleViewRow = useCallback((row) => {
     const url = `${window.location.origin}${row.pathUrl}`;
@@ -919,34 +934,47 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
         />
       )}
 
-      {refund && !showRefundBank && (
+      {refund && !showRefundBank && !showRefundAccount && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Refund AP Advance">
           <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden">
             <div className="bg-blue-100 px-6 py-4">
               <h2 className="text-lg font-semibold text-blue-900">Refund AP Advance</h2>
-              <p className="text-sm text-gray-600">Create and post an Acknowledgement Receipt against this advance.</p>
+              <p className="text-sm text-gray-600">Create and post a refund transaction against this advance.</p>
             </div>
             <div className="grid grid-cols-2 gap-4 p-6 text-sm">
               <div className="col-span-2">
                 <span className="text-gray-500">Payee</span>
                 <div className="font-semibold">{refund.vendCode} - {refund.vendName}</div>
               </div>
-              <div>
+              <label className="col-span-2 block">
+                <span className="text-gray-600">Refund Via</span>
+                <select value={refundMethod} onChange={(e) => setRefundMethod(e.target.value)} disabled={isRefunding}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2">
+                  <option value="AR">Acknowledgement Receipt</option>
+                  <option value="JV">Journal Voucher</option>
+                  <option value="APDM" disabled>AP Debit Memo (coming next)</option>
+                </select>
+              </label>
+              <label className="block">
                 <span className="text-gray-500">Reference</span>
-                <div className="font-semibold">{refund.docCode} {refund.docNo}</div>
-              </div>
-              <div>
+                <input type="text" value={`${refund.docCode ? `${refund.docCode} ` : ""}${refund.docNo || ""}`} readOnly
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2" />
+              </label>
+              <label className="block">
                 <span className="text-gray-500">Advances Account</span>
-                <div className="font-semibold">{refund.acctCode}</div>
-              </div>
-              <div>
+                <input type="text" value={refund.acctCode || ""} readOnly
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2" />
+              </label>
+              <label className="block">
                 <span className="text-gray-500">Advance Amount</span>
-                <div className="font-semibold text-right tabular-nums">{formatNumber(refund.advancesAmount)}</div>
-              </div>
-              <div>
+                <input type="text" value={formatNumber(refund.advancesAmount)} readOnly
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-right tabular-nums" />
+              </label>
+              <label className="block">
                 <span className="text-gray-500">Available Balance</span>
-                <div className="font-semibold text-blue-700 text-right tabular-nums">{refund.currCode} {formatNumber(refund.balance)}</div>
-              </div>
+                <input type="text" value={`${refund.currCode} ${formatNumber(refund.balance)}`} readOnly
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-right text-blue-700 tabular-nums" />
+              </label>
               <label className="block">
                 <span className="text-gray-600">Refund Amount</span>
                 <input type="text" inputMode="decimal" value={refundAmount}
@@ -958,25 +986,32 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-right tabular-nums" />
               </label>
               <label className="block">
-                <span className="text-gray-600">AR Date</span>
+                <span className="text-gray-600">{refundMethod === "JV" ? "JV Date" : "AR Date"}</span>
                 <input type="date" value={refundDate} onChange={(e) => setRefundDate(e.target.value)}
                   disabled={isRefunding} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" />
               </label>
-              <div className="col-span-2">
+              {refundMethod === "AR" ? <div className="col-span-2">
                 <span className="text-gray-600">Bank Account</span>
                 <button type="button" onClick={() => setShowRefundBank(true)} disabled={isRefunding}
                   className="mt-1 flex w-full items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left hover:bg-blue-50">
                   <span>{refundBank ? `${refundBank.bankCode} - ${refundBank.acctName || refundBank.bankAcctNo || ""}` : "Select bank account"}</span>
                   <span className="text-blue-600">Search</span>
                 </button>
-              </div>
+              </div> : <div className="col-span-2">
+                <span className="text-gray-600">Debit Account</span>
+                <button type="button" onClick={() => setShowRefundAccount(true)} disabled={isRefunding}
+                  className="mt-1 flex w-full items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left hover:bg-blue-50">
+                  <span>{refundDebitAccount ? `${refundDebitAccount.acctCode} - ${refundDebitAccount.acctName}` : "Select debit account"}</span>
+                  <span className="text-blue-600">Search</span>
+                </button>
+              </div>}
             </div>
             <div className="flex justify-end gap-2 border-t px-6 py-4">
               <button type="button" onClick={() => setRefund(null)} disabled={isRefunding}
                 className="flex items-center justify-center rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50">Cancel</button>
               <button type="button" onClick={handleSubmitRefund} disabled={isRefunding}
                 className="flex items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90 transition-colors duration-200 disabled:opacity-50">
-                Create Acknowledgement Receipt
+                Create {refundMethod === "JV" ? "Journal Voucher" : "Acknowledgement Receipt"}
               </button>
             </div>
           </div>
@@ -985,6 +1020,9 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
 
       {showRefundBank && (
         <BankMastLookupModal isOpen={showRefundBank} onClose={(bank) => { if (bank) setRefundBank(bank); setShowRefundBank(false); }} />
+      )}
+      {showRefundAccount && (
+        <COAMastLookupModal isOpen={showRefundAccount} customParam="ACTIVEALL" onClose={(account) => { if (account) setRefundDebitAccount(account); setShowRefundAccount(false); }} />
       )}
     </div>
   );
