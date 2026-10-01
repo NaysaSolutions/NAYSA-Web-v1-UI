@@ -31,6 +31,22 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 const ENDPOINT_DETAIL = "getAPAdvances";
 const ENDPOINT_SUMMARY = "getAPAdvances";
 
+function getSummaryColumns(columns) {
+  const summaryColumns = Array.isArray(columns) ? columns.map((column) => ({ ...column })) : [];
+  if (summaryColumns.some((column) => column.key === "apvNo")) return summaryColumns;
+
+  const payeeNameIndex = summaryColumns.findIndex((column) => column.key === "vendName");
+  summaryColumns.splice(payeeNameIndex + 1, 0, {
+    key: "apvNo",
+    label: "APV No.",
+    classNames: "text-left",
+    hidden: false,
+    renderType: "text",
+    renderFormat: "",
+  });
+  return summaryColumns;
+}
+
 /** Light global cache so the tab remembers its UI state across mounts */
 function getGlobalCache() {
   if (typeof window !== "undefined") {
@@ -235,7 +251,7 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
         setState((prev) => ({
           ...prev,
           columnConfig: Array.isArray(colsBottom) ? colsBottom.map((c) => ({ ...c })) : [],
-          columnConfigS: Array.isArray(colsTop) ? colsTop.map((c) => ({ ...c })) : [],
+          columnConfigS: getSummaryColumns(colsTop),
         }));
 
         loadedColsOnceRef.current = true;
@@ -360,7 +376,7 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
               ? snap.columnConfig
               : prev.columnConfig,
             columnConfigS: Array.isArray(snap.columnConfigS)
-              ? snap.columnConfigS
+              ? getSummaryColumns(snap.columnConfigS)
               : prev.columnConfigS,
           }));
 

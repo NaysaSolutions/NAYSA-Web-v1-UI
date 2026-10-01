@@ -12,7 +12,7 @@ import { useSwalSuccessAlert, useSwalErrorAlert, useSwalProceedConfirm } from "@
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines, faChevronDown, faFolderOpen, faBox, faBriefcase, faCoins, faReceipt, faShip } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -38,6 +38,7 @@ import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx
 // Configuration
 import { apiClient, fetchData, fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import { getAccessibleMenuModules, hasAccessibleMenuModule } from "@/NAYSA Cloud/Global/menuAccess.js";
 
 // Global
 import { docTypeNames, docTypes, docTypeVideoGuide, docTypePDFGuide } from "@/NAYSA Cloud/Global/doctype";
@@ -218,6 +219,7 @@ const APV = () => {
   // Routing, authentication, and view-document mode
   const loadedFromUrlRef = useRef(false);
   const defaultAdvancesAccountRef = useRef(null);
+  const openReferencesDropdownRef = useRef(null);
     const location = useLocation();
   const { companyInfo, currentUserRow, refsLoaded, getAllTopVatAmount, getAllTopATCAmount } = useAuth();
   const assignedUserBranch = getAssignedUserBranch(currentUserRow);
@@ -368,6 +370,61 @@ const APV = () => {
     { key: "rcName", label: "RC Name", width: 200 },
   ];
   const [showInvoiceAddDropdown, setShowInvoiceAddDropdown] = useState(false);
+  const [showOpenReferencesDropdown, setShowOpenReferencesDropdown] = useState(false);
+  const [referenceInquiryOpen, setReferenceInquiryOpen] = useState(false);
+  useEffect(() => {
+    if (!showOpenReferencesDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (!openReferencesDropdownRef.current?.contains(event.target)) {
+        setShowOpenReferencesDropdown(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
+  }, [showOpenReferencesDropdown]);
+  const accessibleMenuModules = getAccessibleMenuModules();
+  const canOpenImportationInquiry = hasAccessibleMenuModule(accessibleMenuModules, "IMP");
+
+  const validateReferencePayees = (selectedRows, matchHeader = true) => {
+    const payeeCodes = new Set(
+      selectedRows.map((row) => String(row.vendCode ?? row.payeeCode ?? "").trim().toUpperCase()).filter(Boolean),
+    );
+    if (selectedRows.length > 0 && payeeCodes.size === 0) {
+      useSwalErrorAlert("Missing Payee", "The selected reference has no payee code.");
+      return false;
+    }
+    if (payeeCodes.size > 1) {
+      useSwalErrorAlert("Different Payees", "Select references for one payee only.");
+      return false;
+    }
+    if (matchHeader && vendCode && payeeCodes.size === 1 && !payeeCodes.has(String(vendCode).trim().toUpperCase())) {
+      useSwalErrorAlert("Different Payee", "The selected reference must match the APV payee.");
+      return false;
+    }
+    return true;
+  };
+
+  const openReferenceInquiry = async (referenceType) => {
+    setShowOpenReferencesDropdown(false);
+    const targetApType = { RR: "APV01", JO: "APV01", PO: "APV03", PCV: "APV04", LC: "APV07" }[referenceType];
+    if (!documentID && targetApType !== selectedApType) {
+      if (detailRows.length > 0 || state.receivingRows.length > 0) {
+        useSwalErrorAlert("Open References", "Use the same AP Type for existing invoice lines, or reset the document first.");
+        return;
+      }
+      await handleAPTypeChange({ target: { value: targetApType } });
+    }
+    setReferenceInquiryOpen(true);
+    // The selected reference determines the APV payee, not the other way around.
+    const overrides = { inquiryMode: true, vendCode: "" };
+    if (referenceType === "RR") handleOpenReferenceRR(overrides);
+    else if (referenceType === "JO") handleOpenReferenceJO(overrides);
+    else if (referenceType === "PO") handleOpenReferencePOAdvance(overrides);
+    else if (referenceType === "PCV") handleOpenReferencePCV(overrides);
+    else if (referenceType === "LC") handleOpenReferenceLCImportation(true);
+  };
 
 
   const updateState = (updates) => {
@@ -568,6 +625,8 @@ const APV = () => {
     { key: "branchCode", label: "Branch", width: 80 },
     { key: "pcvNo", label: "PCV No.", width: 120 },
     { key: "pcvDate", label: "PCV Date", width: 110 },
+    { key: "vendCode", label: "Payee Code", width: 110 },
+    { key: "vendName", label: "Payee Name", width: 200 },
     {
       key: "pcvAmount",
       label: "PCV Amount",
@@ -628,9 +687,10 @@ const APV = () => {
 
   const handleOpenReferencePOAdvance = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openPOAdvance",
@@ -689,8 +749,9 @@ const APV = () => {
   };
 
 
-  const handleOpenReferenceLCImportation = async () => {
+  const handleOpenReferenceLCImportation = async (inquiryMode = false) => {
     setShowInvoiceAddDropdown(false);
+    if (!inquiryMode) setReferenceInquiryOpen(false);
     const lookupBranchCode = String(branchCode || "").trim();
 
     try {
@@ -730,6 +791,8 @@ const APV = () => {
 
   const handleCloseLCModal = async (selection) => {
     const selectedDetails = Array.isArray(selection?.details) ? selection.details : [];
+    if (referenceInquiryOpen && documentID) return;
+    if (!validateReferencePayees(selectedDetails, !referenceInquiryOpen)) return;
     if (!selectedDetails.length) {
       updateState({
         showOpenLCModal: false,
@@ -740,11 +803,13 @@ const APV = () => {
     updateState({
       isLoading: true,
       showSpinner: true,
-      showOpenLCModal: false,
     });
 
     try {
-      const foundAtcCode = vendName?.atcCode || "";
+      const payeeUpdates = referenceInquiryOpen ? await getReferencePayeeHeader(selectedDetails[0]) : {};
+      if (referenceInquiryOpen && !canApplyReferencePayee(payeeUpdates.vendCode)) return;
+      if (referenceInquiryOpen) updateState(payeeUpdates);
+      const foundAtcCode = payeeUpdates.vendName?.atcCode || vendName?.atcCode || "";
       const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
       const mappedRows = await Promise.all(
         selectedDetails.map(async (item) => {
@@ -791,6 +856,7 @@ const APV = () => {
       );
       const updatedRows = [...detailRows, ...mappedRows];
       updateInvoiceDetails(updatedRows, {
+        ...payeeUpdates,
         showOpenLCModal: false,
         openLcSummaryData: [],
         openLcSummaryColumns: [],
@@ -2349,9 +2415,10 @@ const APV = () => {
 
   const handleOpenReferencePCV = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openPCV",
@@ -2418,10 +2485,11 @@ const APV = () => {
 
   const handleOpenReferenceRR = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
 
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openRR",
@@ -2497,9 +2565,10 @@ const APV = () => {
 
   const handleOpenReferenceJO = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openJO",
@@ -2647,9 +2716,17 @@ const APV = () => {
     const isLCImportationFlow = modalContext === "openLCImportation";
     const isPCVFlow = modalContext === "openPCV";
     const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
+    if (!itemsArray.length) return;
+    if (referenceInquiryOpen && documentID) return;
+    if (!validateReferencePayees(itemsArray, !referenceInquiryOpen)) return;
     updateState({ isLoading: true, showSpinner: true });
 
     try {
+      const payeeUpdates = referenceInquiryOpen ? await getReferencePayeeHeader(itemsArray[0]) : {};
+      if (referenceInquiryOpen && !canApplyReferencePayee(payeeUpdates.vendCode)) return;
+      if (referenceInquiryOpen) updateState(payeeUpdates);
+      const effectiveVendCode = payeeUpdates.vendCode || vendCode;
+      const effectiveVendName = payeeUpdates.vendName || vendName;
       if (isPCVFlow) {
         const mappedRows = await Promise.all(
           itemsArray.map(async (item) => {
@@ -2693,6 +2770,7 @@ const APV = () => {
         );
         const updatedRows = [...detailRows, ...mappedRows];
         updateInvoiceDetails(updatedRows, {
+          ...payeeUpdates,
           showRRRefModal: false,
           modalContext: "",
           globalLookupTitle: "",
@@ -2731,8 +2809,8 @@ const APV = () => {
           useSwalErrorAlert("LC Importation Reference", "No invoice details found for the selected LC reference.");
           return;
         }
-                const foundVatCode = vendName?.vatCode || "";
-        const foundAtcCode = vendName?.atcCode || "";
+        const foundVatCode = effectiveVendName?.vatCode || "";
+        const foundAtcCode = effectiveVendName?.atcCode || "";
         const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
         const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
         const lcBrokerCode = selectedLC.vendCode || "";
@@ -2793,13 +2871,7 @@ const APV = () => {
 
         const updatedRows = [...detailRows, ...mappedRows];
         updateInvoiceDetails(updatedRows, {
-          vendCode,
-          vendName,
-          apAccountCode,
-          apAccountName,
-          currencyCode,
-          currencyName,
-          currencyRate,
+          ...payeeUpdates,
           showRRRefModal: false,
           modalContext: "",
           globalLookupTitle: "",
@@ -2830,7 +2902,7 @@ const APV = () => {
               : useGetCurrentDayV2();
 
             // Vendor
-            const selectedVendCode = item.vendCode || vendCode || "";
+            const selectedVendCode = item.vendCode || effectiveVendCode || "";
             const payeeRow = selectedVendCode ? await fetchPayeeByCode(selectedVendCode) : null;
 
             // VAT
@@ -2884,7 +2956,7 @@ const APV = () => {
 
               sltypeCode: "SU",
               slCode: selectedVendCode,
-              slName: item.vendName || payeeRow?.vendName || vendName?.vendName || "",
+              slName: item.vendName || payeeRow?.vendName || effectiveVendName?.vendName || "",
 
               vatCode,
               vatName,
@@ -2916,11 +2988,11 @@ const APV = () => {
 
 
 
-          const vCode = item.vatCode || vendName?.vatCode || "";
+          const vCode = item.vatCode || effectiveVendName?.vatCode || "";
           const vatData = vCode ? await useTopVatRow(vCode) : null;
           const targetRcCode = item.rcCode || (resolvedDebitAcct && isRcRequired ? "REQ RC" : "");
           const targetRcName = targetRcCode && targetRcCode !== "REQ RC" ? await fetchRCNameByCode(targetRcCode) : "";
-          const aCode = vendName?.atcCode || "";
+          const aCode = effectiveVendName?.atcCode || "";
           const atcData = aCode ? await useTopATCRow(aCode) : null;
           const amount = parseFormattedNumber(item.siAmount || item.amount || 0);
           const dynamicVatRate = vCode ? await getVatRate(vCode) : 0;
@@ -2948,8 +3020,8 @@ const APV = () => {
             rcCode: targetRcCode,
             rcName: targetRcName,
             sltypeCode: "SU",
-            slCode: vendCode,
-            slName: vendName?.vendName,
+            slCode: effectiveVendCode,
+            slName: effectiveVendName?.vendName,
             vatCode: vCode,
             vatName: vatData?.vatName || item.vatDesc || "",
             vatAmount: formatNumber(vatAmount),
@@ -2974,6 +3046,7 @@ const APV = () => {
 
       const updatedRows = [...detailRows, ...mappedRows];
       updateInvoiceDetails(updatedRows, {
+        ...payeeUpdates,
         showRRRefModal: false,
         triggerGLEntries: false,
         modalContext: "",
@@ -2982,6 +3055,7 @@ const APV = () => {
       });
     } catch (error) {
       console.error("APV processing error inside handleCloseRRRefModal wrapper structure:", error);
+      useSwalErrorAlert("Open References", error?.message || "Unable to apply the selected reference.");
     } finally {
       updateState({ isLoading: false, showSpinner: false });
     }
@@ -3182,6 +3256,61 @@ const APV = () => {
       console.error("Error fetching payee details:", error);
       return null;
     }
+  };
+
+  const getReferencePayeeHeader = async (reference) => {
+    const selectedVendCode = String(reference?.vendCode ?? reference?.payeeCode ?? "").trim();
+    if (!selectedVendCode) throw new Error("The selected reference has no payee code.");
+    const payeeRow = await fetchPayeeByCode(selectedVendCode);
+    if (!payeeRow) throw new Error(`Payee ${selectedVendCode} was not found in Payee Master.`);
+
+    const foundCurrCode = payeeRow.currCode || payeeRow.currencyCode || "";
+    let foundCurrName = payeeRow.currName || payeeRow.currencyName || "";
+    if (foundCurrCode && !foundCurrName) {
+      foundCurrName = (await useTopCurrencyRow(foundCurrCode))?.currName || "";
+    }
+    const foundVatCode = payeeRow.vatCode || "";
+    const foundAtcCode = payeeRow.atcCode || "";
+    const [vatRow, atcRow] = await Promise.all([
+      foundVatCode ? useTopVatRow(foundVatCode) : null,
+      foundAtcCode ? useTopATCRow(foundAtcCode) : null,
+    ]);
+    const foundAcctCode = payeeRow.apAccountCode || payeeRow.acctCode || "";
+    const foundAcctName = payeeRow.apAccountName || payeeRow.acctName || "";
+    const updates = {
+      vendCode: selectedVendCode,
+      vendName: {
+        vendCode: selectedVendCode,
+        vendName: payeeRow.vendName || reference.vendName || "",
+        currCode: foundCurrCode,
+        currName: foundCurrName,
+        vatCode: foundVatCode,
+        vatName: vatRow?.vatName || "",
+        atcCode: foundAtcCode,
+        atcName: atcRow?.atcName || "",
+        sltypeCode: payeeRow.sltypeCode || "SU",
+      },
+      apAccountCode: foundAcctCode,
+      apAccountName: foundAcctCode && foundAcctName ? `${foundAcctCode} - ${foundAcctName}` : foundAcctCode,
+      currencyCode: foundCurrCode,
+      currencyName: foundCurrName,
+      currCode: foundCurrCode,
+      currName: foundCurrName,
+    };
+    if (foundCurrCode) {
+      const rate = foundCurrCode === glCurrDefault ? defaultCurrRate : await useTopForexRate(foundCurrCode, header.apvDate);
+      updates.currencyRate = formatNumber(parseFormattedNumber(rate || 1), 6);
+      updates.currRate = updates.currencyRate;
+    }
+    return updates;
+  };
+
+  const canApplyReferencePayee = (selectedVendCode) => {
+    if (detailRows.length > 0 && vendCode && String(selectedVendCode).trim().toUpperCase() !== String(vendCode).trim().toUpperCase()) {
+      useSwalErrorAlert("Different Payee", "Clear the existing Invoice Details before selecting a reference for another payee.");
+      return false;
+    }
+    return true;
   };
 
 
@@ -4508,13 +4637,47 @@ const APV = () => {
         {/* Form Layout with Tabs */}
         <div className="global-tran-header-div-ui">
           {/* Tab Navigation */}
-          <div className="global-tran-header-tab-div-ui">
+          <div className="global-tran-header-tab-div-ui items-center justify-between gap-3">
             <button
               className={`global-tran-tab-padding-ui ${activeTab === "basic" ? "global-tran-tab-text_active-ui" : "global-tran-tab-text_inactive-ui"}`}
               onClick={() => updateState({ activeTab: "basic" })}
             >
               Basic Information
             </button>
+            <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
+              <button
+                type="button"
+                className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800"
+                onClick={() => setShowOpenReferencesDropdown((current) => !current)}
+                aria-expanded={showOpenReferencesDropdown}
+                aria-label="Open References"
+              >
+                <FontAwesomeIcon icon={faFolderOpen} />
+                Open References
+                <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+              </button>
+              {showOpenReferencesDropdown && (
+                <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                  {[
+                    ["RR", "Open Purchases (RR)", faBox],
+                    ["JO", "Open Purchases (JO)", faBriefcase],
+                    ["PO", "Open Advances", faCoins],
+                    ["PCV", "Open Replenishment", faReceipt],
+                    ...(canOpenImportationInquiry ? [["LC", "Open Importation", faShip]] : []),
+                  ].map(([referenceType, label, icon]) => (
+                    <button
+                      key={referenceType}
+                      type="button"
+                      className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700"
+                      onClick={() => openReferenceInquiry(referenceType)}
+                    >
+                      <FontAwesomeIcon icon={icon} className="w-4 text-blue-600 dark:text-blue-300" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* APV Header Form Section */}
@@ -5596,7 +5759,7 @@ const APV = () => {
             <div className="flex justify-end">
               <button
                 onClick={() => handleActivityOption("GenerateGL")}
-                className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                className={`global-tran-button-generateGL ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={isLoading || isFormDisabled}
               >
                 {isLoading ? "Generating..." : "Generate GL Entries"}
@@ -6130,16 +6293,19 @@ const APV = () => {
                     : "Get Selected RR")
             }
             idKey="groupId"
+            viewOnly={referenceInquiryOpen && Boolean(documentID)}
+            selectionValidator={(rows) => validateReferencePayees(rows, !referenceInquiryOpen)}
             onClose={handleCloseRRRefModal}
-            onCancel={() =>
+            onCancel={() => {
+              setReferenceInquiryOpen(false);
               updateState({
                 showRRRefModal: false,
                 modalContext: "",
                 globalLookupTitle: "",
                 globalLookupBtnCaption: "",
                 globalLookupConfigEndpoint: "",
-              })
-            }
+              });
+            }}
           />
         )}
 
@@ -6244,6 +6410,10 @@ const APV = () => {
           title="Open LC Importation"
           summarySelectionMode="multiple"
           detailSelectionMode="multiple"
+          viewOnly={referenceInquiryOpen && Boolean(documentID)}
+          // LC summary payee is the broker; validate the actual payee on detail selection.
+          selectionValidator={() => true}
+          detailSelectionValidator={(rows) => validateReferencePayees(rows, !referenceInquiryOpen)}
           summaryColumns={state.openLcSummaryColumns}
           detailColumns={state.openLcDetailColumns}
           summaryData={state.openLcSummaryData}
@@ -6286,14 +6456,15 @@ const APV = () => {
             }
           }}
           onClose={handleCloseLCModal}
-          onCancel={() =>
+          onCancel={() => {
+            setReferenceInquiryOpen(false);
             updateState({
               showOpenLCModal: false,
               openLcSummaryData: [],
               openLcSummaryColumns: [],
               openLcDetailColumns: [],
-            })
-          }
+            });
+          }}
         />
       )}
     </div>

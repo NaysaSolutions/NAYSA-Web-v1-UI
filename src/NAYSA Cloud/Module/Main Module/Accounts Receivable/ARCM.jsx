@@ -1,4 +1,4 @@
-import { useState, useEffect,useRef,useCallback } from "react";
+import { Fragment, useState, useEffect,useRef,useCallback,useMemo } from "react";
 import Swal from 'sweetalert2';
 import { useNavigate,useLocation  } from "react-router-dom";
 
@@ -518,6 +518,29 @@ const ARCM = () => {
   totalVATAmount: '0.00',
   totalATCAmount: '0.00'
   });
+
+  const baseCurrencyCode = glCurrDefault || companyInfo?.currCode || "PHP";
+  const transactionCurrencyCode = currCode || baseCurrencyCode;
+  const showForeignTotals = transactionCurrencyCode !== baseCurrencyCode;
+  const baseRate = parseFormattedNumber(currRate) || 1;
+  const foreignGlSuffix = withCurr3
+    ? glCurrGlobal2 === transactionCurrencyCode ? "Fx1" : glCurrGlobal3 === transactionCurrencyCode ? "Fx2" : ""
+    : withCurr2 ? "Fx1" : "";
+  const glDisplayTotals = useMemo(() => detailRowsGL.reduce((result, row) => {
+    const debit = parseFormattedNumber(row.debit) || 0;
+    const credit = parseFormattedNumber(row.credit) || 0;
+    const debitFx = foreignGlSuffix ? parseFormattedNumber(row[`debit${foreignGlSuffix}`]) || 0 : 0;
+    const creditFx = foreignGlSuffix ? parseFormattedNumber(row[`credit${foreignGlSuffix}`]) || 0 : 0;
+    result.debit += debit;
+    result.credit += credit;
+    result.debitFx += debitFx;
+    result.creditFx += creditFx;
+    if ((debit !== 0 && debitFx === 0) || (credit !== 0 && creditFx === 0)) result.hasIncompleteFx = true;
+    return result;
+  }, { debit: 0, credit: 0, debitFx: 0, creditFx: 0, hasIncompleteFx: false }), [detailRowsGL, foreignGlSuffix]);
+  const useGlForeignAmounts = Boolean(foreignGlSuffix) && !glDisplayTotals.hasIncompleteFx;
+  const foreignGlDebit = useGlForeignAmounts ? glDisplayTotals.debitFx : glDisplayTotals.debit / baseRate;
+  const foreignGlCredit = useGlForeignAmounts ? glDisplayTotals.creditFx : glDisplayTotals.credit / baseRate;
 
 
 
@@ -2394,49 +2417,20 @@ const renderArcmGlColumn = (columnKey, row, index) => {
 
 
     {/* Totals Section */}
-    <div className="global-tran-tab-footer-total-main-div-ui">
-
-    
-      <div className="global-tran-tab-footer-total-div-ui">
-        <label className="global-tran-tab-footer-total-label-ui">
-          Total Invoice Amount:
-        </label>
-        <label id="totalSIAmount" className="global-tran-tab-footer-total-value-ui">
-          {totals.totalSIAmount}
-        </label>
-      </div>
-
-      {/* Total VAT Amount */}
-      <div className="global-tran-tab-footer-total-div-ui" >
-        <label className="global-tran-tab-footer-total-label-ui">
-          {"Total Applied Amount:"}
-        </label>
-        <label id="totalAppliedAmount" className="global-tran-tab-footer-total-value-ui">
-          {totals.totalAppliedAmount}
-        </label>
-      </div>
-
-      {/* Total ATC Amount */}
-      <div className="global-tran-tab-footer-total-div-ui" >
-        <label className="global-tran-tab-footer-total-label-ui">
-          Total VAT Amount:
-        </label>
-        <label id="totalUnappliedAmount" className="global-tran-tab-footer-total-value-ui">
-          {totals.totalVATAmount}
-        </label>
-      </div>
-
-      {/* Total Payable Amount (Invoice + VAT - ATC) */}
-
-      <div className="global-tran-tab-footer-total-div-ui">
-        <label className="global-tran-tab-footer-total-label-ui">
-          Total ATC Amount:
-        </label>
-        <label id="totalBalanceAmount" className="global-tran-tab-footer-total-value-ui">
-          {totals.totalATCAmount}
-        </label>
-      </div>
-
+    <div className={`global-tran-tab-footer-total-main-div-ui grid gap-1 ${showForeignTotals ? "grid-cols-3" : "grid-cols-2"}`}>
+      <div></div>
+      <div className="global-tran-tab-footer-total-label-ui text-right">Currency ({baseCurrencyCode})</div>
+      {showForeignTotals && <div className="global-tran-tab-footer-total-label-ui text-right">Currency ({transactionCurrencyCode})</div>}
+      {[
+        ["Total Invoice Amount", totals.totalSIAmount],
+        ["Total Applied Amount", totals.totalAppliedAmount],
+        ["Total VAT Amount", totals.totalVATAmount],
+        ["Total ATC Amount", totals.totalATCAmount],
+      ].map(([label, amount]) => <Fragment key={label}>
+        <div className="global-tran-tab-footer-total-label-ui">{label}:</div>
+        <div className="global-tran-tab-footer-total-value-ui">{formatNumber((parseFormattedNumber(amount) || 0) * (showForeignTotals ? baseRate : 1))}</div>
+        {showForeignTotals && <div className="global-tran-tab-footer-total-value-ui">{formatNumber(parseFormattedNumber(amount))}</div>}
+      </Fragment>)}
     </div>
 
     
@@ -2542,51 +2536,23 @@ const renderArcmGlColumn = (columnKey, row, index) => {
 
         {/* Totals Section */}
         <div className="global-tran-tab-footer-total-main-div-ui">
-
-          {/* Always show base currency totals */}
-          <>
-              {/* Total Debit */}
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-label-ui">
-                  Total Debit ({glCurrDefault}):
-                </label>
-                <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-value-ui">
-                  {totalDebit}
-                </label>
-              </div>
-
-              {/* Total Credit */}
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-label-ui">
-                  Total Credit ({glCurrDefault}):
-                </label>
-                <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-value-ui">
-                  {totalCredit}
-                </label>
-              </div>
-          </>
-
-          {/* Totals in Foreign Currency Section */}
-          {glCurrDefault !== currCode && (
+          <div className="global-tran-tab-footer-total-div-ui">
+            <label className="global-tran-tab-footer-total-label-ui">Total Debit ({baseCurrencyCode}):</label>
+            <label className="global-tran-tab-footer-total-value-ui">{formatNumber(glDisplayTotals.debit)}</label>
+          </div>
+          <div className="global-tran-tab-footer-total-div-ui">
+            <label className="global-tran-tab-footer-total-label-ui">Total Credit ({baseCurrencyCode}):</label>
+            <label className="global-tran-tab-footer-total-value-ui">{formatNumber(glDisplayTotals.credit)}</label>
+          </div>
+          {showForeignTotals && (
             <div className="global-tran-tab-footer-total-main-div-ui">
-              {/* Total Debit in Forex */}
               <div className="global-tran-tab-footer-total-div-ui">
-                <label htmlFor="TotalDebitFx" className="global-tran-tab-footer-total-label-ui">
-                  Total Debit ({currCode}):
-                </label>
-                <label htmlFor="TotalDebitFx" className="global-tran-tab-footer-total-value-ui">
-                  {totalDebitFx1}
-                </label>
+                <label className="global-tran-tab-footer-total-label-ui">Total Debit ({transactionCurrencyCode}):</label>
+                <label className="global-tran-tab-footer-total-value-ui">{formatNumber(foreignGlDebit)}</label>
               </div>
-
-              {/* Total Credit in Forex */}
               <div className="global-tran-tab-footer-total-div-ui">
-                <label htmlFor="TotalCreditFx" className="global-tran-tab-footer-total-label-ui">
-                  Total Credit ({currCode}):
-                </label>
-                <label htmlFor="TotalCreditFx" className="global-tran-tab-footer-total-value-ui">
-                  {totalCreditFx1}
-                </label>
+                <label className="global-tran-tab-footer-total-label-ui">Total Credit ({transactionCurrencyCode}):</label>
+                <label className="global-tran-tab-footer-total-value-ui">{formatNumber(foreignGlCredit)}</label>
               </div>
             </div>
           )}

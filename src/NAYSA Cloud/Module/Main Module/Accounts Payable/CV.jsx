@@ -2906,7 +2906,7 @@ const renderCvGlCell = (columnKey, row, index) => {
               onHistory={() => setTopTab("history")}
               disableRouteNavigation={true}         
               detailsRoute="/page/CV"
-              isSaveDisabled={state.isSaveDisabled || isFormDisabled || detailRowsGL.length === 0}
+              isSaveDisabled={state.isSaveDisabled || isFormDisabled || (selectedWithAPV === "Y" ? detailRows.length === 0 : detailRowsGL.length === 0)}
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
               isPrintDisabled={!documentID || displayStatus === "Cancelled"}
@@ -3323,19 +3323,6 @@ const renderCvGlCell = (columnKey, row, index) => {
           Invoice Details
         </button>
       </div>
-
-      {selectedWithAPV === 'Y' && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => handleOpenAPBalance()}
-            className="global-tran-button-generateGL"
-            disabled={isLoading}
-            style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-          >
-            Get Reference APV
-          </button>
-        </div>
-      )}
 
     </div>
 
