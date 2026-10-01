@@ -14,7 +14,7 @@ import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
-import PostSVI from "../../../Module/Main Module/Accounts Receivable/PostSVI.jsx";
+import PostFGAJ from "./PostFGAJ.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
@@ -106,6 +106,25 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
+
+const normalize = (value) => String(value ?? "").trim().toUpperCase();
+const statusLabels = {
+  F: "FINALIZED", P: "POSTED", C: "CLOSED", AC: "ACCOUNTING CLOSED", X: "CANCELLED",
+};
+const lockedStatuses = new Set(["FINALIZED", "POSTED", "CANCELLED", "CLOSED", "ACCOUNTING CLOSED"]);
+
+const getAdjustmentStatus = (status, documentStatus) => {
+  const label = statusLabels[normalize(status)] || normalize(status);
+  const code = statusLabels[normalize(documentStatus)] || normalize(documentStatus);
+  // A terminal document code must still lock the form if the label is stale/missing.
+  if (lockedStatuses.has(label)) return label;
+  if (lockedStatuses.has(code)) return code;
+  return label || code || "OPEN";
+};
+
+const isAdjustmentReadOnly = (status, documentStatus, viewOnly = false) =>
+  viewOnly || lockedStatuses.has(getAdjustmentStatus(status, documentStatus));
+
 const toDateInputValue = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -386,7 +405,7 @@ const FGAJ = () => {
 
 
   //Status Global Setup
-  const displayStatus = status || 'OPEN';
+  const displayStatus = getAdjustmentStatus(status, documentStatus);
   const statusMap = {
     OPEN: "global-tran-stat-text-open-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
@@ -394,9 +413,7 @@ const FGAJ = () => {
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
-  const isFormDisabled =
-  isViewDocumentUrl ||
-  ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const isFormDisabled = isAdjustmentReadOnly(status, documentStatus, isViewDocumentUrl);
   const canUseSingleUploadOptions =
     String(hsDoc?.docUpload || "").toUpperCase() === "S" &&
     (
@@ -730,6 +747,7 @@ const handleDocNoBlur = () => {
 
 
 const handleActivityOption = async (action) => {
+  if (isFormDisabled) return;
   if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
     return;
   }
@@ -1060,6 +1078,7 @@ const createEmptyDetailRow = () => ({
 });
 
 const handleGetItem = async (index = null) => {
+  if (isFormDisabled) return;
   if (!selectedAJType) return;
 
   const updatedRows = [...detailRows];
@@ -1078,6 +1097,7 @@ const handleGetItem = async (index = null) => {
 
 
   const handleAddRow = async () => {
+  if (isFormDisabled) return;
 
     const fieldsToCheck = {
       "Header : Warehouse": WHCode,
@@ -1103,6 +1123,7 @@ const handleGetItem = async (index = null) => {
 
 
   const handleAddItem = async (index) => {
+  if (isFormDisabled) return;
   if (!selectedAJType) return;
 
   if (["BB", "IG"].includes(selectedAJType)) {
@@ -1142,6 +1163,7 @@ const createEmptyGlRow = () => ({
 });
 
 const handleAddRowGL = (index = null) => {
+  if (isFormDisabled) return;
   if (!selectedAJType) return;
 
   const updatedRows = [...detailRowsGL];
@@ -1163,6 +1185,7 @@ const handleAddRowGL = (index = null) => {
   
 
   const handleDeleteRow = async (index) => {
+  if (isFormDisabled) return;
     const updatedRows = [...detailRows];
     updatedRows.splice(index, 1);
 
@@ -1177,6 +1200,7 @@ const handleAddRowGL = (index = null) => {
 
   
   const handleDeleteRowGL =  (index) => {
+  if (isFormDisabled) return;
     const updatedRows = [...detailRowsGL];
     updatedRows.splice(index, 1);
     updateState({ detailRowsGL: updatedRows }); 
@@ -1198,7 +1222,13 @@ const handlePrint = async () => {
 
 
 
+const handleClosePosting = useCallback(async () => {
+  updateState({ showPostingModal: false });
+  if (documentNo && branchCode) await fetchTranData(documentNo, branchCode);
+}, [documentNo, branchCode]);
+
 const handlePost = async () => {
+  if (isFormDisabled) return;
  if (!detailRows || detailRows.length === 0) {
       return;
       }
@@ -1215,6 +1245,7 @@ const handlePost = async () => {
 
 
 const handleCancel = async () => {
+  if (isFormDisabled) return;
  if (!detailRows || detailRows.length === 0) {
       return;
       }
@@ -1492,6 +1523,7 @@ const handleColumnLabel = (columnName) =>{
   };
 
   const handleUploadExcelFile = async (event) => {
+  if (isFormDisabled) return;
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -1595,6 +1627,7 @@ const handleColumnLabel = (columnName) =>{
   };
 
   const handleUploadSingleTransaction = () => {
+  if (isFormDisabled) return;
     uploadInputRef.current?.click();
   };
 
@@ -1824,6 +1857,7 @@ useEffect(() => {
 
 
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
+  if (isFormDisabled) return;
   const updatedRows = [...(detailRowsRef.current || [])];
 
   updatedRows[index] = {
@@ -1965,6 +1999,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
 
 const handleDetailChangeGL = async (index, field, value) => {
+  if (isFormDisabled) return;
     const updatedRowsGL = [...(detailRowsGLRef.current || [])];
     let row = { ...updatedRowsGL[index] };
 
@@ -2013,6 +2048,7 @@ const handleDetailChangeGL = async (index, field, value) => {
 
 
 const handleBlurGL = async (index, field, value, autoCompute = false) => {
+  if (isFormDisabled) return;
   
   const updatedRowsGL = [...(detailRowsGLRef.current || [])];
   const row = { ...updatedRowsGL[index] };
@@ -2065,6 +2101,7 @@ const handleBlurGL = async (index, field, value, autoCompute = false) => {
 
 
 const handleCloseAccountModal = (selectedAccount) => {
+  if (isFormDisabled) return;
 
     if (selectedAccount && selectedRowIndex !== null) {
 
@@ -2087,6 +2124,7 @@ const handleCloseAccountModal = (selectedAccount) => {
 
 
   const handleCloseRcModalGL = async (selectedRc) => {
+  if (isFormDisabled) return;
     if (selectedRc && selectedRowIndex !== null) {
       if (accountModalSource !== null) {
         handleDetailChange(selectedRowIndex, 'rcCode', selectedRc, false);
@@ -2109,6 +2147,7 @@ const handleCloseAccountModal = (selectedAccount) => {
 
 
   const handleCloseSlModalGL = async (selectedSl) => {
+  if (isFormDisabled) return;
     if (selectedSl && selectedRowIndex !== null) {
 
       const updateFn = accountModalSource !== null ? handleDetailChange : handleDetailChangeGL;
@@ -2139,6 +2178,7 @@ const handleTranDocNoSelection = async (data) => {
 
 
 const handleCloseCancel = async (confirmation) => {
+  if (isFormDisabled) return;
     if(confirmation && documentStatus !== "OPEN" && documentID !== null ) {
 
       const result = await useHandleCancel(docType,documentID,userCode,confirmation.password,confirmation.reason,updateState);
@@ -2193,6 +2233,7 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 const handleCloseWarehouseLookup = (row) => {
+  if (isFormDisabled) return;
   const isHeaderBBIGWarehouse =
     row &&
     !accountModalSource &&
@@ -2251,6 +2292,7 @@ const handleCloseWarehouseLookup = (row) => {
 
 
 const handleCloseLocationLookup = (row) => {
+  if (isFormDisabled) return;
   if (row) {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'locCode', row, false)
@@ -2281,6 +2323,7 @@ const handleCloseLocationLookup = (row) => {
 
 
 const handleCloseQStatLookup = (row) => {
+  if (isFormDisabled) return;
   if (row) {
    handleDetailChange(selectedRowIndex, 'qstatCode', row, false)
   }
@@ -2295,6 +2338,7 @@ const handleCloseQStatLookup = (row) => {
 
 
 const handleCloseBranchModal = (selectedBranch) => {
+  if (isFormDisabled) return;
     if (selectedBranch) {
       updateState({
       branchCode: selectedBranch.branchCode,
@@ -2309,6 +2353,7 @@ const handleCloseBranchModal = (selectedBranch) => {
 
   
   const handleOpenMSLookup = async (itemSingleSelect) => {
+  if (isFormDisabled) return;
     try {
 
       
@@ -2395,6 +2440,7 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 const handleAddBlankRow = (index) => {
+  if (isFormDisabled) return;
   const blankRow = {
     itemCode: "",
     oldValue: "",
@@ -2433,6 +2479,7 @@ const handleAddBlankRow = (index) => {
 
 
 const handleCloseMSLookup = (selectedItems) => {
+  if (isFormDisabled) return;
   
 
   if (!selectedItems) return;
@@ -2527,6 +2574,7 @@ const handleCloseMSLookup = (selectedItems) => {
 };
 
 const handleCloseItemMastLookup = (selectedItems) => {
+  if (isFormDisabled) return;
   if (!selectedItems) {
     updateState({ itemMastLookupOpen: false, itemSingleSelect: false });
     return;
@@ -2553,6 +2601,7 @@ const handleCloseItemMastLookup = (selectedItems) => {
 };
 
 const handleCloseBrandLookup = (selectedBrand) => {
+  if (isFormDisabled) return;
   const rowIndex = selectedRowIndex;
   updateState({ brandLookupOpen: false, selectedRowIndex: null });
 
@@ -2592,7 +2641,7 @@ const renderFgajDetailColumn = (columnKey, row, index) => {
   };
 
   const textInput = (field, options = {}) => (
-    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${textColorClass} ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
+    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${textColorClass} ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={isFormDisabled || options.readOnly} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
   );
 
   const lookupCell = (field, onClick, options = {}) => (
@@ -2606,7 +2655,7 @@ const renderFgajDetailColumn = (columnKey, row, index) => {
       : new RegExp(`^\\d*\\.?\\d{0,${decimalPlaces}}$`);
 
     return (
-      <input type="text" id={`${field}-${index}`} className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearFgajDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextFgajDetailRowInput(index, field, { rows: detailRows, zeroClearFields: fgajDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
+      <input type="text" id={`${field}-${index}`} className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={row[field] || ""} readOnly={isFormDisabled || options.readOnly} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearFgajDetailZeroOnFocus(e, { isEditable: !(isFormDisabled || options.readOnly), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (isFormDisabled || options.readOnly) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (isFormDisabled || options.readOnly)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextFgajDetailRowInput(index, field, { rows: detailRows, zeroClearFields: fgajDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
     );
   };
 
@@ -2649,8 +2698,8 @@ const renderFgajGlColumn = (columnKey, row, index) => {
   const style = getFgajGlCellStyle(columnKey, columnWidth);
   const focusNextGlCell = (field) => focusNextFgajGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: fgajGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
   const modalHandlers = { acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }), slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }) };
-  const textInput = (field, options = {}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />;
-  const lookupCell = (field, options = {}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? true} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]} />}</div></td>;
+  const textInput = (field, options = {}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={isFormDisabled || options.readOnly} maxLength={options.maxLength} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />;
+  const lookupCell = (field, options = {}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={isFormDisabled || (options.readOnly ?? true)} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]} />}</div></td>;
   const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearFgajGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
   const glColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
@@ -2717,7 +2766,7 @@ return (
         isAttachDisabled={!documentID}
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
+        isCancelDisabled={!documentID || isFormDisabled}
         detailsRoute="/page/FGAJ"
       />
       </div>
@@ -3262,12 +3311,12 @@ return (
 
 
     {showPostingModal && (
-      <PostSVI
+      <PostFGAJ
         isOpen={showPostingModal}
         userCode={userCode}
         docType={docType}
         branchCode={branchCode}
-        onClose={() => updateState({ showPostingModal: false })}
+        onClose={handleClosePosting}
       />
     )} 
 
