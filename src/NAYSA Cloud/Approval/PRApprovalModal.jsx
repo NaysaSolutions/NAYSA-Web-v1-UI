@@ -371,6 +371,7 @@ const PRApprovalModal = ({
 
           //console.log("Approve payload:", JSON.stringify(finalPayload));
         await postRequest(APPROVE_ENDPOINT, finalPayload);
+        setIsApproving(false);
 
         await useSwalSuccessAlert(
           "PR Approved",
@@ -418,6 +419,7 @@ const PRApprovalModal = ({
 
         //console.log("Disapprove payload:", JSON.stringify(finalPayload));
         await postRequest(APPROVE_ENDPOINT, finalPayload);
+        setIsApproving(false);
 
         await useSwalSuccessAlert(
           "PR Disapproved",
@@ -466,6 +468,7 @@ const PRApprovalModal = ({
         };
         //console.log("Comment payload:", JSON.stringify(finalPayload));
         await postRequest(APPROVE_ENDPOINT, finalPayload);
+        setIsApproving(false);
 
         await useSwalSuccessAlert(
           "Approver's Note Applied",
@@ -572,31 +575,35 @@ const PRApprovalModal = ({
   }
 
   return (
-    <GlobalApprovalModal
-      {...modalProps}
-      isOpen={isOpen}
-      onClose={onClose}
-      title={transactionLabel}
-      transactionLabel={transactionLabel}
-      documentName={documentName}
-      approverName={effectiveApproverName}
-      approverImageSrc={effectiveApproverImageSrc}
-      approvalLevel={approvalLevel}
-      department={effectiveDepartment}
-      detailColumns={effectiveColumns}
-      detailRows={rows}
-      isDetailLoading={isLoading}
-      isProcessing={isApproving}
-      onViewDocument={onViewDocument}
-      onViewAttachment={onViewAttachment}
-      onReloadRecords={reloadApprovalRows}
-      onRowApprove={handleApproveRows}
-      onRowDisapprove={handleDisapproveRows}
-      onRowComment={handleCommentRows}
-      onApproveSelected={handleApproveRows}
-      onRejectSelected={handleDisapproveRows}
-      onCommentSelected={handleCommentRows}
-    />
+    <>
+      <GlobalApprovalModal
+        {...modalProps}
+        isOpen={isOpen}
+        onClose={onClose}
+        title={transactionLabel}
+        transactionLabel={transactionLabel}
+        documentName={documentName}
+        approverName={effectiveApproverName}
+        approverImageSrc={effectiveApproverImageSrc}
+        approvalLevel={approvalLevel}
+        department={effectiveDepartment}
+        detailColumns={effectiveColumns}
+        detailRows={rows}
+        isDetailLoading={isLoading}
+        isProcessing={isApproving}
+        onViewDocument={onViewDocument}
+        onViewAttachment={onViewAttachment}
+        onReloadRecords={reloadApprovalRows}
+        onRowApprove={handleApproveRows}
+        onRowDisapprove={handleDisapproveRows}
+        onRowComment={handleCommentRows}
+        onApproveSelected={handleApproveRows}
+        onRejectSelected={handleDisapproveRows}
+        onCommentSelected={handleCommentRows}
+      />
+
+      {isApproving && <LoadingSpinner />}
+    </>
   );
 };
 

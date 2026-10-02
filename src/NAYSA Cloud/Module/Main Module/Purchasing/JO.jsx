@@ -11,6 +11,9 @@ import {
   faSearch,
   faMinus,
   faTrashAlt,
+  faBoxOpen,
+  faWarehouse,
+  faTableCellsLarge,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
@@ -27,6 +30,7 @@ import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import JobCodeLookupModal from "../../../Lookup/SearchJobCodesRef.jsx";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
@@ -94,6 +98,7 @@ import {
 
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import { getAccessibleMenuModules, hasAccessibleMenuModule } from "@/NAYSA Cloud/Global/menuAccess.js";
 
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
@@ -148,6 +153,12 @@ const JO = () => {
     const pdfLink = docTypePDFGuide[docType];
     const videoLink = docTypeVideoGuide[docType];
     const documentTitle = hsDoc.docName + ' Transaction';
+    const accessibleMenuModules = getAccessibleMenuModules();
+    const allowedItemTypes = [
+      hasAccessibleMenuModule(accessibleMenuModules, "RM") && "RM",
+      hasAccessibleMenuModule(accessibleMenuModules, "FG") && "FG",
+      hasAccessibleMenuModule(accessibleMenuModules, "MS") && "MS",
+    ].filter(Boolean);
 
 
   const [state, setState] = useState({
@@ -224,6 +235,7 @@ const JO = () => {
 
     // Detail lines (PR dt1)
     detailRows: [],
+    itemDetailRows: [],
     detailRowsApp: [],
 
     // Modal states
@@ -243,6 +255,12 @@ const JO = () => {
     prLookupModalOpen: false,
     showApprovalStatusModal: false,
     showJobCodesModal:false,
+    itemLookupModalOpen: false,
+    selectedItemType: "",
+    selectedItemRowIndex: null,
+    itemSingleSelect: false,
+    itemLookupEndPoint: "",
+    selectedDocType: "",
     showAllTranDocNo:false,
     showOpenPRModal:false,
 
@@ -314,6 +332,7 @@ const JO = () => {
     openPRJO_Col_Detail,
 
     detailRows,
+    itemDetailRows,
     detailRowsApp,
 
    
@@ -334,9 +353,48 @@ const JO = () => {
     showAllTranDocNo,
     showOpenPRModal,
     rcLookupModalOpen,
+    itemLookupModalOpen,
+    selectedItemType,
+    selectedItemRowIndex,
+    itemSingleSelect,
+    itemLookupEndPoint,
+    selectedDocType,
   } = state;
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const itemAddMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showTypeDropdown) return;
+    const handleClickOutside = (event) => {
+      if (!itemAddMenuRef.current?.contains(event.target)) setShowTypeDropdown(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showTypeDropdown]);
+
+  const joItemColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "invType", label: "Inv Type", width: 100 },
+    { key: "itemCode", label: "Item Code", width: 140 },
+    { key: "itemName", label: "Item Name", width: 280 },
+    { key: "specification", label: "Specification", width: 280 },
+    { key: "uomCode", label: "UOM", width: 90 },
+    { key: "quantity", label: "Quantity", width: 130 },
+  ];
+
+  const {
+    getColumnStyle: getJoItemColumnStyle,
+    getOrderedColumns: getOrderedJoItemColumns,
+    getSortedRows: getSortedJoItemRows,
+    renderHeaderContextMenu: renderJoItemHeaderContextMenu,
+    renderResizableHeader: renderJoItemHeader,
+  } = useResizableTableColumns(joItemColumnDefs);
+  const orderedJoItemColumns = getOrderedJoItemColumns(joItemColumnDefs);
+  const sortedJoItemRows = getSortedJoItemRows(
+    (itemDetailRows || []).map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+  );
 
   useEffect(() => {
     detailRowsRef.current = detailRows || [];
@@ -384,6 +442,7 @@ const JO = () => {
     currentApprovalLevel > 0 &&
     currentApprovalLevel <= maxApprovalLevel;
   const isFormDisabled = isDocumentLocked || isApprovalLocked;
+  const isJoItemDisabled = isFormDisabled || !detailRows.length;
 
 
 
@@ -569,6 +628,7 @@ useEffect(() => {
       noReprints: "",
       joCancelled: "",
       detailRows: [],
+      itemDetailRows: [],
       detailRowsApp: [],
       rcLookupModalOpen: false,
       selectedRowIndex: null,
@@ -778,6 +838,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       : data.dtApp
         ? [data.dtApp]
         : [];
+    const retrievedItemRows = (data.dt3 || []).map((item) => ({
+      ...item,
+      quantity: formatNumber(item.quantity || 0, 2),
+    }));
 
     let fetchedCurrName = data.currName || "";
 
@@ -820,6 +884,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       joCancelled: data.joCancelled ,
       noReprints: data.noReprints,
       detailRows: retrievedDetailRows,
+      itemDetailRows: retrievedItemRows,
       detailRowsApp: retrievedApprovalRows,
       isDocNoDisabled: true,
       isFetchDisabled: true,
@@ -942,6 +1007,62 @@ const insertNewRow = async (index = -1) => {
   return updatedRows;
 };
 
+const createEmptyItemRow = (invType = "") => ({ invType, itemCode: "", itemName: "", specification: "", uomCode: "", quantity: formatNumber(0, 2) });
+
+const updateItemDetail = (index, field, value) => {
+  const rows = [...itemDetailRows];
+  rows[index] = { ...rows[index], [field]: value };
+  if (field === "invType") rows[index] = { ...createEmptyItemRow(value), specification: rows[index].specification };
+  updateState({ itemDetailRows: rows });
+};
+
+const addItemDetailRow = (invType = "", index = -1) => {
+  if (isJoItemDisabled) return;
+  const rows = [...itemDetailRows];
+  rows.splice(index < 0 ? rows.length : index + 1, 0, createEmptyItemRow(invType));
+  updateState({ itemDetailRows: rows });
+  setShowTypeDropdown(false);
+};
+
+const validateJoItemAdd = async () => useSwalvalidateRequiredFields({ "Header : Payee": payeeCode }, "Add Item");
+
+const handleJoItemAddClick = async () => {
+  if (isJoItemDisabled || !(await validateJoItemAdd())) return;
+  setShowTypeDropdown((value) => !value);
+};
+
+const handleInsertJoItemRow = async (index) => {
+  if (isJoItemDisabled || !(await validateJoItemAdd())) return;
+  addItemDetailRow("", index);
+};
+
+const openItemLookup = (index, lookupDocType, singleSelect = true) => {
+  const invType = String(lookupDocType || "").slice(-2).toUpperCase();
+  if (!invType || isJoItemDisabled) return;
+  setShowTypeDropdown(false);
+  updateState({ selectedItemRowIndex: index, selectedItemType: invType, selectedDocType: lookupDocType, itemSingleSelect: singleSelect, itemLookupEndPoint: `getInvLookup${invType}`, itemLookupModalOpen: true });
+};
+
+const closeItemLookup = (selection) => {
+  const records = Array.isArray(selection?.records) ? selection.records : selection?.records ? [selection.records] : [];
+  if (!records.length) return updateState({ itemLookupModalOpen: false, itemSingleSelect: false });
+  if (itemSingleSelect && selectedItemRowIndex !== null) {
+    const item = records[0];
+    const rows = [...itemDetailRows];
+    rows[selectedItemRowIndex] = { ...rows[selectedItemRowIndex], invType: selectedItemType, itemCode: item.itemCode || "", itemName: item.itemName || "", uomCode: item.uomCode || "" };
+    updateState({ itemDetailRows: rows });
+  } else {
+    const newRows = records.map((item) => ({ ...createEmptyItemRow(selectedItemType), itemCode: item.itemCode || "", itemName: item.itemName || "", uomCode: item.uomCode || "" }));
+    updateState({ itemDetailRows: [...itemDetailRows, ...newRows] });
+  }
+  updateState({ itemLookupModalOpen: false, selectedItemRowIndex: null, itemSingleSelect: false });
+};
+
+const commitItemQuantity = (index, value, moveNext = false) => {
+  updateItemDetail(index, "quantity", formatNumber(parseFormattedNumber(value || 0), 2));
+  if (moveNext) window.setTimeout(() => document.getElementById(`joItemQuantity-${index + 1}`)?.focus(), 0);
+};
+
 
 
 
@@ -1048,6 +1169,7 @@ const handleDeleteRow = (index) => {
         rcCode,
         remarks,
         detailRows,
+        itemDetailRows,
         documentStatus,
       } = state;
 
@@ -1092,6 +1214,15 @@ const handleDeleteRow = (index) => {
           netAmt: parseFormattedNumber(row.netAmt || 0),
           rcCode: row.rcCode || rcCode || "",
           deliveryDate: row.deliveryDate || null    
+        })),
+        dt3: itemDetailRows.map((row, index) => ({
+          lnNo: index + 1,
+          invType: row.invType || "",
+          itemCode: row.itemCode || "",
+          itemName: row.itemName || "",
+          specification: row.specification || "",
+          uomCode: row.uomCode || "",
+          quantity: parseFormattedNumber(row.quantity || 0),
         })),
       };
 
@@ -2099,7 +2230,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
           <div className="global-tran-tab-nav-ui">
             <div className="flex flex-row sm:flex-row">
               <span className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-                Job Detail
+                JO Detail
               </span>
             </div>
           </div>
@@ -2175,6 +2306,46 @@ const renderJoDetailColumn = (columnKey, row, index) => {
       </div>
 
         {/* HISTORY TAB */}
+        <div className="global-tran-tab-div-ui">
+          <div className="global-tran-tab-nav-ui"><span className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">JO Item Details</span></div>
+          <div className="global-tran-table-main-div-ui"><div className="global-tran-table-main-sub-div-ui">
+            <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+              <thead className="global-tran-thead-div-ui"><tr>
+                {orderedJoItemColumns.map((column) => renderJoItemHeader(column.label, column.key, column.width, { orderedColumns: orderedJoItemColumns }))}
+                {!isFormDisabled && <th className="global-tran-th-ui sticky right-0 bg-blue-100" style={transactionActionsHeaderStyle}>Actions</th>}
+              </tr></thead>
+              <tbody>{sortedJoItemRows.map(({ row, originalIndex }) => <tr key={originalIndex} className="global-tran-tr-ui">
+                {orderedJoItemColumns.map((column) => {
+                  const style = getJoItemColumnStyle(column.key, column.width);
+                  if (column.key === "ln") return <td key={column.key} className="global-tran-td-ui text-center" style={style}>{originalIndex + 1}</td>;
+                  if (column.key === "invType") return <td key={column.key} className="global-tran-td-ui" style={style}><select className="w-full global-tran-td-inputclass-ui" value={row.invType || ""} disabled={isJoItemDisabled || !!row.itemCode} onChange={(e) => updateItemDetail(originalIndex, "invType", e.target.value)}><option value="">Blank</option>{allowedItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></td>;
+                  if (column.key === "itemCode") return <td key={column.key} className="global-tran-td-ui relative" style={style}><input className="w-full global-tran-td-inputclass-ui pr-6" value={row.itemCode || ""} readOnly={!!row.invType} disabled={isJoItemDisabled} onChange={(e) => updateItemDetail(originalIndex, "itemCode", e.target.value)} />{!!row.invType && !isJoItemDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 top-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => openItemLookup(originalIndex, `JO${row.invType}`)} />}</td>;
+                  if (column.key === "quantity") return <td key={column.key} className="global-tran-td-ui" style={style}><input id={`joItemQuantity-${originalIndex}`} className="w-full global-tran-td-inputclass-ui text-right" value={row.quantity ?? ""} disabled={isJoItemDisabled} onFocus={(e) => { if (parseFormattedNumber(e.target.value) === 0) updateItemDetail(originalIndex, "quantity", ""); }} onChange={(e) => { const value = e.target.value.replace(/,/g, ""); if (/^\d*\.?\d{0,2}$/.test(value)) updateItemDetail(originalIndex, "quantity", value); }} onBlur={(e) => commitItemQuantity(originalIndex, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitItemQuantity(originalIndex, e.currentTarget.value, true); } }} /></td>;
+                  const editable = !row.invType || column.key === "specification";
+                  return <td key={column.key} className="global-tran-td-ui" style={style}><input className="w-full global-tran-td-inputclass-ui" value={row[column.key] || ""} readOnly={!editable} disabled={isJoItemDisabled} onChange={(e) => updateItemDetail(originalIndex, column.key, e.target.value)} /></td>;
+                })}
+                {!isFormDisabled && <td className="global-tran-td-ui sticky right-0 bg-white" style={transactionActionsCellStyle}><div className="flex justify-center gap-1"><button disabled={isJoItemDisabled} className="global-tran-td-button-add-ui" onClick={() => handleInsertJoItemRow(originalIndex)}><FontAwesomeIcon icon={faPlus} /></button><button disabled={isJoItemDisabled} className="global-tran-td-button-delete-ui" onClick={() => updateState({ itemDetailRows: itemDetailRows.filter((_, i) => i !== originalIndex) })}><FontAwesomeIcon icon={faTrashAlt} /></button></div></td>}
+              </tr>)}</tbody>
+            </table>{renderJoItemHeaderContextMenu?.()}
+          </div></div>
+          <div className="global-tran-tab-footer-main-div-ui"><div ref={itemAddMenuRef} className="relative inline-block">
+            <button type="button" disabled={isJoItemDisabled} className="global-tran-tab-footer-button-add-ui" onClick={handleJoItemAddClick}><FontAwesomeIcon icon={faPlus} className="mr-2" />Add</button>
+            {showTypeDropdown && <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[240px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
+              <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700"><div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">Add Item</div></div>
+              <div className="p-2">
+                {[
+                  { type: "FG", label: "Finished Goods", hint: "Add FG item", icon: faBoxOpen },
+                  { type: "MS", label: "Material Supplies", hint: "Add MS Item", icon: faTableCellsLarge },
+                  { type: "RM", label: "Raw Material", hint: "Add RM Item", icon: faWarehouse },
+                ].filter((item) => allowedItemTypes.includes(item.type)).map((item, index) => <button key={item.type} type="button" className={`${index ? "mt-1 " : ""}flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700`} onClick={() => openItemLookup(null, `JO${item.type}`, false)}>
+                  <div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200"><FontAwesomeIcon icon={item.icon} /></span><div className="flex flex-col items-start"><span>{item.label}</span><span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">{item.hint}</span></div></div>
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">{item.type}</span>
+                </button>)}
+              </div>
+            </div>}
+          </div></div>
+        </div>
+
      <div className={topTab === "history" ? "" : "hidden"}>
   <AllTranHistory
     showHeader={false}
@@ -2220,6 +2391,17 @@ const renderJoDetailColumn = (columnKey, row, index) => {
           isOpen={rcLookupModalOpen}
           onClose={handleCloseRCModal}
           customParam="ActiveDept"
+        />
+      )}
+
+      {itemLookupModalOpen && (
+        <ItemMastLookupModal
+          isOpen={itemLookupModalOpen}
+          endpoint={itemLookupEndPoint}
+          onClose={closeItemLookup}
+          onCancel={() => updateState({ itemLookupModalOpen: false })}
+          enableMultiSelect={!itemSingleSelect}
+          docType={selectedDocType}
         />
       )}
 

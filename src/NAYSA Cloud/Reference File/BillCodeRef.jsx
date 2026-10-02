@@ -641,9 +641,9 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         className="global-tran-tab-div-ui mt-24 p-6 sm:mt-20"
         style={{ minHeight: "calc(100vh - 170px)" }}
       >
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
-          <div className="rounded-xl border bg-white p-6 shadow-sm md:col-span-10">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="md:col-span-9 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-4">
               <div className="flex flex-col gap-4">
                 <FieldRenderer
                   label="Bill Code"
@@ -678,31 +678,17 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                   required
                 />
 
-                <FieldRenderer
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FieldRenderer
                   label="UOM"
                   value={form.uomCode}
                   maxLength={10}
                   onChange={(val) => setField("uomCode", val)}
                   disabled={!isEditing}
                   required
-                />
-
-                <FieldRenderer
-                  label="Active"
-                  type="select"
-                  value={form.active}
-                  disabled={!isEditing}
-                  options={[
-                    { value: "Y", label: "Yes" },
-                    { value: "N", label: "No" },
-                  ]}
-                  onChange={(v) => setField("active", v)}
-                />
-
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <FieldRenderer
+                  />
+                
+                  <FieldRenderer
                   label="Unit Price Required?"
                   type="select"
                   value={form.unitPriceRequired}
@@ -713,7 +699,8 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                     { value: "N", label: "No" },
                   ]}
                   disabled={!isEditing}
-                />
+                  />
+                </div>
 
                 <FieldRenderer
                   type="lookup"
@@ -731,6 +718,21 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                 />
 
                 <FieldRenderer
+                  label="Active"
+                  type="select"
+                  value={form.active}
+                  disabled={!isEditing}
+                  options={[
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                  ]}
+                  onChange={(v) => setField("active", v)}
+                  />
+              </div>
+
+              <div className="flex flex-col gap-4">
+              
+                <FieldRenderer
                   label="AR Account"
                   type="lookup"
                   value={
@@ -745,10 +747,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                   required
                 />
 
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <FieldRenderer
+                  <FieldRenderer
                   label="Sales Account"
                   type="lookup"
                   value={
@@ -794,7 +793,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
             </div>
           </div>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-3">
             <RegistrationInfo data={form} layout="stacked" />
           </div>
         </div>

@@ -2033,7 +2033,7 @@ export default function GLINQ({
         <div className="flex items-stretch gap-3">
           <aside
             className={`hidden transition-all duration-200 lg:block ${
-              hideNav ? "w-[88px]" : "w-[290px]"
+              hideNav ? "w-[120px]" : "w-[290px]"
             }`}
           >
             <div className="global-tran-tab-div-ui h-full !m-0 !p-4">
@@ -2451,25 +2451,23 @@ const ReportNavList = ({ activeTab, tabConfigs, handleSelect, collapsed }) => (
           <button
             onClick={() => handleSelect(key)}
             title={collapsed ? config.label || key : undefined}
-            className={`w-full rounded-xl border text-left transition ${
+            className={`group w-full rounded-xl border text-left transition ${
               activeTab === key
                 ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
                 : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
             } ${
               collapsed
-                ? "flex justify-center px-2 py-3"
+                ? "flex flex-col items-center justify-center gap-1 px-1 py-2"
                 : "flex items-center px-3 py-2.5"
             }`}
           >
             <FontAwesomeIcon
               icon={config.icon || faListOl}
-              className={`${collapsed ? "" : "mr-2"} text-[13px]`}
+              className={`${collapsed ? "" : "mr-2"} text-[13px] transition-transform duration-200 group-hover:scale-125`}
             />
-            {!collapsed && (
-              <span className="truncate text-xs font-medium sm:text-sm">
-                {config.label || key}
-              </span>
-            )}
+            <span className={collapsed ? "w-full text-center text-[9px] font-medium leading-tight" : "truncate text-xs font-medium sm:text-sm"}>
+              {config.label || key}
+            </span>
           </button>
         </li>
       );

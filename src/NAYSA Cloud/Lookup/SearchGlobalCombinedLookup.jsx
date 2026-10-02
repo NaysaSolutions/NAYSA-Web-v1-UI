@@ -15,6 +15,9 @@ const GlobalCombinedLookup = ({
   summaryData: initialSummaryData,
   fetchDetailApi,
   summarySelectionMode = "multiple",
+  selectionValidator,
+  detailSelectionValidator,
+  viewOnly = false,
   tabTitles = ["Summary", "Details"]
 }) => {
   const [activeTab, setActiveTab] = useState("Summary");
@@ -131,7 +134,7 @@ const GlobalCombinedLookup = ({
       <div className="flex min-w-0 flex-col pl-2 sm:pl-3">
         <div className="global-lookup-headertext-ui leading-tight">{title}</div>
         <div className="mt-0.5 text-[10px] font-medium text-slate-400">
-          Select a summary record, then load and confirm detail rows.
+          {viewOnly ? "Double-click a summary row to view its details." : "Select a summary record, then load and confirm detail rows."}
         </div>
       </div>
 
@@ -201,7 +204,10 @@ const GlobalCombinedLookup = ({
           data={summaryData}
           btnCaption={detailData.length > 0 ? `Update/View ${tabTitles[1]} ->` : `Load ${tabTitles[1]} ->`}
           singleSelect={summarySelectionMode === "single"}
-          autoSelectAll={summaryData.length === 1}
+          autoSelectAll={!viewOnly && summaryData.length === 1}
+          selectionValidator={selectionValidator}
+          viewOnly={viewOnly}
+          onInspectRow={viewOnly ? (row) => handleSummaryAction({ data: [row.groupId], records: [row] }) : undefined}
           onSelectionReset={resetLoadedDetails}
           onClose={handleSummaryAction}
           onCancel={onCancel}
@@ -228,6 +234,8 @@ const GlobalCombinedLookup = ({
           data={detailData}
           btnCaption="Confirm Final Selection"
           singleSelect={false}
+          selectionValidator={detailSelectionValidator || selectionValidator}
+          viewOnly={viewOnly}
           onSelectionChange={(rows) => setSelectedDetailCount(rows.length)}
           onClose={(finalPayload) => {
           const selectedIds = finalPayload.data || [];

@@ -197,16 +197,19 @@ export default function CWTMonitoring() {
           checkbox.title = "Select for batch update";
           checkbox.className = "h-4 w-4 cursor-pointer accent-blue-600";
           checkbox.addEventListener("click", (event) => event.stopPropagation());
-          checkbox.addEventListener("change", () => {
+          checkbox.addEventListener("change", (event) => {
+            const selectedKey = event.currentTarget.dataset.cwtKey;
+            if (!selectedKey) return;
             setSelectedCwtKeys((current) =>
-              current.includes(rowKey)
-                ? current.filter((key) => key !== rowKey)
-                : [...current, rowKey]
+              current.includes(selectedKey)
+                ? current.filter((key) => key !== selectedKey)
+                : [...current, selectedKey]
             );
           });
           actionContainer.appendChild(checkbox);
         }
 
+        checkbox.dataset.cwtKey = rowKey;
         checkbox.checked = isSelected;
         checkbox.disabled = String(
           matchingRow?.originalDocStatus || matchingRow?.docStatus || ""
@@ -400,14 +403,12 @@ export default function CWTMonitoring() {
     try {
       const resp = await fetchData(ENDPOINT, {
         json_data: {
-          json_data: {
-            branchCode,
-            custCode,
-            accountClass: isCwvatEnabled ? accountClass : "CWTCL",
-            startDate,
-            endDate,
-            status: stat,
-          },
+          branchCode,
+          custCode,
+          accountClass: isCwvatEnabled ? accountClass : "CWTCL",
+          startDate,
+          endDate,
+          status: stat,
         },
       });
 
@@ -910,6 +911,22 @@ const doGenerateCWTReversal = useCallback(
       return;
     }
 
+    const batchDetails = isBatch
+      ? selectedRows.map((item) => ({
+          tranId: String(item?.tran_id || "").trim(),
+          atcCode: String(item?.atcCode || "").trim(),
+        }))
+      : [];
+
+    if (isBatch && batchDetails.some((item) => !item.tranId || !item.atcCode)) {
+      await Swal.fire({
+        icon: "error",
+        title: "Invalid CWT selection",
+        text: "One or more selected records are missing a transaction ID or ATC code. Run Find again and reselect the records.",
+      });
+      return;
+    }
+
     try {
       updateState({ isLoading: true });
 
@@ -917,12 +934,7 @@ const doGenerateCWTReversal = useCallback(
         json_data: {
           tranId: row.tran_id,
           atcCode: row.atcCode,
-          dt1: isBatch
-            ? selectedRows.map((item) => ({
-                tranId: item.tran_id,
-                atcCode: item.atcCode,
-              }))
-            : undefined,
+          dt1: isBatch ? batchDetails : undefined,
           status: newStatus,
           receivedDate,
           receivedBy,
@@ -955,10 +967,16 @@ const doGenerateCWTReversal = useCallback(
       handleActionModalCancel();
     } catch (error) {
       console.error("Error updating CWT receiving:", error);
+      const response = error?.response?.data;
+      const validationMessage = response?.errors
+        ? Object.values(response.errors).flat().join("\n")
+        : "";
+      const errorMessage = validationMessage || response?.message || response?.details
+        || "An error occurred while updating the status. Please try again.";
       await Swal.fire({
         icon: "error",
         title: "Update failed",
-        text: "An error occurred while updating the status. Please try again.",
+        text: errorMessage,
       });
     } finally {
       updateState({ isLoading: false });

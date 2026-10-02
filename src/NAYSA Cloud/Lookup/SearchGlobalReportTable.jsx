@@ -73,6 +73,7 @@ const SearchGlobalReportTable = forwardRef(
       onRowActionsClick,
       actionsIcon,
       actionsTitle,
+      isRowActionsDisabled,
       onRowDoubleClick,
       className = "",
       initialState,
@@ -1704,11 +1705,12 @@ const SearchGlobalReportTable = forwardRef(
                           {onRowActionsClick && (
                             <button
                               type="button"
+                              disabled={isRowActionsDisabled?.(row)}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onRowActionsClick(row);
                               }}
-                              className="px-2.5 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition text-[11px] font-medium"
+                              className="px-2.5 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition text-[11px] font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               <FontAwesomeIcon
                                 icon={actionsIcon || faPenToSquare}
@@ -2027,11 +2029,12 @@ const SearchGlobalReportTable = forwardRef(
 
                               {onRowActionsClick && (
                                 <button
+                                  disabled={isRowActionsDisabled?.(row)}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onRowActionsClick(row);
                                   }}
-                                  className="px-2 py-0 bg-gray-500 text-white rounded hover:bg-gray-600 transition leading-none"
+                                  className="px-2 py-0 bg-gray-500 text-white rounded hover:bg-gray-600 transition leading-none disabled:opacity-40 disabled:cursor-not-allowed"
                                   title={actionsTitle || "Edit"}
                                 >
                                   <FontAwesomeIcon

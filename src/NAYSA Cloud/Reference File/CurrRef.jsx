@@ -359,6 +359,7 @@ const CurrRef = () => {
       },
       { key: "currCode", label: "Currency Code", sortable: true, width: 100, requiredVisible: true },
       { key: "currName", label: "Currency Name", sortable: true, width: 400, maxWidth: 400, requiredVisible: true  },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [isMobile]
   );
@@ -536,6 +537,17 @@ const CurrRef = () => {
                 disabled={!isEditing}
                 onChange={(v) => updateForm({ currName: v || "" })}
                 maxLength={getMax("CURR_NAME")}
+              />
+              <FieldRenderer
+                label="Active"
+                type="select"
+                value={formData.active}
+                disabled={!isEditing}
+                options={[
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+                ]}
+                onChange={(v) => updateForm({ active: v })}
               />
             </div>
           </div>

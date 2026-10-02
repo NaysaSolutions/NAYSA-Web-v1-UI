@@ -9,7 +9,6 @@ import {
   faPlus,
   faMinus,
   faTrashAlt,
-  faSearch,
   faClipboardCheck,
   faBoxOpen,
   faWarehouse,
@@ -41,6 +40,7 @@ import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
@@ -390,6 +390,7 @@ const FGRR = (item) => {
 
 	    msLookupModalOpen: false,
 	    altItemLookupOpen: false,
+      brandLookupOpen: false,
 	    tblFieldArray: [],
 
     activeTab: "basic",
@@ -527,6 +528,7 @@ groupId,
 
 	    msLookupModalOpen,
 	    altItemLookupOpen,
+      brandLookupOpen,
 	  } = state;
 
   const [header, setHeader] = useState({
@@ -647,6 +649,7 @@ rrQty: "",
       { key: "poNo", label: "PO No.", width: 140 },
       { key: "itemCode", label: "Item Code", width: 120 },
       { key: "itemName", label: "Item Description", width: 300 },
+      { key: "brandCode", label: "Brand", width: 150 },
       { key: "itemSpecs", label: "Specification", width: 300 },
       { key: "uomCode", label: "UOM", width: 80 },
       { key: "poBalance", label: "PO Balance", width: 130 },
@@ -2160,6 +2163,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         itemCode: d.itemCode || "",
         itemName: d.itemName || "",
+        brandCode: getPOField(d, "brandCode", "brand_code", "BRAND_CODE", "brand") || "",
+        brandName: getPOField(d, "brandName", "brand_name", "BRAND_NAME", "brandDesc") || "",
         itemSpecs: d.itemSpecs || "",
 
         uomCode: d.uomCode || "",
@@ -3005,6 +3010,8 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
         "FG_NAME",
         "FG_DESC"
       ) || "",
+    brandCode: getPOField(r, "brandCode", "brand_code", "BRAND_CODE", "brand", "BRAND") || "",
+    brandName: getPOField(r, "brandName", "brand_name", "BRAND_NAME", "brandDesc", "BRAND_DESC") || "",
 
     itemSpecs: getPOField(r, "itemSpecs", "itemSpec", "ITEM_SPECS", "ITEM_SPEC") || "",
 
@@ -3294,6 +3301,8 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
         poStatus: baseRow.poStatus || status || "",
         itemCode: selectedItem.itemCode || "",
         itemName: selectedItem.itemName || "",
+        brandCode: "",
+        brandName: "",
         uomCode: selectedUomCode,
         convertedUomCode: selectedUomCode,
         convertedQuantity: formatNumber(parseFormattedNumber(baseRow.rrQty || 0), decQty),
@@ -4130,6 +4139,26 @@ const recalcFGRRRow = (row) => {
     }
   };
 
+  const handleCloseBrandLookup = (selectedBrand) => {
+    const rowIndex = state.selectedRowIndex;
+
+    updateState({ brandLookupOpen: false, selectedRowIndex: null });
+
+    if (!selectedBrand || rowIndex === null || rowIndex === undefined) return;
+
+    const rows = [...(detailRowsRef.current || detailRows || [])];
+    if (!rows[rowIndex]) return;
+
+    rows[rowIndex] = {
+      ...rows[rowIndex],
+      brandCode: selectedBrand.brandCode || "",
+      brandName: selectedBrand.brandName || "",
+    };
+
+    detailRowsRef.current = rows;
+    updateState({ detailRows: rows });
+  };
+
   const handleDetailChange = async (index, field, value, extraData = {}) => {
     const latestRows = Array.isArray(detailRowsRef.current)
       ? detailRowsRef.current
@@ -4528,6 +4557,10 @@ const recalcFGRRRow = (row) => {
           invType: r.invType || "FG",
           itemCode: r.itemCode || "",
           itemName: r.itemName || "",
+          brandCode: r.brandCode || "",
+          brand_code: r.brandCode || "",
+          brandName: r.brandName || "",
+          brand_name: r.brandName || "",
           uomCode: r.uomCode || "",
           convertedUomCode: r.convertedUomCode || r.uomCode || "",
           convertedQuantity: parseFormattedNumber(
@@ -5893,6 +5926,32 @@ const handleClosePayeeLookup = async (row) => {
       itemName: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("itemName", { readOnly: isFormDisabled })}
+        </td>
+      ),
+      brandCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`brandCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+              value={row.brandCode || ""}
+              title={row.brandName || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {lookupIcon(() => {
+              if (!row.itemCode) {
+                useSwalInfoAlert("Brand", "Select an FG item first.");
+                return;
+              }
+
+              updateState({
+                selectedRowIndex: index,
+                brandLookupOpen: true,
+              });
+            })}
+          </div>
         </td>
       ),
       itemSpecs: () => (
@@ -7703,6 +7762,14 @@ const handleClosePayeeLookup = async (row) => {
           decimalPlaces={decQty}
           data={convertedUomLookup.data}
           onClose={handleConvertedUomSelect}
+        />
+      )}
+
+      {brandLookupOpen && (
+        <ItemBrandMatrixLookupModal
+          isOpen={brandLookupOpen}
+          itemCode={detailRows?.[selectedRowIndex]?.itemCode}
+          onClose={handleCloseBrandLookup}
         />
       )}
 

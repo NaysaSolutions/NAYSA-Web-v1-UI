@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFolderOpen, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faFolderOpen, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -138,6 +138,17 @@ const CV = () => {
    const isViewDocumentUrl = isViewDocument;
    
    const [topTab, setTopTab] = useState("details"); // "details" | "history"
+    const [showOpenReferencesDropdown, setShowOpenReferencesDropdown] = useState(false);
+    const [referenceInquiryOpen, setReferenceInquiryOpen] = useState(false);
+    const openReferencesDropdownRef = useRef(null);
+    useEffect(() => {
+      if (!showOpenReferencesDropdown) return;
+      const handleClickOutside = (event) => {
+        if (!openReferencesDropdownRef.current?.contains(event.target)) setShowOpenReferencesDropdown(false);
+      };
+      document.addEventListener("pointerdown", handleClickOutside);
+      return () => document.removeEventListener("pointerdown", handleClickOutside);
+    }, [showOpenReferencesDropdown]);
    const { user } = useAuth();
    const { resetFlag } = useReset();
    const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
@@ -1316,6 +1327,7 @@ const handleCurrRateNoBlur = (e) => {
   const handleAddRow = async (insertIndex = null) => {
 
  if(selectedWithAPV ==="Y" ) {
+      setReferenceInquiryOpen(false);
       await handleOpenAPBalance();
       return;
     }
@@ -2203,10 +2215,40 @@ const handleCloseSignatory = async (mode) => {
 
 };
 
-const handleOpenAPBalance = async () => {
+const validateOpenPurchasePayees = (rows) => {
+  const payeeCodes = new Set(rows.map((row) => String(row.vendCode || row.vend_code || "").trim().toUpperCase()).filter(Boolean));
+  if (rows.length && payeeCodes.size === 0) {
+    useSwalErrorAlert("Missing Payee", "The selected APV reference has no payee code.");
+    return false;
+  }
+  if (payeeCodes.size > 1) {
+    useSwalErrorAlert("Different Payees", "Select Open Purchases for one payee only.");
+    return false;
+  }
+  if (rows.length && detailRows.length && vendCode && !payeeCodes.has(String(vendCode).trim().toUpperCase())) {
+    useSwalErrorAlert("Different Payee", "Clear the existing Invoice Details before selecting another payee.");
+    return false;
+  }
+  return true;
+};
+
+const handleOpenPurchasesInquiry = async () => {
+  setShowOpenReferencesDropdown(false);
+  if (!documentID && selectedWithAPV !== "Y") {
+    if (detailRows.length) {
+      useSwalErrorAlert("Open Purchases", "Reset the CV before changing to With APV while invoice lines exist.");
+      return;
+    }
+    updateState({ selectedWithAPV: "Y", selectedCvType: "APV01" });
+  }
+  setReferenceInquiryOpen(true);
+  await handleOpenAPBalance({ inquiryMode: true });
+};
+
+const handleOpenAPBalance = async ({ inquiryMode = false } = {}) => {
   console.log('[APBAL] handler fired');
 
-  if (!String(vendCode || '').trim()) {
+  if (!inquiryMode && !String(vendCode || '').trim()) {
     await Swal.fire({
       icon: 'info',
       title: 'Payee Required',
@@ -2222,9 +2264,9 @@ const handleOpenAPBalance = async () => {
     dt1: detailRows.map((row) => ({ groupId: row.groupId }))
   };
   const params = {
-    vendCode,
+    vendCode: inquiryMode ? "" : vendCode,
     branchCode,
-    tranType: selectedCvType,
+    tranType: inquiryMode ? "APV01" : selectedCvType,
     groupIdSelected,
   };
   console.log('[APBAL] params', { ...params, endpoint });
@@ -2265,7 +2307,7 @@ const handleOpenAPBalance = async () => {
       await Swal.fire({
         icon: 'info',
         title: 'Open AP Balance',
-        text: 'There are no AP balance records for the selected payee/branch.',
+        text: inquiryMode ? 'There are no Open Purchases for this branch.' : 'There are no AP balance records for the selected payee/branch.',
       });
       return;
     }
@@ -2356,28 +2398,23 @@ const handleOpenAPBalance = async () => {
 
 
 const handleCloseAPBalance = async (payload) => {
+    if (referenceInquiryOpen && documentID) {
+      updateState({ showAPBalanceModal: false });
+      setReferenceInquiryOpen(false);
+      return;
+    }
     if (payload && payload !== null) {
       const selectedRecords = Array.isArray(payload.records) ? payload.records : [];
-      const selectedPayeeCodes = [
-        ...new Set(
-          selectedRecords
-            .map((entry) => String(entry.vendCode || entry.vend_code || "").trim())
-            .filter(Boolean)
-        ),
-      ];
-
-      if (selectedPayeeCodes.length > 1) {
-        useSwalErrorAlert("Validation Error", "Open AP Balance should not allow selection of multiple APV references with different Payee.");
-        return;
-      }
+      if (!selectedRecords.length || !validateOpenPurchasePayees(selectedRecords)) return;
+      const selectedVendCode = String(selectedRecords[0].vendCode || selectedRecords[0].vend_code || "").trim();
       
        updateState({ isLoading: true });
 
       const selectionPayload = {
         ...payload,
         branchCode,
-        vendCode,
-        tranType: selectedCvType,
+        vendCode: referenceInquiryOpen ? selectedVendCode : vendCode,
+        tranType: referenceInquiryOpen ? "APV01" : selectedCvType,
         groupIdSelected: {
           dt1: detailRows.map((row) => ({ groupId: row.groupId }))
         },
@@ -2398,11 +2435,17 @@ const handleCloseAPBalance = async (payload) => {
         useSwalErrorAlert("Validation Error", "Open AP Balance should not allow selection of multiple APV references with different Payee.");
         return;
       }
+      if (resultPayeeCodes.length && resultPayeeCodes[0].toUpperCase() !== selectedVendCode.toUpperCase()) {
+        updateState({ isLoading: false });
+        useSwalErrorAlert("Different Payee", "The selected APV details do not match the chosen payee.");
+        return;
+      }
 
       const selectedPayee = resultRows.find((entry) => entry.vendCode || entry.vendName) || selectedRecords[0] || {};
-      const selectedCurrCode = selectedPayee.currCode || currCode;
-      const selectedCurrName = selectedPayee.currName || currName;
-      const selectedCurrRate = selectedPayee.currRate || currRate;
+      const selectedCurrCode = selectedPayee.currCode || selectedRecords[0]?.currCode || currCode;
+      const selectedCurrName = selectedPayee.currName || selectedRecords[0]?.currName || currName;
+      const selectedCurrRate = selectedPayee.currRate || selectedRecords[0]?.currRate || currRate;
+      const selectedVendName = selectedPayee.vendName || selectedRecords[0]?.vendName || vendName;
 
       const newRows = resultRows.map((entry, idx) => ({    
         lnNo: idx + 1,
@@ -2429,14 +2472,14 @@ const handleCloseAPBalance = async (payload) => {
         rcCode: entry.rcCode,
         rcName: entry.rcName,
         slCode: entry.slCode,
-        slName: entry.slName || entry.vendName || selectedPayee.vendName || vendName,
+        slName: entry.slName || entry.vendName || selectedVendName,
         debitAcct: entry.drAccount,
         apAcct: entry.apAccount,
         vatAcct: entry.vatAccount,
         currCode: entry.currCode || selectedCurrCode,
         currRate: formatNumber(entry.currRate || selectedCurrRate,6) ,
         vendCode: entry.vendCode || selectedPayee.vendCode || vendCode,
-        vendName: entry.vendName || selectedPayee.vendName || vendName,
+        vendName: entry.vendName || selectedVendName,
         refBranchcode: branchCode,
         refDocCode: entry.refDocCode,
         groupId: entry.groupId,
@@ -2446,8 +2489,8 @@ const handleCloseAPBalance = async (payload) => {
       
       const updatedRows = [...detailRows, ...newRows];
       updateState({
-        vendCode: selectedPayee.vendCode || vendCode,
-        vendName: selectedPayee.vendName || vendName,
+        vendCode: selectedPayee.vendCode || selectedVendCode || vendCode,
+        vendName: selectedVendName,
         currCode: selectedCurrCode,
         currName: selectedCurrName,
         currRate: formatNumber(selectedCurrRate, 6),
@@ -2459,7 +2502,8 @@ const handleCloseAPBalance = async (payload) => {
   }
   updateState({ showAPBalanceModal: false,
                 isLoading:false
-  });  
+  });
+  setReferenceInquiryOpen(false);
 };
 
 
@@ -2906,7 +2950,7 @@ const renderCvGlCell = (columnKey, row, index) => {
               onHistory={() => setTopTab("history")}
               disableRouteNavigation={true}         
               detailsRoute="/page/CV"
-              isSaveDisabled={state.isSaveDisabled || isFormDisabled || detailRowsGL.length === 0}
+              isSaveDisabled={state.isSaveDisabled || isFormDisabled || (selectedWithAPV === "Y" ? detailRows.length === 0 : detailRowsGL.length === 0)}
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
               isPrintDisabled={!documentID || displayStatus === "Cancelled"}
@@ -2948,7 +2992,7 @@ const renderCvGlCell = (columnKey, row, index) => {
 <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
 
     {/* Tab Navigation */}
-    <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
+    <div className={`global-tran-header-tab-div-ui items-center justify-between gap-3 ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
         <button
             className={`global-tran-tab-padding-ui ${
                 activeTab === 'basic'
@@ -2959,6 +3003,31 @@ const renderCvGlCell = (columnKey, row, index) => {
         >
             Basic Information
         </button>
+        <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
+          <button
+            type="button"
+            className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800"
+            onClick={() => setShowOpenReferencesDropdown((current) => !current)}
+            aria-expanded={showOpenReferencesDropdown}
+            aria-label="Open References"
+          >
+            <FontAwesomeIcon icon={faFolderOpen} />
+            Open References
+            <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+          </button>
+          {showOpenReferencesDropdown && (
+            <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700"
+                onClick={handleOpenPurchasesInquiry}
+              >
+                <FontAwesomeIcon icon={faBox} className="w-4 text-blue-600 dark:text-blue-300" />
+                Open Purchases
+              </button>
+            </div>
+          )}
+        </div>
     </div>
 
     {/* Header Form Section - Main Grid Container */}
@@ -3323,19 +3392,6 @@ const renderCvGlCell = (columnKey, row, index) => {
           Invoice Details
         </button>
       </div>
-
-      {selectedWithAPV === 'Y' && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => handleOpenAPBalance()}
-            className="global-tran-button-generateGL"
-            disabled={isLoading}
-            style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-          >
-            Get Reference APV
-          </button>
-        </div>
-      )}
 
     </div>
 
@@ -3801,8 +3857,14 @@ const renderCvGlCell = (columnKey, row, index) => {
     btnCaption="Get Selected APV"
     title="Open AP Balance"
     endpoint={globalLookupHeader}
+    idKey="groupId"
+    viewOnly={referenceInquiryOpen && Boolean(documentID)}
+    selectionValidator={validateOpenPurchasePayees}
     onClose={handleCloseAPBalance}
-    onCancel={() => updateState({ showAPBalanceModal: false })}
+    onCancel={() => {
+      setReferenceInquiryOpen(false);
+      updateState({ showAPBalanceModal: false });
+    }}
   />
 )}
 

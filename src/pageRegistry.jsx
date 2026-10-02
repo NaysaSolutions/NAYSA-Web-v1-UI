@@ -94,6 +94,11 @@ export const pageRegistry = {
   VESVJOMotor: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Vehicle Service/MJO.jsx")),
   VESVJO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Vehicle Service/CJO.jsx")),
 
+  // MRP 
+  SFB: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/MRP/SalesForecastBaseline.jsx")),
+  SFC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/MRP/SalesForecastCustomer.jsx")),
+  SFA: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/MRP/SalesForecastAdjustment.jsx")),
+  SFQuery: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/MRP/SalesForecastQuery.jsx")),
 
   // Production 
   WO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Production/WO.jsx")),

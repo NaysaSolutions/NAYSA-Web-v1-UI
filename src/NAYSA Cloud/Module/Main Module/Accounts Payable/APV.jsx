@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
 import { useLocation } from "react-router-dom";
 import { useSwalSuccessAlert, useSwalErrorAlert, useSwalProceedConfirm } from "@/NAYSA Cloud/Global/behavior.jsx";
@@ -12,7 +12,7 @@ import { useSwalSuccessAlert, useSwalErrorAlert, useSwalProceedConfirm } from "@
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines, faChevronDown, faFolderOpen, faBox, faBriefcase, faCoins, faReceipt, faShip } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -29,6 +29,7 @@ import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import PostAPV from "./PostAPV.jsx";
+import APVReceivingDetails from "./APVReceivingDetails.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
@@ -37,6 +38,7 @@ import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx
 // Configuration
 import { apiClient, fetchData, fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import { getAccessibleMenuModules, hasAccessibleMenuModule } from "@/NAYSA Cloud/Global/menuAccess.js";
 
 // Global
 import { docTypeNames, docTypes, docTypeVideoGuide, docTypePDFGuide } from "@/NAYSA Cloud/Global/doctype";
@@ -151,6 +153,17 @@ const isRequirementEnabled = (...values) =>
   );
 const isDetailSlRequired = (row) => isRequirementEnabled(row?.recSl, row?.reqSl, row?.slReq);
 const isGlSlRequired = (row) => isRequirementEnabled(row?.reqSl, row?.recSl, row?.slReq);
+const getNextManualAdvancePoNo = (rows, date = new Date()) => {
+  const datePart = `${String(date.getFullYear()).slice(-2)}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+  const usedOrders = new Set((rows || [])
+    .map((row) => String(row?.poNo || "").trim())
+    .filter((poNo) => new RegExp(`^${datePart}\\d{2}$`).test(poNo))
+    .map((poNo) => Number(poNo.slice(-2))));
+  for (let order = 1; order <= 99; order += 1) {
+    if (!usedOrders.has(order)) return `${datePart}${String(order).padStart(2, "0")}`;
+  }
+  return "";
+};
 const buildApvDetailPayloadRow = (row, index, selectedApType) => {
   const apType = String(selectedApType || "")
     .trim()
@@ -164,7 +177,7 @@ const buildApvDetailPayloadRow = (row, index, selectedApType) => {
     invType: isReplenishment ? row.invType || "PCV" : row.invType || "",
     rrNo: isReplenishment ? pcvNo : row.rrNo || "",
     poNo: row.poNo || "",
-    siNo: isReplenishment ? row.siNo || pcvNo : row.siNo || "",
+    siNo: isAdvance ? row.poNo || "" : isReplenishment ? row.siNo || pcvNo : row.siNo || "",
     siDate: row.siDate || "",
     amount: parseFormattedNumber(row.amount || 0),
     siAmount: parseFormattedNumber(row.siAmount || 0),
@@ -206,6 +219,7 @@ const APV = () => {
   // Routing, authentication, and view-document mode
   const loadedFromUrlRef = useRef(false);
   const defaultAdvancesAccountRef = useRef(null);
+  const openReferencesDropdownRef = useRef(null);
     const location = useLocation();
   const { companyInfo, currentUserRow, refsLoaded, getAllTopVatAmount, getAllTopATCAmount } = useAuth();
   const assignedUserBranch = getAssignedUserBranch(currentUserRow);
@@ -218,6 +232,8 @@ const APV = () => {
   }, []);
   const isViewDocumentUrl = isViewDocument;
   const { user } = useAuth();
+  const receivingRequestRef = useRef(false);
+  const receivingContextRef = useRef("");
   const [topTab, setTopTab] = useState("details");
   const [state, setState] = useState({
     // HS Option
@@ -276,9 +292,11 @@ const APV = () => {
     // Detail rows
     detailRows: [],
     detailRowsGL: [],
-    // Totals
-    totalDebit: "0.00",
-    totalCredit: "0.00",
+    receivingRows: [],
+    receivingDetailsLoaded: false, receivingNeedsSave: false,
+    receivingDirty: false,
+    invoiceTab: "invoice",
+    // Totals are derived from the current GL rows.
     // Field visibility
     fieldVisibility: {
       sltypeCode: true,
@@ -352,6 +370,61 @@ const APV = () => {
     { key: "rcName", label: "RC Name", width: 200 },
   ];
   const [showInvoiceAddDropdown, setShowInvoiceAddDropdown] = useState(false);
+  const [showOpenReferencesDropdown, setShowOpenReferencesDropdown] = useState(false);
+  const [referenceInquiryOpen, setReferenceInquiryOpen] = useState(false);
+  useEffect(() => {
+    if (!showOpenReferencesDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (!openReferencesDropdownRef.current?.contains(event.target)) {
+        setShowOpenReferencesDropdown(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
+  }, [showOpenReferencesDropdown]);
+  const accessibleMenuModules = getAccessibleMenuModules();
+  const canOpenImportationInquiry = hasAccessibleMenuModule(accessibleMenuModules, "IMP");
+
+  const validateReferencePayees = (selectedRows, matchHeader = true) => {
+    const payeeCodes = new Set(
+      selectedRows.map((row) => String(row.vendCode ?? row.payeeCode ?? "").trim().toUpperCase()).filter(Boolean),
+    );
+    if (selectedRows.length > 0 && payeeCodes.size === 0) {
+      useSwalErrorAlert("Missing Payee", "The selected reference has no payee code.");
+      return false;
+    }
+    if (payeeCodes.size > 1) {
+      useSwalErrorAlert("Different Payees", "Select references for one payee only.");
+      return false;
+    }
+    if (matchHeader && vendCode && payeeCodes.size === 1 && !payeeCodes.has(String(vendCode).trim().toUpperCase())) {
+      useSwalErrorAlert("Different Payee", "The selected reference must match the APV payee.");
+      return false;
+    }
+    return true;
+  };
+
+  const openReferenceInquiry = async (referenceType) => {
+    setShowOpenReferencesDropdown(false);
+    const targetApType = { RR: "APV01", JO: "APV01", PO: "APV03", PCV: "APV04", LC: "APV07" }[referenceType];
+    if (!documentID && targetApType !== selectedApType) {
+      if (detailRows.length > 0 || state.receivingRows.length > 0) {
+        useSwalErrorAlert("Open References", "Use the same AP Type for existing invoice lines, or reset the document first.");
+        return;
+      }
+      await handleAPTypeChange({ target: { value: targetApType } });
+    }
+    setReferenceInquiryOpen(true);
+    // The selected reference determines the APV payee, not the other way around.
+    const overrides = { inquiryMode: true, vendCode: "" };
+    if (referenceType === "RR") handleOpenReferenceRR(overrides);
+    else if (referenceType === "JO") handleOpenReferenceJO(overrides);
+    else if (referenceType === "PO") handleOpenReferencePOAdvance(overrides);
+    else if (referenceType === "PCV") handleOpenReferencePCV(overrides);
+    else if (referenceType === "LC") handleOpenReferenceLCImportation(true);
+  };
 
 
   const updateState = (updates) => {
@@ -433,8 +506,6 @@ const APV = () => {
     header,
     detailRows,
     detailRowsGL,
-    totalDebit,
-    totalCredit,
     fieldVisibility,
     // Contexts
     modalContext,
@@ -554,6 +625,8 @@ const APV = () => {
     { key: "branchCode", label: "Branch", width: 80 },
     { key: "pcvNo", label: "PCV No.", width: 120 },
     { key: "pcvDate", label: "PCV Date", width: 110 },
+    { key: "vendCode", label: "Payee Code", width: 110 },
+    { key: "vendName", label: "Payee Name", width: 200 },
     {
       key: "pcvAmount",
       label: "PCV Amount",
@@ -614,9 +687,10 @@ const APV = () => {
 
   const handleOpenReferencePOAdvance = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openPOAdvance",
@@ -675,8 +749,9 @@ const APV = () => {
   };
 
 
-  const handleOpenReferenceLCImportation = async () => {
+  const handleOpenReferenceLCImportation = async (inquiryMode = false) => {
     setShowInvoiceAddDropdown(false);
+    if (!inquiryMode) setReferenceInquiryOpen(false);
     const lookupBranchCode = String(branchCode || "").trim();
 
     try {
@@ -716,6 +791,8 @@ const APV = () => {
 
   const handleCloseLCModal = async (selection) => {
     const selectedDetails = Array.isArray(selection?.details) ? selection.details : [];
+    if (referenceInquiryOpen && documentID) return;
+    if (!validateReferencePayees(selectedDetails, !referenceInquiryOpen)) return;
     if (!selectedDetails.length) {
       updateState({
         showOpenLCModal: false,
@@ -726,11 +803,13 @@ const APV = () => {
     updateState({
       isLoading: true,
       showSpinner: true,
-      showOpenLCModal: false,
     });
 
     try {
-      const foundAtcCode = vendName?.atcCode || "";
+      const payeeUpdates = referenceInquiryOpen ? await getReferencePayeeHeader(selectedDetails[0]) : {};
+      if (referenceInquiryOpen && !canApplyReferencePayee(payeeUpdates.vendCode)) return;
+      if (referenceInquiryOpen) updateState(payeeUpdates);
+      const foundAtcCode = payeeUpdates.vendName?.atcCode || vendName?.atcCode || "";
       const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
       const mappedRows = await Promise.all(
         selectedDetails.map(async (item) => {
@@ -777,6 +856,7 @@ const APV = () => {
       );
       const updatedRows = [...detailRows, ...mappedRows];
       updateInvoiceDetails(updatedRows, {
+        ...payeeUpdates,
         showOpenLCModal: false,
         openLcSummaryData: [],
         openLcSummaryColumns: [],
@@ -1119,15 +1199,6 @@ const APV = () => {
   }, [vendName?.currCode]);
 
   useEffect(() => {
-    const debitSum = detailRowsGL.reduce((acc, row) => acc + (parseFormattedNumber(row.debit) || 0), 0);
-    const creditSum = detailRowsGL.reduce((acc, row) => acc + (parseFormattedNumber(row.credit) || 0), 0);
-    updateState({
-      totalDebit: formatNumber(debitSum),
-      totalCredit: formatNumber(creditSum),
-    });
-  }, [detailRowsGL]);
-
-  useEffect(() => {
     updateState({ isDocNoDisabled: !!documentID });
   }, [documentID]);
 
@@ -1145,37 +1216,34 @@ const APV = () => {
   // Amount, due-date, and currency helpers
 
 
-  const updateTotalsDisplay = (invoice, vat, atc, payable) => {
-    const totalInvoiceElement = document.getElementById("totalInvoiceAmount");
-    const totalVATElement = document.getElementById("totalVATAmount");
-    const totalATCElement = document.getElementById("totalATCAmount");
-    const totalPayableElement = document.getElementById("totalPayableAmount");
-    if (totalInvoiceElement) totalInvoiceElement.textContent = formatNumber(invoice);
-    if (totalVATElement) totalVATElement.textContent = formatNumber(vat);
-    if (totalATCElement) totalATCElement.textContent = formatNumber(atc);
-    if (totalPayableElement) totalPayableElement.textContent = formatNumber(payable);
-  };
-
-
-  const updateTotals = (rows) => {
-    let totalInvoice = 0;
-    let totalVAT = 0;
-    let totalATC = 0;
-    let totalPayable = 0;
-
-    rows.forEach((row) => {
-      const invoiceAmount = parseFormattedNumber(row.siAmount || row.amount || 0) || 0;
-      const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
-      const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
-
-      totalInvoice += invoiceAmount;
-      totalVAT += vatAmount;
-      totalATC += atcAmount;
-    });
-
-    totalPayable = totalInvoice - totalATC;
-    updateTotalsDisplay(totalInvoice, totalVAT, totalATC, totalPayable);
-  };
+  const invoiceTotals = useMemo(() => detailRows.reduce((totals, row) => {
+    totals.invoice += parseFormattedNumber(row.siAmount || row.amount || 0) || 0;
+    totals.vat += parseFormattedNumber(row.vatAmount || 0) || 0;
+    totals.atc += parseFormattedNumber(row.atcAmount || 0) || 0;
+    return totals;
+  }, { invoice: 0, vat: 0, atc: 0 }), [detailRows]);
+  const baseCurrencyCode = glCurrDefault || companyInfo?.currCode || "PHP";
+  const transactionCurrencyCode = currencyCode || baseCurrencyCode;
+  const showForeignTotals = transactionCurrencyCode !== baseCurrencyCode;
+  const invoiceBaseRate = parseFormattedNumber(currencyRate) || 1;
+  const foreignGlSuffix = withCurr3
+    ? glCurrGlobal2 === transactionCurrencyCode ? "Fx1" : glCurrGlobal3 === transactionCurrencyCode ? "Fx2" : ""
+    : withCurr2 ? "Fx1" : "";
+  const glTotals = useMemo(() => detailRowsGL.reduce((totals, row) => {
+    const debit = parseFormattedNumber(row.debit) || 0;
+    const credit = parseFormattedNumber(row.credit) || 0;
+    const debitFx = foreignGlSuffix ? parseFormattedNumber(row[`debit${foreignGlSuffix}`]) || 0 : 0;
+    const creditFx = foreignGlSuffix ? parseFormattedNumber(row[`credit${foreignGlSuffix}`]) || 0 : 0;
+    totals.debit += debit;
+    totals.credit += credit;
+    totals.debitFx += debitFx;
+    totals.creditFx += creditFx;
+    if ((debit !== 0 && debitFx === 0) || (credit !== 0 && creditFx === 0)) totals.hasIncompleteFx = true;
+    return totals;
+  }, { debit: 0, credit: 0, debitFx: 0, creditFx: 0, hasIncompleteFx: false }), [detailRowsGL, foreignGlSuffix]);
+  const useGlForeignAmounts = Boolean(foreignGlSuffix) && !glTotals.hasIncompleteFx;
+  const foreignGlDebit = useGlForeignAmounts ? glTotals.debitFx : glTotals.debit / invoiceBaseRate;
+  const foreignGlCredit = useGlForeignAmounts ? glTotals.creditFx : glTotals.credit / invoiceBaseRate;
 
 
   const calculateDueDate = (startDate, daysDue) => {
@@ -1364,6 +1432,10 @@ const APV = () => {
       documentID: "",
       detailRows: [],
       detailRowsGL: [],
+      receivingRows: [],
+      receivingDetailsLoaded: false, receivingNeedsSave: false,
+      receivingDirty: false,
+      invoiceTab: "invoice",
       documentStatus: "",
       status: "OPEN",
       isDocNoDisabled: false,
@@ -1372,19 +1444,18 @@ const APV = () => {
       isFetchDisabled: false,
     });
 
-    updateTotalsDisplay(0, 0, 0, 0);
   };
 
 
   const fetchTranData = async (documentNo, branchCode, direction = "") => {
     const resetState = () => {
       updateState({
+        receivingRows: [], receivingDetailsLoaded: false, receivingNeedsSave: false, receivingDirty: false, invoiceTab: "invoice",
         documentNo: "",
         documentID: "",
         isDocNoDisabled: false,
         isFetchDisabled: false,
       });
-      updateTotals([]);
     };
     updateState({ isLoading: true, showSpinner: true });
 
@@ -1417,6 +1488,7 @@ const APV = () => {
           apAdvId: item.apAdvId || "",
           autoAdv: retrievedApType === "APV01" ? item.autoAdv || "Y" : "N",
           poNo: item.poNo || item.joNo || "",
+          siNo: retrievedApType === "APV03" ? item.poNo || item.joNo || "" : item.siNo || "",
           amount: formatNumber(item.amount || 0),
           currency: data.currCode || item.currency || "",
           currRate: formatNumber(item.currRate),
@@ -1493,6 +1565,7 @@ const APV = () => {
       }
 
 
+      const savedReceivingRows = await enrichReceivingDescriptions(Array.isArray(data.dt3) ? data.dt3 : [], retrievedDetailRows);
       const stateUpdates = {
         documentStatus: data.apvStatus || "",
         status: data.docStatus,
@@ -1516,13 +1589,17 @@ const APV = () => {
         apAccountName: apAccountName,
         detailRows: retrievedDetailRows,
         detailRowsGL: formattedGLRows,
+        receivingRows: savedReceivingRows,
+        receivingDetailsLoaded: Array.isArray(data.dt3) && data.dt3.length > 0,
+        receivingDirty: false,
+        receivingNeedsSave: false,
+        invoiceTab: "invoice",
         isDocNoDisabled: true,
         isFetchDisabled: true,
       };
 
       updateState(stateUpdates);
 
-      updateTotals(retrievedDetailRows);
     } catch (error) {
       console.error("Error fetching transaction data:", error);
       Swal.fire({
@@ -1639,13 +1716,15 @@ const APV = () => {
       for (let index = 0; index < rows.length; index += 1) {
         const row = rows[index] || {};
         const amount = parseFormattedNumber(row.amount) || 0;
-        const advanceBalance = Math.max(
-          parseFormattedNumber(row.advanceBalance ?? row.advpoAmount ?? row.amount) || 0,
-          0,
-        );
         if (amount < 0) return `Advances Amount in row ${index + 1} cannot be negative.`;
-        if (amount > advanceBalance) {
-          return `Advances Amount in row ${index + 1} cannot exceed the Advances Balance of ${formatNumber(advanceBalance)}.`;
+        if (String(row.sourceId ?? "").trim()) {
+          const advanceBalance = Math.max(
+            parseFormattedNumber(row.advanceBalance ?? row.advpoAmount ?? row.amount) || 0,
+            0,
+          );
+          if (amount > advanceBalance) {
+            return `Advances Amount in row ${index + 1} cannot exceed the Advances Balance of ${formatNumber(advanceBalance)}.`;
+          }
         }
       }
       return "";
@@ -1687,6 +1766,7 @@ const APV = () => {
     currRate: parseFormattedNumber(currencyRate) || 1,
     remarks: header.remarks || "",
     userCode: userCode || currentUserRow?.userCode || user?.userCode || "",
+    ...(state.receivingDetailsLoaded ? { dt3: state.receivingRows } : {}),
     dt1: invoiceRows.map((row, index) => buildApvDetailPayloadRow(row, index, selectedApType)),
     dt2: glRows.map((entry, index) => ({
       recNo: String(index + 1),
@@ -1727,13 +1807,14 @@ const APV = () => {
     vatCode = "",
     atcCode = "",
     forceSupplierSl = false,
+    useInvoiceSl = false,
   }) => {
     const accountRequirement = getAccountRequirement(accountRow);
     const requiresRc = accountRequirement.reqRc === "Y";
     const requiresSl = accountRequirement.reqSl === "Y" || forceSupplierSl;
-    const selectedSlType = row.sltypeCode || vendName?.sltypeCode || "SU";
-    const selectedSlCode = row.slCode || vendCode || "";
-    const selectedSlName = row.slName || vendName?.vendName || "";
+    const selectedSlType = useInvoiceSl ? row.sltypeCode || "SU" : vendName?.sltypeCode || "SU";
+    const selectedSlCode = useInvoiceSl ? row.slCode || "" : vendCode || "";
+    const selectedSlName = useInvoiceSl ? row.slName || "" : vendName?.vendName || "";
     const selectedAcctName = acctName || accountRow?.acctName || accountRow?.acct_name || "";
     const selectedRcName = requiresRc ? row.rcName || "" : "";
     const selectedParticular = buildGlParticular(selectedAcctName, requiresSl ? selectedSlName : "", selectedRcName);
@@ -1801,6 +1882,7 @@ const APV = () => {
             row: lineRow,
             debit: vatAmount,
             vatCode: row.vatCode || "",
+            useInvoiceSl: true,
           }),
         );
       }
@@ -1815,6 +1897,7 @@ const APV = () => {
             row: lineRow,
             credit: atcAmount,
             atcCode: row.atcCode || "",
+            useInvoiceSl: true,
           }),
         );
       }
@@ -1834,13 +1917,136 @@ const APV = () => {
     return generatedRows.filter((row) => (parseFormattedNumber(row.debit) || 0) + (parseFormattedNumber(row.credit) || 0) !== 0);
   };
 
+  // Reject a response if the user changed the document while it was loading.
+  receivingContextRef.current = JSON.stringify([documentID, branchCode, vendCode, selectedApType, currencyCode, currencyRate, header, detailRows, state.receivingRows]);
+
+  const enrichReceivingDescriptions = async (rows, invoices = detailRows) => {
+    const receipts = [...new Map(rows.map(row => [`${row.invType}:${row.rrId}`, row])).values()];
+    const descriptions = new Map();
+    await Promise.all(receipts.map(async receipt => {
+      const invoice = invoices.find(row => row.invType === receipt.invType && String(row.sourceId || row.rrId) === String(receipt.rrId));
+      const sourceRows = invoice?.rrDetailRows?.length ? invoice.rrDetailRows : await fetchRRReferenceDetails({ ...receipt, type: receipt.invType });
+      sourceRows.forEach(row => {
+        const code = row.itemCode || row.ITEM_CODE;
+        const name = row.itemName || row.itemDesc || row.ITEM_NAME;
+        if (code && name) descriptions.set(`${receipt.invType}:${receipt.rrId}:${code}`, name);
+      });
+    }));
+    return rows.map(row => ({ ...row, itemName: descriptions.get(`${row.invType}:${row.rrId}:${row.itemCode}`) || row.itemName || "" }));
+  };
+
+  const requestReceivingDetails = async (mode, payload) => {
+    if (mode !== "Load" && (payload.dt3 || []).some(row =>
+      row.adjPrice === "" || row.adjPrice == null || !Number.isFinite(Number(row.adjPrice)) || Number(row.adjPrice) < 0)) {
+      throw new Error("Enter a valid adjusted price on every receiving detail line.");
+    }
+    const response = await postRequest("apv/price-adjustment", { mode, json_data: payload });
+    if (!response?.success) throw new Error(response?.details || response?.message || "Unable to process receiving details.");
+    const raw = response.data?.[0]?.result;
+    const result = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!result || !Array.isArray(result.dt3)) throw new Error("The receiving details response is incomplete.");
+    result.dt3 = result.dt3.map(row => ({ ...row, itemName: row.itemName || state.receivingRows.find(existing => existing.invType === row.invType && existing.rrId === row.rrId && existing.rrLineno === row.rrLineno)?.itemName || "" }));
+    return result;
+  };
+
+  const mergeReceivingInvoices = (returnedRows, invoiceRows = detailRows) => invoiceRows.map((row, index) => {
+    const calculated = (returnedRows || []).find(entry => String(entry.lnNo) === String(index + 1));
+    if (!calculated) return row;
+    return { ...row, ...calculated,
+      amount: formatNumber(calculated.amount), siAmount: formatNumber(calculated.siAmount),
+      vatAmount: formatNumber(calculated.vatAmount), atcAmount: formatNumber(calculated.atcAmount),
+      advpoVatAmount: formatNumber(calculated.advVatAmount ?? row.advpoVatAmount ?? 0),
+      advpoAtcAmount: formatNumber(calculated.advAtcAmount ?? row.advpoAtcAmount ?? 0),
+    };
+  });
+
+  const handleReceivingDetails = async (mode) => {
+    if (isFormDisabled || isLoading || receivingRequestRef.current) return;
+    receivingRequestRef.current = true;
+    const context = receivingContextRef.current;
+    updateState({ isLoading: true, showSpinner: mode === "Apply" });
+    try {
+      const payload = buildTransactionPayload();
+      if (mode === "Load") {
+        const loaded = await requestReceivingDetails("Load", { ...payload, dt3: [] });
+        const existingKeys = new Set(state.receivingRows.map(row => `${row.invType}:${row.rrId}:${row.rrLineno}`));
+        const missing = loaded.dt3.filter(row => {
+          const key = `${row.invType}:${row.rrId}:${row.rrLineno}`;
+          if (existingKeys.has(key)) return false;
+          existingKeys.add(key);
+          return true;
+        });
+        const additions = await enrichReceivingDescriptions(missing);
+        if (receivingContextRef.current !== context || !additions.length) return;
+        updateState({ receivingRows: [...state.receivingRows, ...additions], receivingDetailsLoaded: true,
+          receivingDirty: true, receivingNeedsSave: true, detailRowsGL: [] });
+        return;
+      }
+      const result = await requestReceivingDetails(mode, payload);
+      if (receivingContextRef.current !== context) return;
+      const rows = mergeReceivingInvoices(result.dt1);
+      const generatedEntries = mode === "Apply" ? (result.dt2 || []).map(entry => ({
+        ...entry,
+        reqRc: isRequirementEnabled(entry.reqRc, entry.rcReq, entry.recRc) ? "Y" : "N",
+        reqSl: isRequirementEnabled(entry.reqSl, entry.slReq, entry.recSl) || Boolean(entry.slCode) ? "Y" : "N",
+        slRefNo: entry.slRefNo || entry.slrefNo || "",
+        slrefDate: normalizeSlrefDate(entry.slrefDate),
+        debit: formatNumber(entry.debit), credit: formatNumber(entry.credit),
+        debitFx1: formatNumber(entry.debitFx1 || 0), creditFx1: formatNumber(entry.creditFx1 || 0),
+      })) : [];
+      if (mode === "Apply" && !generatedEntries.length) throw new Error("No GL entries were generated for the adjustment.");
+      updateState({ receivingRows: result.dt3, receivingDetailsLoaded: true, receivingDirty: false, receivingNeedsSave: true, detailRows: rows, detailRowsGL: generatedEntries, invoiceTab: mode === "Apply" ? "invoice" : state.invoiceTab });
+      if (mode === "Apply") setTopTab("details");
+    } catch (error) {
+      useSwalErrorAlert("Receiving Details", error.response?.data?.details || error.message || "Unable to load receiving details.");
+    } finally {
+      receivingRequestRef.current = false;
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  const handleDeleteReceivingRow = async (index) => {
+    const removed = state.receivingRows[index];
+    if (!removed || removed.postedDate || isFormDisabled || isLoading || receivingRequestRef.current) return;
+    receivingRequestRef.current = true;
+    const context = receivingContextRef.current;
+    updateState({ isLoading: true });
+    try {
+      const remaining = state.receivingRows.filter((_, rowIndex) => rowIndex !== index);
+      // Include the removed row at its original price for this calculation only.
+      // This restores the invoice total even when deleting its last adjustment.
+      const result = await requestReceivingDetails("Calculate", {
+        ...buildTransactionPayload(), dt3: [...remaining, { ...removed, adjPrice: removed.origPrice }],
+      });
+      if (receivingContextRef.current !== context) return;
+      const rows = mergeReceivingInvoices(result.dt1);
+      const receivingRows = result.dt3.filter(row => !(row.invType === removed.invType &&
+        String(row.rrId) === String(removed.rrId) && Number(row.rrLineno) === Number(removed.rrLineno)));
+      updateState({ receivingRows, receivingDetailsLoaded: true, receivingDirty: false,
+        receivingNeedsSave: true, detailRows: rows, detailRowsGL: [] });
+    } catch (error) {
+      useSwalErrorAlert("Delete Receiving Detail", error.response?.data?.details || error.message || "Unable to delete receiving detail.");
+    } finally {
+      receivingRequestRef.current = false;
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleReceivingPriceChange = (index, value) => {
+    if (isFormDisabled || isLoading) return;
+    setState(prev => ({ ...prev, receivingDirty: true, receivingNeedsSave: true, detailRowsGL: [],
+      receivingRows: prev.receivingRows.map((row, rowIndex) => rowIndex === index ? { ...row, adjPrice: value } : row),
+    }));
+  };
+
   // Main action dispatcher: Generate GL, then Upsert
 
 
   const handleActivityOption = async (action) => {
+    if (isLoading || isFormDisabled || receivingRequestRef.current) return;
     const remarksEl = document.getElementById("remarks");
     if (remarksEl) remarksEl.focus();
-    const shouldGenerateGl = action === "GenerateGL" || (action === "Upsert" && detailRowsGL.length === 0);
+    const shouldGenerateGl = action === "GenerateGL" || (action === "Upsert" && (detailRowsGL.length === 0 || state.receivingRows.length > 0));
     if (["GenerateGL", "Upsert"].includes(action)) {
       const advanceValidationError = getAdvanceValidationError();
       if (advanceValidationError) {
@@ -1865,7 +2071,14 @@ const APV = () => {
       }
     }
 
-    if (shouldGenerateGl && fieldVisibility.invoiceDetails && fieldVisibility.siNo) {
+    if (["GenerateGL", "Upsert"].includes(action) && selectedApType === "APV03") {
+      const missingPoNoRow = detailRows.findIndex((row) => !String(row?.poNo || "").trim());
+      if (missingPoNoRow >= 0) {
+        useSwalErrorAlert("AP Advances", `PO/JO No. is required in row ${missingPoNoRow + 1}.`);
+        return;
+      }
+    }
+    if (shouldGenerateGl && fieldVisibility.invoiceDetails && fieldVisibility.siNo && selectedApType !== "APV03") {
       const missingInvoiceNoRow = findMissingInvoiceNoRow(detailRows);
       if (missingInvoiceNoRow >= 0) {
         useSwalErrorAlert("Generate GL", `Invoice No. is required in row ${missingInvoiceNoRow + 1} before generating GL entries.`);
@@ -1876,8 +2089,10 @@ const APV = () => {
     if (documentStatus === "" || documentStatus === "OPEN") {
       updateState({ isLoading: true });
       const glData = buildTransactionPayload();
+      const actionContext = receivingContextRef.current;
       let finalInvoiceRows = [...detailRows];
       let finalGlEntries = [...detailRowsGL];
+      let finalReceivingRows = state.receivingRows;
 
       try {
         if (shouldGenerateGl && isReplenishmentAPType) {
@@ -1899,7 +2114,22 @@ const APV = () => {
         }
         if (shouldGenerateGl) {
           finalGlEntries = [];
-          if (isNonPurchasesApType(selectedApType)) {
+          if (state.receivingRows.length > 0) {
+            // Validate raw input before converting strings in the transport payload.
+            const calculated = await requestReceivingDetails("Apply", { ...glData, dt3: state.receivingRows });
+            if (receivingContextRef.current !== actionContext) throw new Error("The APV changed while calculating. Please retry with the current details.");
+            finalReceivingRows = calculated.dt3;
+            finalInvoiceRows = mergeReceivingInvoices(calculated.dt1);
+            finalGlEntries = (calculated.dt2 || []).map(entry => ({
+              ...entry,
+              reqRc: isRequirementEnabled(entry.reqRc, entry.rcReq, entry.recRc) ? "Y" : "N",
+              reqSl: isRequirementEnabled(entry.reqSl, entry.slReq, entry.recSl) || Boolean(entry.slCode) ? "Y" : "N",
+              slRefNo: entry.slRefNo || entry.slrefNo || "",
+              slrefDate: normalizeSlrefDate(entry.slrefDate),
+              debit: formatNumber(entry.debit), credit: formatNumber(entry.credit),
+              debitFx1: formatNumber(entry.debitFx1 || 0), creditFx1: formatNumber(entry.creditFx1 || 0),
+            }));
+          } else if (isNonPurchasesApType(selectedApType)) {
 
             const blankRow = {
               acctCode: "",
@@ -2007,17 +2237,19 @@ const APV = () => {
             return;
           }
 
-          updateState({ detailRows: finalInvoiceRows, detailRowsGL: finalGlEntries });
+          updateState({ detailRows: finalInvoiceRows, detailRowsGL: finalGlEntries, receivingRows: finalReceivingRows, receivingDirty: false, receivingNeedsSave: state.receivingRows.length > 0 || state.receivingNeedsSave });
         }
 
         if (action === "Upsert") {
           const saveData = buildTransactionPayload(finalGlEntries, finalInvoiceRows);
+          if (state.receivingDetailsLoaded) saveData.dt3 = finalReceivingRows;
           const response = await useTransactionUpsert(docType, saveData, updateState, "apvId", "apvNo");
           if (response?.status === "success" && !response.data[0].errorMsg) {
             useSwalshowSaveSuccessDialog(handleReset, () => handleSaveAndPrint(response.data[0].apvId));
             updateState({
               isDocNoDisabled: true,
               isFetchDisabled: true,
+              receivingNeedsSave: false,
               documentStatus: response.data[0].apvStatus || "",
               status: response.data[0].docStatus || "OPEN",
             });
@@ -2025,6 +2257,7 @@ const APV = () => {
         }
       } catch (error) {
         console.error(`APV ${action} Error:`, error);
+        useSwalErrorAlert(action === "Upsert" ? "Save APV" : "Generate GL", error.response?.data?.details || error.message || "Unable to process APV.");
       } finally {
         updateState({ isLoading: false, showSpinner: false });
       }
@@ -2038,16 +2271,26 @@ const APV = () => {
     const invoiceDetailsChanged = JSON.stringify(updatedRows) !== JSON.stringify(detailRows);
     updateState({
       detailRows: updatedRows,
+      receivingRows: state.receivingRows.filter(receipt => updatedRows.some(invoice => invoice.invType === receipt.invType && String(invoice.sourceId || invoice.rrId) === String(receipt.rrId))),
+      receivingDirty: invoiceDetailsChanged && state.receivingRows.length > 0 ? true : state.receivingDirty,
+      receivingNeedsSave: invoiceDetailsChanged && state.receivingDetailsLoaded ? true : state.receivingNeedsSave,
       ...(invoiceDetailsChanged ? { detailRowsGL: [], triggerGLEntries: false } : {}),
+      ...(state.invoiceTab === "receiving" && !updatedRows.some((row) => ["FG", "RM", "MS"].includes(String(row.invType || "").trim().toUpperCase()) &&
+      Boolean(String(row.rrNo || "").trim()) &&
+      Boolean(String(row.poNo || "").trim())) ? { invoiceTab: "invoice" } : {}),
       ...additionalState,
     });
-    if (invoiceDetailsChanged) updateTotals(updatedRows);
     return invoiceDetailsChanged;
   };
 
 
   const handleAddRow = async (insertIndex = null, payee = {}) => {
     try {
+      const manualAdvancePoNo = selectedApType === "APV03" ? getNextManualAdvancePoNo(detailRows) : "";
+      if (selectedApType === "APV03" && !manualAdvancePoNo) {
+        useSwalErrorAlert("Add Advance", "The 01-99 auto-generated PO numbers for today are already in use.");
+        return;
+      }
       const selectedVendCode = payee.vendCode || vendCode || "";
       const selectedVendName = payee.vendName || vendName?.vendName || "";
       const firstRow = detailRows[0];
@@ -2057,8 +2300,8 @@ const APV = () => {
         lnNo: "",
         invType: "",
         rrNo: "",
-        poNo: "",
-        siNo: "",
+        poNo: manualAdvancePoNo,
+        siNo: manualAdvancePoNo,
         siDate: useGetCurrentDayV2(),
         amount: "0.00",
         siAmount: "0.00",
@@ -2104,9 +2347,16 @@ const APV = () => {
     const sourceRow = detailRows[index];
     if (!sourceRow) return;
 
+    const manualAdvancePoNo = selectedApType === "APV03" ? getNextManualAdvancePoNo(detailRows) : "";
+    if (selectedApType === "APV03" && !manualAdvancePoNo) {
+      useSwalErrorAlert("Copy Advance", "The 01-99 auto-generated PO numbers for today are already in use.");
+      return;
+    }
+
     const copiedRow = {
       ...sourceRow,
       lnNo: "",
+      ...(selectedApType === "APV03" ? { poNo: manualAdvancePoNo, siNo: manualAdvancePoNo } : {}),
       autoAdv: "N",
       apAdvId: "",
       advpoNo: "",
@@ -2165,9 +2415,10 @@ const APV = () => {
 
   const handleOpenReferencePCV = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openPCV",
@@ -2234,10 +2485,11 @@ const APV = () => {
 
   const handleOpenReferenceRR = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
 
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openRR",
@@ -2313,9 +2565,10 @@ const APV = () => {
 
   const handleOpenReferenceJO = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode) {
+    if (!lookupVendCode && !overrides.inquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openJO",
@@ -2463,9 +2716,17 @@ const APV = () => {
     const isLCImportationFlow = modalContext === "openLCImportation";
     const isPCVFlow = modalContext === "openPCV";
     const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
+    if (!itemsArray.length) return;
+    if (referenceInquiryOpen && documentID) return;
+    if (!validateReferencePayees(itemsArray, !referenceInquiryOpen)) return;
     updateState({ isLoading: true, showSpinner: true });
 
     try {
+      const payeeUpdates = referenceInquiryOpen ? await getReferencePayeeHeader(itemsArray[0]) : {};
+      if (referenceInquiryOpen && !canApplyReferencePayee(payeeUpdates.vendCode)) return;
+      if (referenceInquiryOpen) updateState(payeeUpdates);
+      const effectiveVendCode = payeeUpdates.vendCode || vendCode;
+      const effectiveVendName = payeeUpdates.vendName || vendName;
       if (isPCVFlow) {
         const mappedRows = await Promise.all(
           itemsArray.map(async (item) => {
@@ -2509,6 +2770,7 @@ const APV = () => {
         );
         const updatedRows = [...detailRows, ...mappedRows];
         updateInvoiceDetails(updatedRows, {
+          ...payeeUpdates,
           showRRRefModal: false,
           modalContext: "",
           globalLookupTitle: "",
@@ -2547,8 +2809,8 @@ const APV = () => {
           useSwalErrorAlert("LC Importation Reference", "No invoice details found for the selected LC reference.");
           return;
         }
-                const foundVatCode = vendName?.vatCode || "";
-        const foundAtcCode = vendName?.atcCode || "";
+        const foundVatCode = effectiveVendName?.vatCode || "";
+        const foundAtcCode = effectiveVendName?.atcCode || "";
         const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
         const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
         const lcBrokerCode = selectedLC.vendCode || "";
@@ -2609,13 +2871,7 @@ const APV = () => {
 
         const updatedRows = [...detailRows, ...mappedRows];
         updateInvoiceDetails(updatedRows, {
-          vendCode,
-          vendName,
-          apAccountCode,
-          apAccountName,
-          currencyCode,
-          currencyName,
-          currencyRate,
+          ...payeeUpdates,
           showRRRefModal: false,
           modalContext: "",
           globalLookupTitle: "",
@@ -2646,7 +2902,7 @@ const APV = () => {
               : useGetCurrentDayV2();
 
             // Vendor
-            const selectedVendCode = item.vendCode || vendCode || "";
+            const selectedVendCode = item.vendCode || effectiveVendCode || "";
             const payeeRow = selectedVendCode ? await fetchPayeeByCode(selectedVendCode) : null;
 
             // VAT
@@ -2700,7 +2956,7 @@ const APV = () => {
 
               sltypeCode: "SU",
               slCode: selectedVendCode,
-              slName: item.vendName || payeeRow?.vendName || vendName?.vendName || "",
+              slName: item.vendName || payeeRow?.vendName || effectiveVendName?.vendName || "",
 
               vatCode,
               vatName,
@@ -2732,11 +2988,11 @@ const APV = () => {
 
 
 
-          const vCode = item.vatCode || vendName?.vatCode || "";
+          const vCode = item.vatCode || effectiveVendName?.vatCode || "";
           const vatData = vCode ? await useTopVatRow(vCode) : null;
           const targetRcCode = item.rcCode || (resolvedDebitAcct && isRcRequired ? "REQ RC" : "");
           const targetRcName = targetRcCode && targetRcCode !== "REQ RC" ? await fetchRCNameByCode(targetRcCode) : "";
-          const aCode = vendName?.atcCode || "";
+          const aCode = effectiveVendName?.atcCode || "";
           const atcData = aCode ? await useTopATCRow(aCode) : null;
           const amount = parseFormattedNumber(item.siAmount || item.amount || 0);
           const dynamicVatRate = vCode ? await getVatRate(vCode) : 0;
@@ -2764,8 +3020,8 @@ const APV = () => {
             rcCode: targetRcCode,
             rcName: targetRcName,
             sltypeCode: "SU",
-            slCode: vendCode,
-            slName: vendName?.vendName,
+            slCode: effectiveVendCode,
+            slName: effectiveVendName?.vendName,
             vatCode: vCode,
             vatName: vatData?.vatName || item.vatDesc || "",
             vatAmount: formatNumber(vatAmount),
@@ -2783,12 +3039,14 @@ const APV = () => {
             recSl: "Y",
             sourceId: item.sourceId || item.rrId || item.joId || "",
             rrId: item.rrId || item.joId || "",
+            rrDetailRows: item.rrDetailRows || [],
           };
         }),
       );
 
       const updatedRows = [...detailRows, ...mappedRows];
       updateInvoiceDetails(updatedRows, {
+        ...payeeUpdates,
         showRRRefModal: false,
         triggerGLEntries: false,
         modalContext: "",
@@ -2797,6 +3055,7 @@ const APV = () => {
       });
     } catch (error) {
       console.error("APV processing error inside handleCloseRRRefModal wrapper structure:", error);
+      useSwalErrorAlert("Open References", error?.message || "Unable to apply the selected reference.");
     } finally {
       updateState({ isLoading: false, showSpinner: false });
     }
@@ -2837,6 +3096,14 @@ const APV = () => {
   };
 
 
+  const handleDeleteRowGL = (index) => {
+    if (isFormDisabled) return;
+    setState((prev) => ({
+      ...prev,
+      detailRowsGL: prev.detailRowsGL.filter((_, rowIndex) => rowIndex !== index),
+    }));
+  };
+
   const handleDeleteRow = async (index) => {
     const updatedRows = [...detailRows];
     updatedRows.splice(index, 1);
@@ -2849,6 +3116,10 @@ const APV = () => {
 
 
   const handlePost = async () => {
+    if (state.receivingNeedsSave) {
+      useSwalErrorAlert("Post APV", "Save the receiving price changes before posting.");
+      return;
+    }
     if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
@@ -2922,6 +3193,8 @@ const APV = () => {
         ...row,
         poNo: "",
         siNo: "",
+        rrNo: "",
+        invType: "",
         siDate: useGetCurrentDayV2(),
         sourceId: "",
         apAdvId: "",
@@ -2946,9 +3219,12 @@ const APV = () => {
         noReprints: "0",
         detailRows: copiedRows,
         detailRowsGL: retainCopiedGLEntries ? detailRowsGL : [],
+        receivingRows: [],
+        receivingDetailsLoaded: false, receivingNeedsSave: false,
+        receivingDirty: false,
+        invoiceTab: "invoice",
         triggerGLEntries: false,
       });
-      updateTotals(copiedRows);
     }
   };
 
@@ -2980,6 +3256,61 @@ const APV = () => {
       console.error("Error fetching payee details:", error);
       return null;
     }
+  };
+
+  const getReferencePayeeHeader = async (reference) => {
+    const selectedVendCode = String(reference?.vendCode ?? reference?.payeeCode ?? "").trim();
+    if (!selectedVendCode) throw new Error("The selected reference has no payee code.");
+    const payeeRow = await fetchPayeeByCode(selectedVendCode);
+    if (!payeeRow) throw new Error(`Payee ${selectedVendCode} was not found in Payee Master.`);
+
+    const foundCurrCode = payeeRow.currCode || payeeRow.currencyCode || "";
+    let foundCurrName = payeeRow.currName || payeeRow.currencyName || "";
+    if (foundCurrCode && !foundCurrName) {
+      foundCurrName = (await useTopCurrencyRow(foundCurrCode))?.currName || "";
+    }
+    const foundVatCode = payeeRow.vatCode || "";
+    const foundAtcCode = payeeRow.atcCode || "";
+    const [vatRow, atcRow] = await Promise.all([
+      foundVatCode ? useTopVatRow(foundVatCode) : null,
+      foundAtcCode ? useTopATCRow(foundAtcCode) : null,
+    ]);
+    const foundAcctCode = payeeRow.apAccountCode || payeeRow.acctCode || "";
+    const foundAcctName = payeeRow.apAccountName || payeeRow.acctName || "";
+    const updates = {
+      vendCode: selectedVendCode,
+      vendName: {
+        vendCode: selectedVendCode,
+        vendName: payeeRow.vendName || reference.vendName || "",
+        currCode: foundCurrCode,
+        currName: foundCurrName,
+        vatCode: foundVatCode,
+        vatName: vatRow?.vatName || "",
+        atcCode: foundAtcCode,
+        atcName: atcRow?.atcName || "",
+        sltypeCode: payeeRow.sltypeCode || "SU",
+      },
+      apAccountCode: foundAcctCode,
+      apAccountName: foundAcctCode && foundAcctName ? `${foundAcctCode} - ${foundAcctName}` : foundAcctCode,
+      currencyCode: foundCurrCode,
+      currencyName: foundCurrName,
+      currCode: foundCurrCode,
+      currName: foundCurrName,
+    };
+    if (foundCurrCode) {
+      const rate = foundCurrCode === glCurrDefault ? defaultCurrRate : await useTopForexRate(foundCurrCode, header.apvDate);
+      updates.currencyRate = formatNumber(parseFormattedNumber(rate || 1), 6);
+      updates.currRate = updates.currencyRate;
+    }
+    return updates;
+  };
+
+  const canApplyReferencePayee = (selectedVendCode) => {
+    if (detailRows.length > 0 && vendCode && String(selectedVendCode).trim().toUpperCase() !== String(vendCode).trim().toUpperCase()) {
+      useSwalErrorAlert("Different Payee", "Clear the existing Invoice Details before selecting a reference for another payee.");
+      return false;
+    }
+    return true;
   };
 
 
@@ -3076,10 +3407,6 @@ const APV = () => {
           currencyRate: formatNumber(parseFormattedNumber(rate || 1), 6),
           currRate: formatNumber(parseFormattedNumber(rate || 1), 6),
         });
-      }
-
-      if (headerUpdates.detailRows) {
-        updateTotals(headerUpdates.detailRows);
       }
 
       if (isRRFlow) {
@@ -3188,6 +3515,7 @@ const APV = () => {
 
     updatedRows[index] = { ...updatedRows[index], [field]: value };
     const row = updatedRows[index];
+    if (selectedApType === "APV03" && field === "poNo") row.siNo = value;
     if (["debitAcct", "vatAcct", "advAcct"].includes(field) && typeof value === "object") {
       const selectedAcctCode = value.acctCode || "";
       row[field] = selectedAcctCode;
@@ -3853,6 +4181,10 @@ const APV = () => {
 
       const handleAPTypeChange = async (event) => {
     const selectedType = event.target.value;
+    if (selectedType !== selectedApType && state.receivingRows.length) {
+      useSwalErrorAlert("APV Type", "Reset the document before changing the APV type with receiving details.");
+      return;
+    }
 
     // Default: show all fields
     let visibility = {
@@ -3898,6 +4230,8 @@ const APV = () => {
         visibility.slName = false;
         visibility.address = false;
         visibility.tin = false;
+        visibility.siNo = false;
+        visibility.siDate = false;
         break;
 
       case "APV04": // replenishment
@@ -3939,6 +4273,7 @@ const APV = () => {
 
     const updates = {
       selectedApType: selectedType,
+      invoiceTab: "invoice",
       fieldVisibility: visibility,
       detailRows: detailRows.map((row) => ({ ...row, autoAdv: selectedType === "APV01" ? row.autoAdv || "Y" : "N" })),
     };
@@ -3975,6 +4310,11 @@ const APV = () => {
       .includes("REPLENISH");
   const isImportationAPType = selectedApType === "APV07";
   const isPurchasesAPType = selectedApType === "APV01";
+  const hasReceivingEligibleInvoiceDetails = detailRows.some((row) =>
+    ["FG", "RM", "MS"].includes(String(row.invType || "").trim().toUpperCase()) &&
+      Boolean(String(row.rrNo || "").trim()) &&
+      Boolean(String(row.poNo || "").trim()),
+  );
   const isLcSourcedImportationRow = (row) => isImportationAPType && Boolean(String(row.sourceId || row.sourceNo || "").trim());
   const showAppliedAdvancesColumns = isPurchasesAPType || isImportationAPType;
   const showAdvancesAccountColumn = isPurchasesAPType || isAdvancesAPType || isImportationAPType;
@@ -4008,8 +4348,8 @@ const APV = () => {
         ]
       : []),
 
-    ...(fieldVisibility.siNo ? [{ key: "siNo", label: "Invoice No.", width: 120 }] : []),
-    ...(fieldVisibility.siDate ? [{ key: "siDate", label: "Invoice Date", width: 130 }] : []),
+    ...(fieldVisibility.siNo && !isAdvancesAPType ? [{ key: "siNo", label: "Invoice No.", width: 120 }] : []),
+    ...(fieldVisibility.siDate && !isAdvancesAPType ? [{ key: "siDate", label: "Invoice Date", width: 130 }] : []),
 
     {
       key: "amount",
@@ -4297,13 +4637,47 @@ const APV = () => {
         {/* Form Layout with Tabs */}
         <div className="global-tran-header-div-ui">
           {/* Tab Navigation */}
-          <div className="global-tran-header-tab-div-ui">
+          <div className="global-tran-header-tab-div-ui items-center justify-between gap-3">
             <button
               className={`global-tran-tab-padding-ui ${activeTab === "basic" ? "global-tran-tab-text_active-ui" : "global-tran-tab-text_inactive-ui"}`}
               onClick={() => updateState({ activeTab: "basic" })}
             >
               Basic Information
             </button>
+            <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
+              <button
+                type="button"
+                className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800"
+                onClick={() => setShowOpenReferencesDropdown((current) => !current)}
+                aria-expanded={showOpenReferencesDropdown}
+                aria-label="Open References"
+              >
+                <FontAwesomeIcon icon={faFolderOpen} />
+                Open References
+                <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+              </button>
+              {showOpenReferencesDropdown && (
+                <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                  {[
+                    ["RR", "Open Purchases (RR)", faBox],
+                    ["JO", "Open Purchases (JO)", faBriefcase],
+                    ["PO", "Open Advances", faCoins],
+                    ["PCV", "Open Replenishment", faReceipt],
+                    ...(canOpenImportationInquiry ? [["LC", "Open Importation", faShip]] : []),
+                  ].map(([referenceType, label, icon]) => (
+                    <button
+                      key={referenceType}
+                      type="button"
+                      className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700"
+                      onClick={() => openReferenceInquiry(referenceType)}
+                    >
+                      <FontAwesomeIcon icon={icon} className="w-4 text-blue-600 dark:text-blue-300" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* APV Header Form Section */}
@@ -4490,16 +4864,19 @@ const APV = () => {
                 <div className="flex flex-row sm:flex-row">
                   <button
                     className={`global-tran-tab-padding-ui ${
-                      GLactiveTab === "invoice" ? "global-tran-tab-text_active-ui" : "global-tran-tab-text_inactive-ui"
+                      state.invoiceTab === "invoice" ? "global-tran-tab-text_active-ui" : "global-tran-tab-text_inactive-ui"
                     }`}
-                    onClick={() => updateState({ GLactiveTab: "invoice" })}
-                    disabled={isFormDisabled}
+                    onClick={() => updateState({ invoiceTab: "invoice" })}
                   >
                     Invoice Details
                   </button>
+                  {hasReceivingEligibleInvoiceDetails && <button type="button"
+                    className={`global-tran-tab-padding-ui ${state.invoiceTab === "receiving" ? "global-tran-tab-text_active-ui" : "global-tran-tab-text_inactive-ui"}`}
+                    onClick={() => updateState({ invoiceTab: "receiving" })}>Receiving Details</button>}
                 </div>
               </div>
 
+              <div hidden={state.invoiceTab !== "invoice"}>
               {/* Invoice Details Button */}
               <div className="global-tran-table-main-div-ui">
                 <div className="global-tran-table-main-sub-div-ui">
@@ -4718,7 +5095,7 @@ const APV = () => {
                                 />
                               </td>
                             )}
-                            {fieldVisibility.siNo && (
+                            {fieldVisibility.siNo && !isAdvancesAPType && (
                               <td data-apv-column-key="siNo" className="global-tran-td-ui">
                                 <input
                                   type="text"
@@ -4730,7 +5107,7 @@ const APV = () => {
                                 />
                               </td>
                             )}
-                            {fieldVisibility.siDate && (
+                            {fieldVisibility.siDate && !isAdvancesAPType && (
                               <td data-apv-column-key="siDate" className="global-tran-td-ui">
                                 <div className="w-[110px]">
                                   <DateFormatInput
@@ -5333,39 +5710,32 @@ const APV = () => {
                 </div>
 
                 {/* Totals Section */}
-                <div className="global-tran-tab-footer-total-main-div-ui">
-                  {/* Total Invoice Amount */}
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">Total Invoice Amount:</label>
-                    <label id="totalInvoiceAmount" className="global-tran-tab-footer-total-value-ui">
-                      0.00
-                    </label>
-                  </div>
-
-                  {/* Total VAT Amount */}
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">Total VAT Amount:</label>
-                    <label id="totalVATAmount" className="global-tran-tab-footer-total-value-ui">
-                      0.00
-                    </label>
-                  </div>
-
-                  {/* Total ATC Amount */}
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">Total ATC Amount:</label>
-                    <label id="totalATCAmount" className="global-tran-tab-footer-total-value-ui">
-                      0.00
-                    </label>
-                  </div>
-
-                  {/* Total Payable Amount (Invoice - ATC) */}
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">Total Payable Amount:</label>
-                    <label id="totalPayableAmount" className="global-tran-tab-footer-total-value-ui">
-                      0.00
-                    </label>
-                  </div>
+                <div className={`global-tran-tab-footer-total-main-div-ui grid gap-1 ${showForeignTotals ? "grid-cols-3" : "grid-cols-2"}`}>
+                  <div></div>
+                  <div className="global-tran-tab-footer-total-label-ui text-right">Currency ({baseCurrencyCode})</div>
+                  {showForeignTotals && <div className="global-tran-tab-footer-total-label-ui text-right">Currency ({transactionCurrencyCode})</div>}
+                  {[
+                    ["Total Invoice Amount", invoiceTotals.invoice],
+                    ["Total VAT Amount", invoiceTotals.vat],
+                    ["Total ATC Amount", invoiceTotals.atc],
+                    ["Total Payable Amount", invoiceTotals.invoice - invoiceTotals.atc],
+                  ].map(([label, amount]) => <Fragment key={label}>
+                    <div className="global-tran-tab-footer-total-label-ui">{label}:</div>
+                    <div className="global-tran-tab-footer-total-value-ui">{formatNumber(showForeignTotals ? amount * invoiceBaseRate : amount)}</div>
+                    {showForeignTotals && <div className="global-tran-tab-footer-total-value-ui">{formatNumber(amount)}</div>}
+                  </Fragment>)}
                 </div>
+              </div>
+              </div>
+              <div hidden={state.invoiceTab !== "receiving"}>
+                <APVReceivingDetails rows={state.receivingRows} currency={currencyCode} exchangeRate={parseFormattedNumber(currencyRate)}
+                  disabled={isFormDisabled} busy={isLoading} dirty={state.receivingDirty}
+                  onLoad={() => handleReceivingDetails("Load")}
+                  onApplyAdjustment={() => handleReceivingDetails("Apply")}
+                  onPriceChange={handleReceivingPriceChange}
+                  onDelete={handleDeleteReceivingRow}
+                  onResetPrices={() => setState(prev => ({ ...prev, receivingDirty: true, receivingNeedsSave: true, detailRowsGL: [], receivingRows: prev.receivingRows.map(row => ({ ...row, adjPrice: row.origPrice })) }))}
+                />
               </div>
             </div>
           </>
@@ -5389,7 +5759,7 @@ const APV = () => {
             <div className="flex justify-end">
               <button
                 onClick={() => handleActivityOption("GenerateGL")}
-                className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                className={`global-tran-button-generateGL ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={isLoading || isFormDisabled}
               >
                 {isLoading ? "Generating..." : "Generate GL Entries"}
@@ -5826,7 +6196,7 @@ const APV = () => {
                               <FontAwesomeIcon icon={faPlus} />
                             </button>
 
-                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(index)}>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(index)}>
                               <FontAwesomeIcon icon={faTrashAlt} />
                             </button>
                           </div>
@@ -5855,25 +6225,24 @@ const APV = () => {
 
             {/* Totals Section */}
             <div className="global-tran-tab-footer-total-main-div-ui">
-              {/* Total Debit */}
               <div className="global-tran-tab-footer-total-div-ui">
-                <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-label-ui">
-                  Total Debit:
-                </label>
-                <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-value-ui">
-                  {totalDebit}
-                </label>
+                <label className="global-tran-tab-footer-total-label-ui">Total Debit ({baseCurrencyCode}):</label>
+                <label className="global-tran-tab-footer-total-value-ui">{formatNumber(glTotals.debit)}</label>
               </div>
-
-              {/* Total Credit */}
               <div className="global-tran-tab-footer-total-div-ui">
-                <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-label-ui">
-                  Total Credit:
-                </label>
-                <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-value-ui">
-                  {totalCredit}
-                </label>
+                <label className="global-tran-tab-footer-total-label-ui">Total Credit ({baseCurrencyCode}):</label>
+                <label className="global-tran-tab-footer-total-value-ui">{formatNumber(glTotals.credit)}</label>
               </div>
+              {showForeignTotals && <div className="global-tran-tab-footer-total-main-div-ui">
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">Total Debit ({transactionCurrencyCode}):</label>
+                  <label className="global-tran-tab-footer-total-value-ui">{formatNumber(foreignGlDebit)}</label>
+                </div>
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">Total Credit ({transactionCurrencyCode}):</label>
+                  <label className="global-tran-tab-footer-total-value-ui">{formatNumber(foreignGlCredit)}</label>
+                </div>
+              </div>}
             </div>
           </div>
         </div>
@@ -5924,16 +6293,19 @@ const APV = () => {
                     : "Get Selected RR")
             }
             idKey="groupId"
+            viewOnly={referenceInquiryOpen && Boolean(documentID)}
+            selectionValidator={(rows) => validateReferencePayees(rows, !referenceInquiryOpen)}
             onClose={handleCloseRRRefModal}
-            onCancel={() =>
+            onCancel={() => {
+              setReferenceInquiryOpen(false);
               updateState({
                 showRRRefModal: false,
                 modalContext: "",
                 globalLookupTitle: "",
                 globalLookupBtnCaption: "",
                 globalLookupConfigEndpoint: "",
-              })
-            }
+              });
+            }}
           />
         )}
 
@@ -6038,6 +6410,10 @@ const APV = () => {
           title="Open LC Importation"
           summarySelectionMode="multiple"
           detailSelectionMode="multiple"
+          viewOnly={referenceInquiryOpen && Boolean(documentID)}
+          // LC summary payee is the broker; validate the actual payee on detail selection.
+          selectionValidator={() => true}
+          detailSelectionValidator={(rows) => validateReferencePayees(rows, !referenceInquiryOpen)}
           summaryColumns={state.openLcSummaryColumns}
           detailColumns={state.openLcDetailColumns}
           summaryData={state.openLcSummaryData}
@@ -6080,14 +6456,15 @@ const APV = () => {
             }
           }}
           onClose={handleCloseLCModal}
-          onCancel={() =>
+          onCancel={() => {
+            setReferenceInquiryOpen(false);
             updateState({
               showOpenLCModal: false,
               openLcSummaryData: [],
               openLcSummaryColumns: [],
               openLcDetailColumns: [],
-            })
-          }
+            });
+          }}
         />
       )}
     </div>

@@ -32,6 +32,7 @@ import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx"
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
+import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.jsx";
 import ReactDOM from "react-dom";
 
 // Configuration
@@ -490,6 +491,7 @@ const FGST = () => {
     showPostingModal: false,
     showAllTranDocNo: false,
     showQstatModal: false,
+    brandLookupOpen: false,
     locationLookupOpen: false,
   });
 
@@ -579,6 +581,7 @@ const FGST = () => {
     showPostingModal,
     showAllTranDocNo,
     showQstatModal,
+    brandLookupOpen,
     fgLookupModalOpen,
     warehouseLookupOpen,
     fromwarehouseLookupOpen,
@@ -1213,6 +1216,8 @@ const FGST = () => {
       const retrievedDetailRows = (data.dt1 || []).map((item) => ({
         ...item,
         invType: "FG",
+        brandCode: item.brandCode || item.brand_code || "",
+        brandName: item.brandName || item.brand_name || "",
         quantity: formatNumber(item.quantity, decQty),
         unitCost: formatNumber(item.unitCost, decUcost),
         itemAmount: formatNumber(item.itemAmount, 2),
@@ -1362,6 +1367,10 @@ const FGST = () => {
           invType: "FG",
           itemCode: row.itemCode || "",
           itemName: row.itemName || "",
+          brandCode: row.brandCode || "",
+          brand_code: row.brandCode || "",
+          brandName: row.brandName || "",
+          brand_name: row.brandName || "",
           categCode: row.categCode || "",
           quantity: parseFormattedNumber(row.quantity || 0),
           uomCode: row.uomCode || "",
@@ -1507,6 +1516,8 @@ const FGST = () => {
     lnNo: "",
     itemCode: "",
     itemName: "",
+    brandCode: "",
+    brandName: "",
     categCode: "",
     quantity: "1.00",
     uomCode: "",
@@ -1741,6 +1752,7 @@ const FGST = () => {
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Description", width: 260 },
+    { key: "brandCode", label: "Brand", width: 150 },
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "quantity", label: "Quantity", width: 120 },
     { key: "unitCost", label: handleColumnLabel("UnitCost"), width: 130 },
@@ -2043,6 +2055,8 @@ const FGST = () => {
     if (field === "itemCode") {
       row["itemCode"] = value.itemCode;
       row["itemName"] = value.itemName;
+      row["brandCode"] = "";
+      row["brandName"] = "";
       row["uomCode"] = value.uomCode;
       row["categCode"] = value.categCode;
 
@@ -2817,6 +2831,8 @@ const FGST = () => {
         invType: "FG",
         itemCode: item?.itemCode ?? "",
         itemName: item?.itemName ?? "",
+        brandCode: "",
+        brandName: "",
         categCode: item?.categCode ?? "",
         uomCode: item?.uomCode ?? "",
         unitCost: formatNumber(rawUnitCost, decUcost),
@@ -2880,6 +2896,25 @@ const FGST = () => {
     });
 
     updateState({ itemSingleSelect: false, fgLookupModalOpen: false });
+  };
+
+  const handleCloseBrandLookup = (selectedBrand) => {
+    const rowIndex = selectedRowIndex;
+    updateState({ brandLookupOpen: false, selectedRowIndex: null });
+
+    if (!selectedBrand || rowIndex === null || rowIndex === undefined) return;
+
+    const rows = [...(detailRowsRef.current || detailRows || [])];
+    if (!rows[rowIndex]) return;
+
+    rows[rowIndex] = {
+      ...rows[rowIndex],
+      brandCode: selectedBrand.brandCode || "",
+      brandName: selectedBrand.brandName || "",
+    };
+
+    detailRowsRef.current = rows;
+    updateState({ detailRows: rows });
   };
 
   const handleCloseLocationLookup = (row) => {
@@ -3298,6 +3333,30 @@ const FGST = () => {
                             )
                           }
                         />
+                      </td>
+
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[130px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                            value={row.brandCode || ""}
+                            readOnly
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => {
+                                if (!row.itemCode) {
+                                  useSwalInfoAlert("Brand", "Select an FG item first.");
+                                  return;
+                                }
+                                updateState({ selectedRowIndex: index, brandLookupOpen: true });
+                              }}
+                            />
+                          )}
+                        </div>
                       </td>
 
                       <td className="global-tran-td-ui">
@@ -4544,6 +4603,14 @@ const FGST = () => {
             onClose={handleCloseFGLookup}
             onCancel={() => updateState({ fgLookupModalOpen: false })}
             singleSelect={itemSingleSelect}
+          />
+        )}
+
+        {brandLookupOpen && (
+          <ItemBrandMatrixLookupModal
+            isOpen={brandLookupOpen}
+            itemCode={detailRows?.[selectedRowIndex]?.itemCode || ""}
+            onClose={handleCloseBrandLookup}
           />
         )}
 
