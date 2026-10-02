@@ -16,6 +16,8 @@ import {
   faCar,
   faTableCellsLarge,
   faFileLines,
+  faPen,
+  faCheck,
   faPlus as faPlusIcon,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -115,6 +117,35 @@ import {
 import Header from "@/NAYSA Cloud/Components/Header";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 
+const showDiscountError = useSwalErrorAlert;
+
+// Allocate whole cents so the last item receives any rounding difference.
+const allocateDiscountCents = (grossAmounts, discountAmount) => {
+  const capacities = grossAmounts.map((amount) => Math.max(0, Math.round(Number(amount || 0) * 100)));
+  const grossCents = capacities.reduce((sum, cents) => sum + cents, 0);
+  const discountCents = Math.round(Number(discountAmount || 0) * 100);
+
+  if (!Number.isFinite(discountCents) || discountCents < 0 || discountCents > grossCents) {
+    throw new RangeError("Discount Amount must be between zero and Gross Amount.");
+  }
+  if (!capacities.length) return [];
+
+  let remainingDiscount = discountCents;
+  let remainingGross = grossCents;
+  return capacities.map((gross, index) => {
+    const laterGross = remainingGross - gross;
+    const proportional = grossCents ? Math.round((discountCents * gross) / grossCents) : 0;
+    const minimum = Math.max(0, remainingDiscount - laterGross);
+    const maximum = Math.min(gross, remainingDiscount);
+    const cents = index === capacities.length - 1
+      ? remainingDiscount
+      : Math.min(maximum, Math.max(minimum, proportional));
+    remainingDiscount -= cents;
+    remainingGross = laterGross;
+    return cents / 100;
+  });
+};
+
 const toDateInputValue = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -141,6 +172,7 @@ const PO = () => {
   const quantityEditStartRef = useRef({});
   const suppressDeliveryDatePromptRef = useRef(true);
   const addTypeDropdownRef = useRef(null);
+  const headerDiscountInputRef = useRef(null);
   const navigate = useNavigate();
   const {
     companyInfo,
@@ -175,6 +207,8 @@ const PO = () => {
   const isViewDocumentUrl = isViewDocument;
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const [isHeaderDiscountEditing, setIsHeaderDiscountEditing] = useState(false);
+  const [headerDiscountDraft, setHeaderDiscountDraft] = useState("");
   const [requiredUomLookup, setRequiredUomLookup] = useState({
     isOpen: false,
     rowIndex: null,
@@ -692,6 +726,7 @@ const PO = () => {
           unitPrice: parseFormattedNumber(row.unitPrice || 0) || 0,
           grossAmt,
           discRate: parseFormattedNumber(row.discRate || 0) || 0,
+          hasDiscountRate: (parseFormattedNumber(row.discRate || 0) || 0) > 0,
           discAmt,
           totalAmt,
           vatCode: row.vatCode || "",
@@ -709,6 +744,7 @@ const PO = () => {
       existing.totalAmt += totalAmt;
       existing.vatAmt += vatAmt;
       existing.netAmt += netAmt;
+      existing.hasDiscountRate ||= (parseFormattedNumber(row.discRate || 0) || 0) > 0;
 
       if (!existing.vatCode && row.vatCode) existing.vatCode = row.vatCode;
       if (!existing.vatName && row.vatName) existing.vatName = row.vatName;
@@ -721,9 +757,9 @@ const PO = () => {
       const computedUnitPrice = summaryQty
         ? row.grossAmt / summaryQty
         : row.unitPrice;
-      const computedDiscRate = row.grossAmt
+      const computedDiscRate = row.hasDiscountRate && row.grossAmt
         ? (row.discAmt / row.grossAmt) * 100
-        : row.discRate;
+        : 0;
 
       return {
         ...row,
@@ -761,6 +797,8 @@ const PO = () => {
       totalNet: formatNumber(net || 0, DEC_AMT),
     };
   }, [poSummaryRows]);
+
+  const headerTotals = isPoSummaryApplicable ? poSummaryTotals : totals;
 
   const sortedPoSummaryRows = getSortedPoSummaryRows(
     poSummaryRows.map((row, originalIndex) => ({ row, originalIndex })),
@@ -836,6 +874,11 @@ const PO = () => {
   const isApprovalLocked =
     currentApprovalLevel > 0 && currentApprovalLevel <= maxApprovalLevel;
   const isFormDisabled = isDocumentLocked || isApprovalLocked;
+  const canEditHeaderDiscount =
+    !isFormDisabled &&
+    !isSaveDisabled &&
+    getStatusCode(status) === "O" &&
+    (parseFormattedNumber(headerTotals.totalGross) || 0) > 0;
 
   const computeVatFromInclusive = (vatRate, grossAmt) => {
     const rate = parseFormattedNumber(vatRate || 0);
@@ -909,9 +952,9 @@ const PO = () => {
     let discRate = parseFormattedNumber(row.discRate || 0);
     let discAmt = parseFormattedNumber(row.discAmt || 0);
 
-    if (changedField === "discAmt") {
+    if (changedField === "discAmt" || (changedField !== "discRate" && discRate === 0 && discAmt > 0)) {
       if (discAmt > gross) discAmt = gross;
-      discRate = gross !== 0 ? (discAmt / gross) * 100 : 0;
+      discRate = changedField === "discAmt" && gross !== 0 ? (discAmt / gross) * 100 : 0;
     } else {
       if (discRate > 99.99) discRate = 99.99;
       discAmt = gross * (discRate / 100);
@@ -978,6 +1021,87 @@ const PO = () => {
       totalVat: formatNumber(vat || 0, DEC_AMT),
       totalNet: formatNumber(net || 0, DEC_AMT),
     });
+  };
+
+  const applyHeaderDiscount = async () => {
+    if (!canEditHeaderDiscount) return;
+    const enteredAmount = isHeaderDiscountEditing ? headerDiscountDraft : headerTotals.totalDiscount;
+    const discountAmount = parseFormattedNumber(enteredAmount);
+    const grossAmount = parseFormattedNumber(headerTotals.totalGross) || 0;
+    if (!Number.isFinite(discountAmount) || discountAmount < 0) {
+      showDiscountError("Invalid Discount Amount", "Discount Amount cannot be negative.");
+      return;
+    }
+    if (Math.round(discountAmount * 100) > Math.round(grossAmount * 100)) {
+      showDiscountError("Invalid Discount Amount", "Discount Amount cannot exceed Gross Amount.");
+      return;
+    }
+
+    const sourceRows = detailRowsRef.current || detailRows || [];
+    if (!sourceRows.length) {
+      showDiscountError("Discount Amount", "Add PO items before applying a discount.");
+      return;
+    }
+
+    const confirmation = await useSwalProceedConfirm(
+      "Apply PO Discount?",
+      `Distribute the discount of ${formatNumber(discountAmount, DEC_AMT)} to the PO items?`,
+      "Yes, apply",
+      "No",
+    );
+    if (!confirmation?.isConfirmed) {
+      setHeaderDiscountDraft(headerTotals.totalDiscount);
+      setIsHeaderDiscountEditing(false);
+      return;
+    }
+    if (!canEditHeaderDiscount) return;
+
+    const discountByIndex = new Map();
+    try {
+      if (isPoSummaryApplicable) {
+        // Summary is authoritative: allocate to groups, then split each group into detail lines.
+        const summaryDiscounts = allocateDiscountCents(
+          poSummaryRows.map((row) => parseFormattedNumber(row.grossAmt) || 0),
+          discountAmount,
+        );
+        poSummaryRows.forEach((summaryRow, summaryIndex) => {
+          const detailIndexes = sourceRows.flatMap((row, index) =>
+            getPoSummaryGroupKey(row) === summaryRow._summaryKey ? [index] : [],
+          );
+          const detailDiscounts = allocateDiscountCents(
+            detailIndexes.map((index) => parseFormattedNumber(sourceRows[index].grossAmt) || 0),
+            summaryDiscounts[summaryIndex],
+          );
+          detailIndexes.forEach((index, position) => discountByIndex.set(index, detailDiscounts[position]));
+        });
+      } else {
+        const detailIndexes = sourceRows.flatMap((row, index) =>
+          String(row?.itemCode || "").trim() ? [index] : [],
+        );
+        const detailDiscounts = allocateDiscountCents(
+          detailIndexes.map((index) => parseFormattedNumber(sourceRows[index].grossAmt) || 0),
+          discountAmount,
+        );
+        detailIndexes.forEach((index, position) => discountByIndex.set(index, detailDiscounts[position]));
+      }
+    } catch (error) {
+      showDiscountError("Invalid Discount Amount", error.message);
+      return;
+    }
+
+    const updatedRows = sourceRows.map((row, index) => {
+      if (!discountByIndex.has(index)) return row;
+      return recalcDetailRow({
+        ...row,
+        discRate: formatNumber(0, DEC_AMT),
+        discAmt: formatNumber(discountByIndex.get(index), DEC_AMT),
+      }, "headerDiscount");
+    });
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
+    setHeaderDiscountDraft(formatNumber(discountAmount, DEC_AMT));
+    setIsHeaderDiscountEditing(false);
   };
 
   const handleAddBlankRow = (index) => {
@@ -1170,6 +1294,8 @@ const PO = () => {
   }, [isPoSummaryApplicable]);
 
   const handleReset = () => {
+    setIsHeaderDiscountEditing(false);
+    setHeaderDiscountDraft("");
     clearPoDetailSorting();
     loadCompanyData();
 
@@ -4742,13 +4868,11 @@ const PO = () => {
 
           {/* PO Header Form Section */}
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols- gap-4 rounded-lg relative"
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 rounded-lg relative"
             id="pr_hd"
           >
-            {/* Columns 1ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“3 (Header fields) */}
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Column 1: Branch / PO No / PO Date / Department */}
-              <div className="global-tran-textbox-group-div-ui">
+            {/* Column 1: PO identification */}
+              <div className="global-tran-textbox-group-div-ui min-w-0">
                 {/* Branch */}
                 <FieldRenderer
                   id="branchName"
@@ -4842,12 +4966,8 @@ const PO = () => {
                     })
                   }
                 />
-              </div>
 
-              {/* Column 2: PO Type / Payee Code / Payee Name / Payterm */}
-              <div className="global-tran-textbox-group-div-ui">
-                {/* PO Type */}
-                <FieldRenderer
+                 <FieldRenderer
                   id="poTypes"
                   label="PO Type"
                   type="select"
@@ -4861,6 +4981,12 @@ const PO = () => {
                     value: t.DROPDOWN_CODE,
                   }))}
                 />
+
+              </div>
+
+              {/* Column 2: PO type, payee, and terms */}
+              <div className="global-tran-textbox-group-div-ui min-w-0">
+
 
                 {/* Payee Code */}
                 <FieldRenderer
@@ -4887,6 +5013,56 @@ const PO = () => {
                   disabled
                 />
 
+                   <div className="flex min-w-0 gap-4">
+                  <input type="hidden" id="currCode" value={currCode || ""} readOnly />
+                  <div className="min-w-0 flex-[2]">
+                    <FieldRenderer
+                      id="currName"
+                      label="Currency"
+                      type="text"
+                      value={currCode ? `${currCode}${currName ? ` - ${currName}` : ""}` : ""}
+                      disabled
+                      readOnly
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <FieldRenderer
+                      id="currRate"
+                      label="Currency Rate"
+                      type="amount"
+                      value={currRate || ""}
+                      disabled={isFormDisabled || glCurrDefault === currCode}
+                      onChange={(val) => {
+                        const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+                        if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+                          updateState({ currRate: sanitizedValue });
+                        }
+                      }}
+                      onBlur={handleCurrRateNoBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          document.getElementById("refPoNo1")?.focus();
+                        }
+                      }}
+                      onFocus={(e) => {
+                        if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
+                          updateState({ currRate: "" });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <FieldRenderer
+                  id="attention"
+                  label="Attention"
+                  type="text"
+                  value={attention || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ attention: val })}
+                />
+
                 {/* Payterm */}
                 <FieldRenderer
                   id="payTerm"
@@ -4906,78 +5082,9 @@ const PO = () => {
                 />
               </div>
 
-              {/* Column 3: Currency / Rate / Attention / Delivery Address / Delivery Date */}
-              <div className="global-tran-textbox-group-div-ui">
-                <div className="flex gap-4">
-                  <input
-                    type="hidden"
-                    id="currCode"
-                    value={currCode || ""}
-                    readOnly
-                  />
+              {/* Column 3: Currency and delivery */}
+              <div className="global-tran-textbox-group-div-ui min-w-0">
 
-                  <div className="flex-grow w-2/3">
-                    <FieldRenderer
-                      id="currName"
-                      label="Currency"
-                      type="text"
-                      value={
-                        currCode
-                          ? `${currCode}${currName ? ` - ${currName}` : ""}`
-                          : ""
-                      }
-                      disabled
-                      readOnly
-                    />
-                  </div>
-
-                  <div className="flex-grow">
-                    <FieldRenderer
-                      id="currRate"
-                      label="Currency Rate"
-                      type="amount"
-                      value={currRate || ""}
-                      disabled={isFormDisabled || glCurrDefault === currCode}
-                      onChange={(val) => {
-                        const sanitizedValue = String(val).replace(
-                          /[^0-9.]/g,
-                          "",
-                        );
-                        if (
-                          /^\d*\.?\d{0,6}$/.test(sanitizedValue) ||
-                          sanitizedValue === ""
-                        ) {
-                          updateState({ currRate: sanitizedValue });
-                        }
-                      }}
-                      onBlur={handleCurrRateNoBlur}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          document.getElementById("refPoNo1")?.focus();
-                        }
-                      }}
-                      onFocus={(e) => {
-                        if (
-                          !isFormDisabled &&
-                          parseFormattedNumber(e.target.value) === 0
-                        ) {
-                          updateState({ currRate: "" });
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Attention */}
-                <FieldRenderer
-                  id="attention"
-                  label="Attention"
-                  type="text"
-                  value={attention || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ attention: val })}
-                />
 
                 <FieldRenderer
                   id="delAddress"
@@ -5019,11 +5126,8 @@ const PO = () => {
                     Delivery Date
                   </label>
                 </div>
-              </div>
 
-              {/* Column 4: References / Status */}
-              <div className="global-tran-textbox-group-div-ui">
-                <FieldRenderer
+                 <FieldRenderer
                   id="refPoNo1"
                   label="Ref PO No. 1"
                   type="text"
@@ -5043,45 +5147,108 @@ const PO = () => {
                   maxLength={useGetFieldLength(tblFieldArray, "refpo_no2")}
                 />
 
-                {/* PO Status */}
-                <FieldRenderer
-                  id="poStatus"
-                  label="PO Status"
-                  type="select"
-                  value={getStatusCode(status)}
-                  disabled={
-                    isDocumentLocked ||
-                    !documentID ||
-                    getStatusCode(status) !== "O"
-                  }
-                  onChange={(val) => handleHeaderStatusChange(val)}
-                  options={[
-                    { label: "Open", value: "O" },
-                    { label: "Closed", value: "C" },
-                    { label: "Cancelled", value: "X" },
-                  ]}
-                />
+
+              <FieldRenderer
+                id="poStatus"
+                label="PO Status"
+                type="select"
+                value={getStatusCode(status)}
+                disabled={isDocumentLocked || !documentID || getStatusCode(status) !== "O"}
+                onChange={(val) => handleHeaderStatusChange(val)}
+                options={[
+                  { label: "Open", value: "O" },
+                  { label: "Closed", value: "C" },
+                  { label: "Cancelled", value: "X" },
+                ]}
+              />
+
               </div>
 
-              {/* Remarks */}
-              <div className="col-span-full">
-                <div className="relative p-2">
-                  <textarea
-                    id="remarks"
-                    placeholder=""
-                    rows={4}
-                    className="peer global-tran-textbox-remarks-ui pt-2"
-                    value={remarks}
-                    onChange={(e) => updateState({ remarks: e.target.value })}
-                    disabled={isFormDisabled}
-                  />
-                  <label
-                    htmlFor="remarks"
-                    className="global-tran-floating-label-remarks"
+              {/* Column 4: References, amounts, and status */}
+              <div className="global-tran-textbox-group-div-ui min-w-0">
+
+              <FieldRenderer id="poHeaderGrossAmount" label="Gross Amount" type="amount" value={headerTotals.totalGross} disabled />
+              <div className="relative w-full [&_input]:!pl-[4.5rem]">
+                <FieldRenderer
+                  id="poHeaderDiscountAmount"
+                  label="Discount Amount"
+                  type="amount"
+                  value={isHeaderDiscountEditing ? headerDiscountDraft : headerTotals.totalDiscount}
+                  inputRef={headerDiscountInputRef}
+                  disabled={!isHeaderDiscountEditing || !canEditHeaderDiscount}
+                  hideClearButton
+                  onChange={(value) => {
+                    if (String(value).includes("-")) {
+                      showDiscountError("Invalid Discount Amount", "Discount Amount cannot be negative.");
+                      return;
+                    }
+                    const sanitized = String(value).replace(/,/g, "").replace(/[^\d.]/g, "");
+                    if (!/^\d*\.?\d{0,2}$/.test(sanitized)) return;
+                    if (Number(sanitized || 0) > (parseFormattedNumber(headerTotals.totalGross) || 0)) {
+                      showDiscountError("Invalid Discount Amount", "Discount Amount cannot exceed Gross Amount.");
+                      return;
+                    }
+                    setHeaderDiscountDraft(sanitized);
+                  }}
+                  onBlur={() => {
+                    if (isHeaderDiscountEditing) setHeaderDiscountDraft(formatNumber(parseFormattedNumber(headerDiscountDraft) || 0, DEC_AMT));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      applyHeaderDiscount();
+                    }
+                  }}
+                />
+                <div className="absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5">
+                  <button
+                    type="button"
+                    aria-label="Edit PO discount"
+                    title="Edit discount"
+                    disabled={!canEditHeaderDiscount}
+                    className="flex h-7 w-8 flex-col items-center justify-center rounded text-blue-600 hover:bg-blue-100 disabled:opacity-40"
+                    onClick={() => {
+                      setHeaderDiscountDraft(headerTotals.totalDiscount);
+                      setIsHeaderDiscountEditing(true);
+                      requestAnimationFrame(() => headerDiscountInputRef.current?.focus());
+                    }}
                   >
-                    Remarks
-                  </label>
+                    <FontAwesomeIcon icon={faPen} className="text-[10px]" />
+                    <span className="text-[8px] leading-none">Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Apply PO discount to items"
+                    title="Apply discount to items"
+                    disabled={!canEditHeaderDiscount}
+                    className="flex h-7 w-8 flex-col items-center justify-center rounded text-green-600 hover:bg-green-100 disabled:opacity-40"
+                    onClick={applyHeaderDiscount}
+                  >
+                    <FontAwesomeIcon icon={faCheck} className="text-[10px]" />
+                    <span className="text-[8px] leading-none">Apply</span>
+                  </button>
                 </div>
+              </div>
+              <FieldRenderer id="poHeaderVatAmount" label="VAT Amount" type="amount" value={headerTotals.totalVat} disabled />
+              <FieldRenderer id="poHeaderNetAmount" label="Net Amount" type="amount" value={headerTotals.totalNet} disabled />
+
+            </div>
+
+            {/* Remarks spans all four columns. */}
+            <div className="md:col-span-2 xl:col-span-4">
+              <div className="relative p-2">
+                <textarea
+                  id="remarks"
+                  placeholder=""
+                  rows={4}
+                  className="peer global-tran-textbox-remarks-ui pt-2"
+                  value={remarks}
+                  onChange={(e) => updateState({ remarks: e.target.value })}
+                  disabled={isFormDisabled}
+                />
+                <label htmlFor="remarks" className="global-tran-floating-label-remarks">
+                  Remarks
+                </label>
               </div>
             </div>
           </div>

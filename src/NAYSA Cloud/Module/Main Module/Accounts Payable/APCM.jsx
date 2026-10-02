@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faSpinner, faFolderOpen, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -74,6 +74,7 @@ import { useHandlePrint } from '@/NAYSA Cloud/Global/report';
 import { 
   formatNumber,
   parseFormattedNumber,
+  useSwalErrorAlert,
   useSwalshowSaveSuccessDialog,
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
@@ -97,6 +98,17 @@ const APCM = () => {
   }, [location.search]);
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const [showOpenReferencesDropdown, setShowOpenReferencesDropdown] = useState(false);
+  const [referenceInquiryOpen, setReferenceInquiryOpen] = useState(false);
+  const openReferencesDropdownRef = useRef(null);
+  useEffect(() => {
+    if (!showOpenReferencesDropdown) return;
+    const handleClickOutside = (event) => {
+      if (!openReferencesDropdownRef.current?.contains(event.target)) setShowOpenReferencesDropdown(false);
+    };
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
+  }, [showOpenReferencesDropdown]);
   const { resetFlag } = useReset();
   
   const [focusedCell, setFocusedCell] = useState(null);
@@ -619,6 +631,7 @@ const APCM = () => {
     if (!vendCode) return;
 
     if (['APCM01'].includes(selectedAPCMType)) {
+      setReferenceInquiryOpen(false);
       await handleOpenAPBalance();
       return;
     }
@@ -1045,12 +1058,42 @@ const APCM = () => {
     updateState({ showBankMastModal: false });  
   };
 
-  const handleOpenAPBalance = async () => {
+  const validateOpenPurchasePayees = (rows) => {
+    const payeeCodes = new Set(rows.map((row) => String(row.vendCode || row.vend_code || "").trim().toUpperCase()).filter(Boolean));
+    if (rows.length && !payeeCodes.size) {
+      useSwalErrorAlert("Missing Payee", "The selected APV reference has no payee code.");
+      return false;
+    }
+    if (payeeCodes.size > 1) {
+      useSwalErrorAlert("Different Payees", "Select Open Purchases for one payee only.");
+      return false;
+    }
+    if (rows.length && detailRows.length && vendCode && !payeeCodes.has(String(vendCode).trim().toUpperCase())) {
+      useSwalErrorAlert("Different Payee", "Clear the existing Invoice Details before selecting another payee.");
+      return false;
+    }
+    return true;
+  };
+
+  const handleOpenPurchasesInquiry = async () => {
+    setShowOpenReferencesDropdown(false);
+    if (!documentID && selectedAPCMType !== "APCM01") {
+      if (detailRows.length || detailRowsGL.length) {
+        useSwalErrorAlert("Open Purchases", "Reset the APCM before changing the transaction type while invoice lines exist.");
+        return;
+      }
+      updateState({ selectedAPCMType: "APCM01", detailRowsGL: [] });
+    }
+    setReferenceInquiryOpen(true);
+    await handleOpenAPBalance({ inquiryMode: true });
+  };
+
+  const handleOpenAPBalance = async ({ inquiryMode = false } = {}) => {
     try {
       updateState({ isLoading: true });
       const groupIdSelected = { dt1: detailRows.map((row) => ({ groupId: row.groupId })) };
       const endpoint = "getOpenAPBalance";
-      const response = await fetchDataJson(endpoint, { vendCode, branchCode, tranType: selectedAPCMType, groupIdSelected });
+      const response = await fetchDataJson(endpoint, { vendCode: inquiryMode ? "" : vendCode, branchCode, tranType: inquiryMode ? "APCM01" : selectedAPCMType, groupIdSelected });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
       const colConfig = await useSelectedHSColConfig(endpoint);
 
@@ -1072,7 +1115,7 @@ const APCM = () => {
         : [];
 
       if (openAPRows.length === 0) {
-        await Swal.fire({ icon: "info", title: "Open AP Balance", text: "There are no AP balance records for the selected payee/branch." });
+        await Swal.fire({ icon: "info", title: "Open AP Balance", text: inquiryMode ? "There are no Open Purchases for this branch." : "There are no AP balance records for the selected payee/branch." });
         updateState({ isLoading: false });
         return; 
       }
@@ -1091,10 +1134,29 @@ const APCM = () => {
   };
 
   const handleCloseAPBalance = async (payload) => {
+    if (referenceInquiryOpen && documentID) {
+      updateState({ showAPBalanceModal: false });
+      setReferenceInquiryOpen(false);
+      return;
+    }
     if (payload && payload !== null) {
+      const selectedRecords = Array.isArray(payload.records) ? payload.records : [];
+      if (!selectedRecords.length || !validateOpenPurchasePayees(selectedRecords)) return;
+      const selectedVendCode = String(selectedRecords[0].vendCode || selectedRecords[0].vend_code || "").trim();
       updateState({ isLoading: true });
-      const result = await useSelectedOpenAPBalance(payload, selectedAPCMType);
-      if (result) {
+      const result = await useSelectedOpenAPBalance({ ...payload, vendCode: referenceInquiryOpen ? selectedVendCode : vendCode, branchCode }, referenceInquiryOpen ? "APCM01" : selectedAPCMType);
+      if (Array.isArray(result) && result.length) {
+        const resultPayeeCodes = new Set(result.map((row) => String(row.vendCode || row.vend_code || "").trim().toUpperCase()).filter(Boolean));
+        if (resultPayeeCodes.size > 1 || (resultPayeeCodes.size && !resultPayeeCodes.has(selectedVendCode.toUpperCase()))) {
+          updateState({ isLoading: false });
+          useSwalErrorAlert("Different Payees", "The selected APV details do not match one payee.");
+          return;
+        }
+        const selectedPayee = result.find((row) => row.vendCode || row.vendName) || selectedRecords[0];
+        const selectedVendName = selectedPayee.vendName || selectedRecords[0].vendName || vendName;
+        const selectedCurrCode = selectedPayee.currCode || selectedRecords[0].currCode || currCode;
+        const selectedCurrName = selectedPayee.currName || selectedRecords[0].currName || currName;
+        const selectedCurrRate = selectedPayee.currRate || selectedRecords[0].currRate || currRate;
         const newRows = result.map((entry, idx) => {
           const netDisc = parseFormattedNumber(entry.balance);
           const applied = netDisc; 
@@ -1108,11 +1170,20 @@ const APCM = () => {
           };
         });
         const updatedRows = [...detailRows, ...newRows];
-        updateState({ detailRows: updatedRows });
+        updateState({
+          vendCode: selectedPayee.vendCode || selectedVendCode,
+          vendName: selectedVendName,
+          currCode: selectedCurrCode,
+          currName: selectedCurrName,
+          currRate: formatNumber(selectedCurrRate, 6),
+          detailRows: updatedRows,
+          detailRowsGL: [],
+        });
         updateTotals(updatedRows);
       }  
     }
     updateState({ showAPBalanceModal: false, isLoading: false });
+    setReferenceInquiryOpen(false);
   };
 
   const handleSaveAndPrint = async (documentID) => {
@@ -1212,10 +1283,22 @@ const APCM = () => {
         </div>
 
         <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
-          <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
+          <div className={`global-tran-header-tab-div-ui items-center justify-between gap-3 ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
             <button className={`global-tran-tab-padding-ui ${activeTab === 'basic' ? 'global-tran-tab-text_active-ui' : 'global-tran-tab-text_inactive-ui'}`}>
               Basic Information
             </button>
+            <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
+              <button type="button" className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800" onClick={() => setShowOpenReferencesDropdown((current) => !current)} aria-expanded={showOpenReferencesDropdown} aria-label="Open References">
+                <FontAwesomeIcon icon={faFolderOpen} />Open References<FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+              </button>
+              {showOpenReferencesDropdown && (
+                <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                  <button type="button" className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700" onClick={handleOpenPurchasesInquiry}>
+                    <FontAwesomeIcon icon={faBox} className="w-4 text-blue-600 dark:text-blue-300" />Open Purchases
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative items-stretch" id="apcm_hd">
@@ -1539,7 +1622,7 @@ const APCM = () => {
         {currencyModalOpen && <CurrLookupModal isOpen={currencyModalOpen} onClose={handleCloseCurrencyModal} />}
         {payeeModalOpen && <PayeeMastLookupModal isOpen={payeeModalOpen} onClose={handleClosePayeeModal} />}
         {showBankMastModal && <BankMastLookupModal isOpen={showBankMastModal} onClose={handleCloseBankMast} />}
-        {showAPBalanceModal && <GlobalLookupModalv1 isOpen={showAPBalanceModal} data={globalLookupRow} btnCaption="Get Selected Invoice" title="Open AP Balance" endpoint={globalLookupHeader} onClose={handleCloseAPBalance} onCancel={() => updateState({ showAPBalanceModal: false })} />}
+        {showAPBalanceModal && <GlobalLookupModalv1 isOpen={showAPBalanceModal} data={globalLookupRow} btnCaption="Get Selected Invoice" title="Open AP Balance" endpoint={globalLookupHeader} idKey="groupId" viewOnly={referenceInquiryOpen && Boolean(documentID)} selectionValidator={validateOpenPurchasePayees} onClose={handleCloseAPBalance} onCancel={() => { setReferenceInquiryOpen(false); updateState({ showAPBalanceModal: false }); }} />}
         {showAccountModal && <COAMastLookupModal isOpen={showAccountModal} onClose={handleCloseAccountModal} source={accountModalSource} />}
         {showRcModal && <RCLookupModal isOpen={showRcModal} onClose={handleCloseRcModalGL} source={accountModalSource} />}
         {showVatModal && <VATLookupModal isOpen={showVatModal} onClose={handleCloseVatModal} customParam="OutputService" />}
