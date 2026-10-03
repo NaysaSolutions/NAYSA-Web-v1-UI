@@ -35,9 +35,11 @@ const Header = ({
   historyRoute = "/page/AllTranHistory",
   onDetails, // optional override (don’t navigate)
   onHistory, // optional override (don’t navigate)
+  showTransactionNav = true,
 
   // actions
   showActions = true,
+  showResetAction = false,
   showBIRForm = true,
   birFormLabel = "BIR Form",
   showCopyForm = true,
@@ -265,7 +267,7 @@ const Header = ({
     <div className="fixed top-[50px] left-0 w-full z-30 bg-white shadow-md dark:bg-gray-800">
       <div className="flex flex-col md:flex-row items-center justify-between px-4 py-1 gap-2 border-b border-gray-200 dark:border-gray-700">
         {/* Tabs */}
-        <div className="flex flex-wrap justify-center md:justify-start gap-1 lg:gap-2 w-full md:w-auto">
+        {showTransactionNav && <div className="flex flex-wrap justify-center md:justify-start gap-1 lg:gap-2 w-full md:w-auto">
           <button
             className={`flex items-center px-3 py-2 rounded-md text-xs md:text-sm font-bold transition-colors duration-200
               ${
@@ -293,7 +295,22 @@ const Header = ({
               Transaction History
             </button>
           )}
-        </div>
+        </div>}
+
+        {showResetAction && !showActions && !isViewDocument && (
+          <div className="flex w-full justify-center md:w-auto md:justify-end">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={isResetDisabled}
+              className={getBlueButtonClass(isResetDisabled)}
+            >
+              <FontAwesomeIcon icon={faUndo} />
+              <span className={mobileLabelClass}>Reset</span>
+              <span className={desktopLabelClass}>Reset</span>
+            </button>
+          </div>
+        )}
 
         {/* Actions (hidden when showActions=false) */}
         {showActions && !isViewDocument && (

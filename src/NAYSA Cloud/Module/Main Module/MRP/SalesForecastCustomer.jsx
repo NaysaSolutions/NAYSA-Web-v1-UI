@@ -58,20 +58,6 @@ const MONTH_NAMES = [
   "Dec",
 ];
 
-const HISTORY_COLUMNS = {
-  SFC_Summary: [
-    { key: "sfcNo", label: "SFC No." },
-    { key: "sfcDate", label: "Date", renderType: "date" },
-    { key: "branchCode", label: "Branch" },
-    { key: "custCode", label: "Customer Code" },
-    { key: "custName", label: "Customer Name" },
-    { key: "description", label: "Description" },
-    { key: "forecastStart", label: "Forecast Start" },
-    { key: "forecastEnd", label: "Forecast End" },
-    { key: "status", label: "Status" },
-  ],
-};
-const HISTORY_STATUSES = ["All", "Draft", "Approved", "Cancelled"].map(value => ({ value, label: value }));
 
 const getRequestErrorMessages = (error, fallback) => {
   const data = error?.response?.data;
@@ -232,7 +218,7 @@ const SalesForecastCustomer = (item) => {
       return "OPEN";
     }
 
-    if (["A", "P", "C", "APPROVED", "POSTED"].includes(text)) {
+    if (["A", "P", "APPROVED", "POSTED"].includes(text)) {
       return "APPROVED";
     }
 
@@ -2133,8 +2119,6 @@ const SalesForecastCustomer = (item) => {
           endpoint="/sales-forecast/customer/getSFCHistory"
           cacheKey={`SFC:${branchCode || ""}:${documentNo || ""}`}
           activeTabKey="SFC_Summary"
-          columnConfigOverrides={HISTORY_COLUMNS}
-          statusOptions={HISTORY_STATUSES}
           branchCode={branchCode}
           startDate={null}
           endDate={null}
