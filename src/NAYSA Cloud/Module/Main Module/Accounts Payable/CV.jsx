@@ -2950,7 +2950,7 @@ const renderCvGlCell = (columnKey, row, index) => {
               onHistory={() => setTopTab("history")}
               disableRouteNavigation={true}         
               detailsRoute="/page/CV"
-              isSaveDisabled={state.isSaveDisabled || isFormDisabled || (selectedWithAPV === "Y" ? detailRows.length === 0 : detailRowsGL.length === 0)}
+              isSaveDisabled={state.isSaveDisabled || isFormDisabled || detailRows.length === 0}
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
               isPrintDisabled={!documentID || displayStatus === "Cancelled"}
