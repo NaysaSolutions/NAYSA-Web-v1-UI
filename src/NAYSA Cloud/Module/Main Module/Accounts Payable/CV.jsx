@@ -494,7 +494,6 @@ const isCashPayment = selectedPayTypeCode.includes("CV02") || selectedPayTypeNam
     { key: "balance", label: "Balance", width: 130 },
     { key: "debitAcct", label: "DR Account", width: 120 },
     { key: "apAcct", label: "AP Account", width: 120 },
-    { key: "vatAcct", label: "VAT Account", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
     { key: "rcName", label: "RC Name", width: 220 },
     { key: "slCode", label: "SL Code", width: 120 },
@@ -1333,7 +1332,18 @@ const handleCurrRateNoBlur = (e) => {
     }
 
   try {
-    const items = await handleFetchDetail(vendCode);
+    const previousRow = selectedWithAPV === "N" && detailRows.length > 0
+      ? detailRows[insertIndex !== null && insertIndex >= 0 ? insertIndex : detailRows.length - 1]
+      : null;
+    const items = previousRow
+      ? [{
+          vatCode: previousRow.vatCode,
+          vatName: previousRow.vatName,
+          vatAcct: previousRow.vatAcct,
+          atcCode: previousRow.atcCode,
+          atcName: previousRow.atcName,
+        }]
+      : await handleFetchDetail(vendCode);
     const itemList = Array.isArray(items) ? items : [items];
         const newRows = await Promise.all(
       itemList.map(async (item) => {
