@@ -1109,19 +1109,27 @@ useEffect(() => {
   };
 
   const parseLookupResultRows = (response) => {
-    const rawResult = response?.data?.[0]?.result;
+    const unwrap = (value) => {
+      if (value?.data?.data !== undefined) return unwrap(value.data.data);
+      if (value?.data !== undefined) return unwrap(value.data);
+      if (Array.isArray(value) && value[0]?.result !== undefined) return unwrap(value[0].result);
+      if (value?.result !== undefined) return unwrap(value.result);
 
-    if (typeof rawResult === "string" && rawResult.trim() !== "") {
-      try {
-        const parsed = JSON.parse(rawResult);
-        return Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
-      } catch (error) {
-        console.warn("Unable to parse lookup result JSON:", error);
+      if (typeof value === "string" && value.trim() !== "") {
+        try {
+          return unwrap(JSON.parse(value));
+        } catch {
+          return value;
+        }
       }
-    }
 
-    if (Array.isArray(response?.data)) return response.data;
-    if (response?.data) return [response.data];
+      return value;
+    };
+
+    const parsed = unwrap(response);
+
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object") return [parsed];
     return [];
   };
 
@@ -1132,6 +1140,19 @@ useEffect(() => {
     "Unknown server error";
 
   const getWOIssueInventoryType = (issueItem = {}) => {
+    const itemCode = String(
+      getFirstValue(
+        issueItem.itemCode,
+        issueItem.ITEM_CODE,
+        issueItem.item_code,
+        issueItem.rmCode,
+        issueItem.RM_CODE,
+        issueItem.msCode,
+        issueItem.MS_CODE,
+        issueItem.fgCode,
+        issueItem.FG_CODE,
+      )
+    ).trim().toUpperCase();
     const rawType = String(
       getFirstValue(
         issueItem.invType,
@@ -1140,13 +1161,15 @@ useEffect(() => {
         issueItem.TYPE,
         issueItem.inventoryType,
         issueItem.INVENTORY_TYPE,
-        "FG",
       )
     ).trim().toUpperCase();
 
     if (rawType.includes("RM") || rawType.includes("RAW")) return "RM";
     if (rawType.includes("MS") || rawType.includes("MATERIAL") || rawType.includes("SUPPL")) return "MS";
     if (rawType.includes("VE") || rawType.includes("VEHICLE")) return "VE";
+    if (itemCode.startsWith("RM")) return "RM";
+    if (itemCode.startsWith("MS")) return "MS";
+    if (itemCode.startsWith("VE")) return "VE";
     return "FG";
   };
 
@@ -1240,9 +1263,13 @@ useEffect(() => {
       item?.FGCATEG_CODE,
       item?.rmCategCode,
       item?.rmcategCode,
+      item?.rm_categ_code,
+      item?.rmcateg_code,
       item?.RMCATEG_CODE,
       item?.msCategCode,
       item?.mscategCode,
+      item?.ms_categ_code,
+      item?.mscateg_code,
       item?.MSCATEG_CODE,
     );
 
@@ -1331,13 +1358,33 @@ useEffect(() => {
       return categoryAccountCacheRef.current[cacheKey];
     }
 
+    const payload = {
+      categCode: category,
+      rmcategCode: category,
+      mscategCode: category,
+      fgcategCode: category,
+    };
+
     try {
-      const response = await fetchDataJson(endpoint, {
-        categCode: category,
-        rmcategCode: category,
-        mscategCode: category,
-        fgcategCode: category,
-      });
+      let response;
+
+      try {
+        response = await fetchDataJson(endpoint, payload);
+      } catch (getError) {
+        if (getError?.response?.status !== 405) throw getError;
+
+        try {
+          response = await postRequest(endpoint, {
+            PARAMS: JSON.stringify({ json_data: payload }),
+          });
+        } catch (postParamsError) {
+          response = await postRequest(endpoint, {
+            json_data: payload,
+            ...payload,
+          });
+        }
+      }
+
       const rows = parseLookupResultRows(response);
       const row = rows[0] || {};
       const account = getDefaultDrAccountFromItem(row);
@@ -1356,6 +1403,119 @@ useEffect(() => {
 
     const categoryCode = getItemCategoryCode(item);
     return fetchDefaultDrAccountByCategory(categoryCode, item);
+  };
+
+  const fetchInventoryLookupRowForItem = async (item = {}) => {
+    const itemCode = String(getFirstValue(item.itemCode, item.ITEM_CODE, item.item_code, item.rmCode, item.RM_CODE, item.msCode, item.MS_CODE, item.fgCode, item.FG_CODE)).trim();
+    if (!itemCode) return {};
+
+    const endpoint = getWOIssueInventoryLookupEndpoint(item);
+
+    try {
+      const response = await fetchDataJson(endpoint, {
+        userCode: state.userCode || user?.USER_CODE || user?.userCode || "",
+        branchCode: state.branchCode || "",
+        whouseCode: item.whouseCode || item.whCode || state.WHcode || "",
+        whCode: item.whouseCode || item.whCode || state.WHcode || "",
+        locCode: item.locCode || state.locCode || "",
+        itemCode,
+        search: itemCode,
+        docType: "FGIS",
+        tranType: "IL",
+      });
+
+      const rows = parseLookupResultRows(response);
+      return (
+        rows.find((row) =>
+          String(getFirstValue(row.itemCode, row.ITEM_CODE, row.item_code, row.rmCode, row.RM_CODE, row.msCode, row.MS_CODE, row.fgCode, row.FG_CODE)).trim() === itemCode
+        ) ||
+        rows[0] ||
+        {}
+      );
+    } catch (error) {
+      console.warn(`Unable to fetch inventory lookup row for ${itemCode}:`, error);
+      return {};
+    }
+  };
+
+  const getItemMasterLookupDocType = (item = {}) => {
+    const invType = getWOIssueInventoryType(item);
+    return {
+      FG: "PRFG",
+      RM: "PRRM",
+      MS: "PRMS",
+    }[invType] || "PRFG";
+  };
+
+  const fetchItemMasterLookupRowForItem = async (item = {}) => {
+    const itemCode = String(getFirstValue(item.itemCode, item.ITEM_CODE, item.item_code, item.rmCode, item.RM_CODE, item.msCode, item.MS_CODE, item.fgCode, item.FG_CODE)).trim();
+    if (!itemCode) return {};
+
+    const endpoint = getWOIssueInventoryLookupEndpoint(item);
+
+    try {
+      const response = await fetchDataJson(endpoint, {
+        userCode: state.userCode || user?.USER_CODE || user?.userCode || "",
+        search: itemCode,
+        filter: "ActiveAll",
+        docType: getItemMasterLookupDocType(item),
+        searchMode: "part",
+        itemCode,
+      });
+
+      const rows = parseLookupResultRows(response);
+      return (
+        rows.find((row) =>
+          String(getFirstValue(row.itemCode, row.ITEM_CODE, row.item_code, row.rmCode, row.RM_CODE, row.msCode, row.MS_CODE, row.fgCode, row.FG_CODE)).trim() === itemCode
+        ) ||
+        rows[0] ||
+        {}
+      );
+    } catch (error) {
+      console.warn(`Unable to fetch item master lookup row for ${itemCode}:`, error);
+      return {};
+    }
+  };
+
+  const mergeBlankInventoryFields = (row = {}, lookupRow = {}) => {
+    const categoryCode = getItemCategoryCode(row) || getItemCategoryCode(lookupRow);
+    const lookupAccount = getDefaultDrAccountFromItem(lookupRow);
+
+    return {
+      ...row,
+      categCode: categoryCode,
+      invType: row.invType || row.inventoryType || getWOIssueInventoryType(row),
+      invAcct: row.invAcct || lookupRow.invAcct || lookupRow.inv_acct || lookupRow.INV_ACCT || lookupRow.INVACCT_CODE || lookupRow.invAcctCode || lookupRow.invacctCode || "",
+      invAcctCode: row.invAcctCode || row.invacctCode || lookupRow.invAcctCode || lookupRow.invacctCode || lookupRow.invacct_code || lookupRow.INVACCT_CODE || lookupRow.invAcct || lookupRow.inv_acct || "",
+      invAcctName: row.invAcctName || row.invacctName || lookupRow.invAcctName || lookupRow.invacctName || lookupRow.invacct_name || lookupRow.INVACCT_NAME || "",
+      acctCode: row.acctCode || row.drAcctCode || lookupAccount.code || "",
+      drAcctCode: row.drAcctCode || row.acctCode || lookupAccount.code || "",
+      drAcctName: row.drAcctName || lookupAccount.name || "",
+    };
+  };
+
+  const enrichInventoryDetailRow = async (row = {}) => {
+    const hasCategory = !!getItemCategoryCode(row);
+    const hasInventoryAccount = !!getDefaultDrAccountFromItem(row).code;
+    let enrichedRow = row;
+
+    if (!hasCategory || !hasInventoryAccount) {
+      const lookupRow = await fetchInventoryLookupRowForItem(row);
+      enrichedRow = mergeBlankInventoryFields(row, lookupRow);
+    }
+
+    if (!getItemCategoryCode(enrichedRow)) {
+      const masterLookupRow = await fetchItemMasterLookupRowForItem(enrichedRow);
+      enrichedRow = mergeBlankInventoryFields(enrichedRow, masterLookupRow);
+    }
+
+    const defaultDrAccount = await resolveDefaultDrAccount(enrichedRow);
+    return {
+      ...enrichedRow,
+      acctCode: enrichedRow.acctCode || enrichedRow.drAcctCode || defaultDrAccount.code || "",
+      drAcctCode: enrichedRow.drAcctCode || enrichedRow.acctCode || defaultDrAccount.code || "",
+      drAcctName: enrichedRow.drAcctName || defaultDrAccount.name || "",
+    };
   };
 
   const handleCloseFGLookup = async (selectedItems) => {
@@ -1885,6 +2045,11 @@ useEffect(() => {
     if (isFormDisabled) return;
     if (!["Upsert", "GenerateGL"].includes(action)) return;
 
+    const preparedDetailRows = await Promise.all(
+      (state.detailRows || []).map((row) => enrichInventoryDetailRow(row))
+    );
+    updateState({ detailRows: preparedDetailRows });
+
     const formatDateForSql = (value) => {
       if (!value) return null;
       const dateValue = new Date(value);
@@ -1965,7 +2130,6 @@ useEffect(() => {
         status,
         userCode,
 
-        detailRows,
       } = state;
 
       return {
@@ -1996,7 +2160,7 @@ useEffect(() => {
         noReprints: parseInt(noReprints || 0, 10),
         userCode: userCode || "NSI",
 
-        dt1: (detailRows || []).map((row, index) => {
+        dt1: (preparedDetailRows || []).map((row, index) => {
           const quantityValue = parseFormattedNumber(row.quantity || 0);
           const unitCostValue = parseFormattedNumber(row.unitCost || 0);
           const parsedItemAmount = parseFormattedNumber(row.itemAmount ?? row.amount ?? 0);
@@ -2013,6 +2177,9 @@ useEffect(() => {
             brandName: row.brandName || "",
             brand_name: row.brandName || "",
             categCode: row.categCode || "",
+            categoryCode: row.categCode || "",
+            invAcct: row.invAcct || row.invAcctCode || row.drAcctCode || row.acctCode || "",
+            invAcctCode: row.invAcctCode || row.invAcct || row.drAcctCode || row.acctCode || "",
             uomCode: row.uomCode || "",
 
             quantity: quantityValue,
@@ -2511,7 +2678,7 @@ useEffect(() => {
       itemName: getFirstValue(row.itemName, row.itemDesc, row.item_name, row.ITEM_NAME, row.ITEM_DESC),
       brandCode: getFirstValue(row.brandCode, row.brand_code, row.BRAND_CODE),
       brandName: getFirstValue(row.brandName, row.brand_name, row.BRAND_NAME),
-      categCode: getFirstValue(row.categCode, row.categ_code, row.CATEG_CODE),
+      categCode: getItemCategoryCode(row),
       uomCode: getFirstValue(row.uomCode, row.uom_code, row.UOM_CODE),
       quantity: formatNumber(quantityValue, 6),
       unitCost: formatNumber(unitCostValue, 6),
@@ -2534,6 +2701,9 @@ useEffect(() => {
       acctCode: getFirstValue(row.acctCode, row.acct_code, row.drAcctCode, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
       drAcctCode: getFirstValue(row.drAcctCode, row.acctCode, row.acct_code, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
       drAcctName: getFirstValue(row.drAcctName, row.acctName, row.acct_name, row.invAcctName, row.invacctName, row.invacct_name, row.INVACCT_NAME),
+      invAcct: getFirstValue(row.invAcct, row.inv_acct, row.INV_ACCT, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE),
+      invAcctCode: getFirstValue(row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
+      invAcctName: getFirstValue(row.invAcctName, row.invacctName, row.invacct_name, row.INVACCT_NAME),
       rcCode: getFirstValue(row.rcCode, row.rc_code, state.rcCode),
       slTypeCode: getFirstValue(row.slTypeCode, row.sltypeCode, row.sltype_code),
       sltypeCode: getFirstValue(row.sltypeCode, row.slTypeCode, row.sltype_code),
@@ -2609,14 +2779,15 @@ useEffect(() => {
   };
 
   const resolveDetailRowAccount = async (row) => {
-    if (row.drAcctCode) return row;
+    const enrichedRow = await enrichInventoryDetailRow(row);
+    if (enrichedRow.drAcctCode) return enrichedRow;
 
-    const defaultDrAccount = await resolveDefaultDrAccount(row);
+    const defaultDrAccount = await resolveDefaultDrAccount(enrichedRow);
     return {
-      ...row,
+      ...enrichedRow,
       drAcctCode: defaultDrAccount.code || "",
       drAcctName: defaultDrAccount.name || "",
-      acctCode: defaultDrAccount.code || row.acctCode || "",
+      acctCode: defaultDrAccount.code || enrichedRow.acctCode || "",
     };
   };
 
@@ -2636,7 +2807,8 @@ useEffect(() => {
     const selectedWoNo =
       getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO) ||
       state.woNo;
-    const pickedRow = await resolveDetailRowAccount(normalizeWODetailRow(issueItem, itemIndex));
+    const enrichedIssueItem = await enrichInventoryDetailRow(issueItem);
+    const pickedRow = await resolveDetailRowAccount(normalizeWODetailRow(enrichedIssueItem, itemIndex));
     const pickedIdentity = getWODetailIdentity(pickedRow, itemIndex);
     const currentRows = Array.isArray(state.detailRows) ? state.detailRows : [];
     let didReplace = false;
