@@ -1,10 +1,10 @@
-import { useState, useEffect,useRef,useCallback } from "react";
+import { Fragment, useState, useEffect,useRef,useCallback,useMemo } from "react";
 import Swal from 'sweetalert2';
 import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -74,6 +74,7 @@ import {
 import { 
   formatNumber,
   parseFormattedNumber,
+  useSwalErrorAlert,
   useSwalInfoAlert,
   useSwalshowSaveSuccessDialog,
 } from '@/NAYSA Cloud/Global/behavior.jsx';
@@ -99,6 +100,17 @@ const APDM = () => {
   const isViewDocumentUrl = isViewDocument;
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const [showOpenReferencesDropdown, setShowOpenReferencesDropdown] = useState(false);
+  const [referenceInquiryOpen, setReferenceInquiryOpen] = useState(false);
+  const openReferencesDropdownRef = useRef(null);
+  useEffect(() => {
+    if (!showOpenReferencesDropdown) return;
+    const handleClickOutside = (event) => {
+      if (!openReferencesDropdownRef.current?.contains(event.target)) setShowOpenReferencesDropdown(false);
+    };
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
+  }, [showOpenReferencesDropdown]);
   const { resetFlag } = useReset();
   
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
@@ -326,6 +338,29 @@ const APDM = () => {
     totalCreditFx1: formatNumber(creditFx1Sum)
   })
   }, [detailRowsGL]);
+
+  const baseCurrencyCode = glCurrDefault || companyInfo?.currCode || "PHP";
+  const transactionCurrencyCode = currCode || baseCurrencyCode;
+  const showForeignTotals = transactionCurrencyCode !== baseCurrencyCode;
+  const foreignGlSuffix = withCurr3
+    ? glCurrGlobal2 === transactionCurrencyCode ? "Fx1" : glCurrGlobal3 === transactionCurrencyCode ? "Fx2" : ""
+    : withCurr2 ? "Fx1" : "";
+  const glDisplayTotals = useMemo(() => detailRowsGL.reduce((totals, row) => {
+    const debit = parseFormattedNumber(row.debit) || 0;
+    const credit = parseFormattedNumber(row.credit) || 0;
+    const debitFx = foreignGlSuffix ? parseFormattedNumber(row[`debit${foreignGlSuffix}`]) || 0 : 0;
+    const creditFx = foreignGlSuffix ? parseFormattedNumber(row[`credit${foreignGlSuffix}`]) || 0 : 0;
+    totals.debit += debit;
+    totals.credit += credit;
+    totals.debitFx += debitFx;
+    totals.creditFx += creditFx;
+    if ((debit !== 0 && debitFx === 0) || (credit !== 0 && creditFx === 0)) totals.hasIncompleteFx = true;
+    return totals;
+  }, { debit: 0, credit: 0, debitFx: 0, creditFx: 0, hasIncompleteFx: false }), [detailRowsGL, foreignGlSuffix]);
+  const useGlForeignAmounts = Boolean(foreignGlSuffix) && !glDisplayTotals.hasIncompleteFx;
+  const baseRate = parseFormattedNumber(currRate) || 1;
+  const foreignGlDebit = useGlForeignAmounts ? glDisplayTotals.debitFx : glDisplayTotals.debit / baseRate;
+  const foreignGlCredit = useGlForeignAmounts ? glDisplayTotals.creditFx : glDisplayTotals.credit / baseRate;
 
  useEffect(() => {
   if (resetFlag) handleReset();
@@ -731,6 +766,7 @@ const moveFocusBeforeSave = () => {
   }
 
   if (['APDM01'].includes(selectedAPDMType)) {
+    setReferenceInquiryOpen(false);
     await handleOpenAPBalance();
     return;
   }
@@ -1347,7 +1383,37 @@ const handleCloseBankMast = async (selectedBankCode) => {
   updateState({ showBankMastModal: false});  
 };
 
-const handleOpenAPBalance = async () => {
+const validateOpenPurchasePayees = (rows) => {
+  const payeeCodes = new Set(rows.map((row) => String(row.vendCode || row.vend_code || "").trim().toUpperCase()).filter(Boolean));
+  if (rows.length && !payeeCodes.size) {
+    useSwalErrorAlert("Missing Payee", "The selected APV reference has no payee code.");
+    return false;
+  }
+  if (payeeCodes.size > 1) {
+    useSwalErrorAlert("Different Payees", "Select Open Purchases for one payee only.");
+    return false;
+  }
+  if (rows.length && detailRows.length && vendCode && !payeeCodes.has(String(vendCode).trim().toUpperCase())) {
+    useSwalErrorAlert("Different Payee", "Clear the existing Invoice Details before selecting another payee.");
+    return false;
+  }
+  return true;
+};
+
+const handleOpenPurchasesInquiry = async () => {
+  setShowOpenReferencesDropdown(false);
+  if (!documentID && selectedAPDMType !== "APDM01") {
+    if (detailRows.length || detailRowsGL.length) {
+      useSwalErrorAlert("Open Purchases", "Reset the APDM before changing the transaction type while invoice lines exist.");
+      return;
+    }
+    updateState({ selectedAPDMType: "APDM01", detailRowsGL: [] });
+  }
+  setReferenceInquiryOpen(true);
+  await handleOpenAPBalance({ inquiryMode: true });
+};
+
+const handleOpenAPBalance = async ({ inquiryMode = false } = {}) => {
   try {
     updateState({ isLoading: true });
 
@@ -1358,7 +1424,7 @@ const handleOpenAPBalance = async () => {
     }
 
     const endpoint ="getOpenAPBalance"
-    const response = await fetchDataJson(endpoint, { vendCode, branchCode, tranType:selectedAPDMType, groupIdSelected });
+    const response = await fetchDataJson(endpoint, { vendCode: inquiryMode ? "" : vendCode, branchCode, tranType: inquiryMode ? "APDM01" : selectedAPDMType, groupIdSelected });
     const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
 
     const colConfig = await useSelectedHSColConfig(endpoint);
@@ -1377,7 +1443,7 @@ const handleOpenAPBalance = async () => {
       await Swal.fire({
         icon: "info",
         title: "Open AP Balance",
-        text: "There are no AP balance records for the selected supplier/branch.",
+         text: inquiryMode ? "There are no Open Purchases for this branch." : "There are no AP balance records for the selected supplier/branch.",
       });
        updateState({ isLoading: false });
       return; 
@@ -1404,11 +1470,30 @@ const handleOpenAPBalance = async () => {
 };
 
 const handleCloseAPBalance = async (payload) => {
+  if (referenceInquiryOpen && documentID) {
+    updateState({ showAPBalanceModal: false });
+    setReferenceInquiryOpen(false);
+    return;
+  }
   if (payload && payload !== null) {
+    const selectedRecords = Array.isArray(payload.records) ? payload.records : [];
+    if (!selectedRecords.length || !validateOpenPurchasePayees(selectedRecords)) return;
+    const selectedVendCode = String(selectedRecords[0].vendCode || selectedRecords[0].vend_code || "").trim();
     updateState({ isLoading: true });
 
-      const result = await useSelectedOpenAPBalance(payload,selectedAPDMType);
-      if (result) {
+      const result = await useSelectedOpenAPBalance({ ...payload, vendCode: referenceInquiryOpen ? selectedVendCode : vendCode, branchCode }, referenceInquiryOpen ? "APDM01" : selectedAPDMType);
+      if (Array.isArray(result) && result.length) {
+        const resultPayeeCodes = new Set(result.map((row) => String(row.vendCode || row.vend_code || "").trim().toUpperCase()).filter(Boolean));
+        if (resultPayeeCodes.size > 1 || (resultPayeeCodes.size && !resultPayeeCodes.has(selectedVendCode.toUpperCase()))) {
+          updateState({ isLoading: false });
+          useSwalErrorAlert("Different Payees", "The selected APV details do not match one payee.");
+          return;
+        }
+        const selectedPayee = result.find((row) => row.vendCode || row.vendName) || selectedRecords[0];
+        const selectedVendName = selectedPayee.vendName || selectedRecords[0].vendName || vendName;
+        const selectedCurrCode = selectedPayee.currCode || selectedRecords[0].currCode || currCode;
+        const selectedCurrName = selectedPayee.currName || selectedRecords[0].currName || currName;
+        const selectedCurrRate = selectedPayee.currRate || selectedRecords[0].currRate || currRate;
         const newRows = result.map((entry, idx) => {
         const netDisc = parseFormattedNumber(entry.balance);
         const vatRate = parseFormattedNumber(entry.vatCalcRate);
@@ -1446,7 +1531,15 @@ const handleCloseAPBalance = async (payload) => {
         });
 
         const updatedRows = [...detailRows, ...newRows];
-        updateState({ detailRows: updatedRows });
+        updateState({
+          vendCode: selectedPayee.vendCode || selectedVendCode,
+          vendName: selectedVendName,
+          currCode: selectedCurrCode,
+          currName: selectedCurrName,
+          currRate: formatNumber(selectedCurrRate, 6),
+          detailRows: updatedRows,
+          detailRowsGL: [],
+        });
         updateTotals(updatedRows);
       }  
   }
@@ -1455,6 +1548,7 @@ const handleCloseAPBalance = async (payload) => {
     showAPBalanceModal: false,
     isLoading: false
   });
+  setReferenceInquiryOpen(false);
 };
 
 const handleSaveAndPrint = async (documentID) => {
@@ -1588,7 +1682,7 @@ const handleCloseBranchModal = (selectedBranch) => {
 <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
 
     {/* Tab Navigation */}
-    <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
+    <div className={`global-tran-header-tab-div-ui items-center justify-between gap-3 ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
         <button
             className={`global-tran-tab-padding-ui ${
                 activeTab === 'basic'
@@ -1599,6 +1693,18 @@ const handleCloseBranchModal = (selectedBranch) => {
         >
             Basic Information
         </button>
+        <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
+          <button type="button" className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800" onClick={() => setShowOpenReferencesDropdown((current) => !current)} aria-expanded={showOpenReferencesDropdown} aria-label="Open References">
+            <FontAwesomeIcon icon={faFolderOpen} />Open References<FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+          </button>
+          {showOpenReferencesDropdown && (
+            <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+              <button type="button" className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700" onClick={handleOpenPurchasesInquiry}>
+                <FontAwesomeIcon icon={faBox} className="w-4 text-blue-600 dark:text-blue-300" />Open Purchases
+              </button>
+            </div>
+          )}
+        </div>
         {/* Provision for Other Tabs */}
     </div>
 
@@ -2221,47 +2327,20 @@ const handleCloseBranchModal = (selectedBranch) => {
 </div>
 
 {/* Totals Section */}
-<div className="global-tran-tab-footer-total-main-div-ui">
- 
-  <div className="global-tran-tab-footer-total-div-ui">
-    <label className="global-tran-tab-footer-total-label-ui">
-      Total Invoice Amount:
-    </label>
-    <label id="totalSIAmount" className="global-tran-tab-footer-total-value-ui">
-      {totals.totalSIAmount}
-    </label>
-  </div>
-
-  {/* Total VAT Amount */}
-  <div className="global-tran-tab-footer-total-div-ui" >
-    <label className="global-tran-tab-footer-total-label-ui">
-       {"Total Applied Amount:"}
-    </label>
-    <label id="totalAppliedAmount" className="global-tran-tab-footer-total-value-ui">
-      {totals.totalAppliedAmount}
-    </label>
-  </div>
-
-  {/* Total ATC Amount */}
-  <div className="global-tran-tab-footer-total-div-ui" >
-    <label className="global-tran-tab-footer-total-label-ui">
-      Total VAT Amount:
-    </label>
-    <label id="totalUnappliedAmount" className="global-tran-tab-footer-total-value-ui">
-      {totals.totalVATAmount}
-    </label>
-  </div>
-
-  {/* Total Payable Amount (Invoice + VAT - ATC) */}
-  <div className="global-tran-tab-footer-total-div-ui">
-    <label className="global-tran-tab-footer-total-label-ui">
-      Total ATC Amount:
-    </label>
-    <label id="totalBalanceAmount" className="global-tran-tab-footer-total-value-ui">
-      {totals.totalATCAmount}
-    </label>
-  </div>
-
+<div className={`global-tran-tab-footer-total-main-div-ui grid gap-1 ${showForeignTotals ? "grid-cols-3" : "grid-cols-2"}`}>
+  <div></div>
+  <div className="global-tran-tab-footer-total-label-ui text-right">Currency ({baseCurrencyCode})</div>
+  {showForeignTotals && <div className="global-tran-tab-footer-total-label-ui text-right">Currency ({transactionCurrencyCode})</div>}
+  {[
+    ["Total Invoice Amount", totals.totalSIAmount],
+    ["Total Applied Amount", totals.totalAppliedAmount],
+    ["Total VAT Amount", totals.totalVATAmount],
+    ["Total ATC Amount", totals.totalATCAmount],
+  ].map(([label, amount]) => <Fragment key={label}>
+    <div className="global-tran-tab-footer-total-label-ui">{label}:</div>
+    <div className="global-tran-tab-footer-total-value-ui">{formatNumber((parseFormattedNumber(amount) || 0) * (showForeignTotals ? baseRate : 1))}</div>
+    {showForeignTotals && <div className="global-tran-tab-footer-total-value-ui">{formatNumber(parseFormattedNumber(amount))}</div>}
+  </Fragment>)}
 </div>
 </div>
 
@@ -2799,27 +2878,27 @@ const handleCloseBranchModal = (selectedBranch) => {
 
       {/* Totals Section */}
       <div className="global-tran-tab-footer-total-main-div-ui">
-
-      {/* Total Debit */}
-      <div className="global-tran-tab-footer-total-div-ui">
-        <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-label-ui">
-          Total Debit:
-        </label>
-        <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-value-ui">
-      {totalDebit}
-      </label>
+        <div className="global-tran-tab-footer-total-div-ui">
+          <label className="global-tran-tab-footer-total-label-ui">Total Debit ({baseCurrencyCode}):</label>
+          <label className="global-tran-tab-footer-total-value-ui">{formatNumber(glDisplayTotals.debit)}</label>
+        </div>
+        <div className="global-tran-tab-footer-total-div-ui">
+          <label className="global-tran-tab-footer-total-label-ui">Total Credit ({baseCurrencyCode}):</label>
+          <label className="global-tran-tab-footer-total-value-ui">{formatNumber(glDisplayTotals.credit)}</label>
+        </div>
+        {showForeignTotals && (
+          <div className="global-tran-tab-footer-total-main-div-ui">
+            <div className="global-tran-tab-footer-total-div-ui">
+              <label className="global-tran-tab-footer-total-label-ui">Total Debit ({transactionCurrencyCode}):</label>
+              <label className="global-tran-tab-footer-total-value-ui">{formatNumber(foreignGlDebit)}</label>
+            </div>
+            <div className="global-tran-tab-footer-total-div-ui">
+              <label className="global-tran-tab-footer-total-label-ui">Total Credit ({transactionCurrencyCode}):</label>
+              <label className="global-tran-tab-footer-total-value-ui">{formatNumber(foreignGlCredit)}</label>
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* Total Credit */}
-      <div className="global-tran-tab-footer-total-div-ui">
-        <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-label-ui">
-          Total Credit:
-        </label>
-        <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-value-ui">
-      {totalCredit}
-      </label>
-      </div>
-    </div>
 
   </div>
 
@@ -2860,8 +2939,11 @@ const handleCloseBranchModal = (selectedBranch) => {
     btnCaption="Get Selected Invoice"
     title="Open AP Balance"
     endpoint={globalLookupHeader}
+    idKey="groupId"
+    viewOnly={referenceInquiryOpen && Boolean(documentID)}
+    selectionValidator={validateOpenPurchasePayees}
     onClose={handleCloseAPBalance}
-    onCancel={() => updateState({ showAPBalanceModal: false })}
+    onCancel={() => { setReferenceInquiryOpen(false); updateState({ showAPBalanceModal: false }); }}
   />
 )}
 

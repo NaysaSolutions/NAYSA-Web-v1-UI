@@ -68,6 +68,7 @@ import {
   useUpdateRowEditEntries,
   useFetchTranData,
   useHandleCancel,
+  useHandlePostTran,
   useFieldLenghtCheck,
   useGetFieldLength,
 } from "@/NAYSA Cloud/Global/procedure";
@@ -304,90 +305,14 @@ const PostVEST = ({ isOpen, onClose, userCode, docType = "VEST", documentTitle =
   }, [isOpen, onClose]);
 
   const handlePost = async (selectedData, userPw) => {
-    const selectedRows = Array.isArray(selectedData)
-      ? selectedData
-      : Array.isArray(selectedData?.records)
-        ? selectedData.records
-        : selectedData
-          ? [selectedData]
-          : [];
-
-    const dt1 = selectedRows
-      .map((row, index) => ({
-        lnNo: index + 1,
-        groupId:
-          row?.groupId ||
-          row?.vestId ||
-          row?.documentID ||
-          row?.docId ||
-          "",
-      }))
-      .filter((row) => row.groupId);
-
-    if (dt1.length === 0) {
-      useSwalValidationAlert({
-        icon: "warning",
-        title: "Posting failed",
-        message: "No valid VEST transaction was selected for posting.",
-      });
-      return false;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await postRequest("finalizeVEST", {
-        userCode,
-        userPassword: userPw,
-        json_data: {
-          userCode,
-          dt1,
-        },
-      });
-      const result = getVESTPostingResult(response);
-      const errorCount = Number(result?.errorCount || 0);
-      const errorMessage = String(
-        result?.errorMsg || (errorCount > 0 ? result?.result : "") || "",
-      ).trim();
-
-      if (errorCount > 0 || errorMessage) {
-        useSwalValidationAlert({
-          icon: "error",
-          title: "Posting failed",
-          message: errorMessage || "VEST finalization failed.",
-        });
-        return false;
-      }
-
-      useSwalValidationAlert({
-        icon: "success",
-        title: "Posting successful",
-        message:
-          String(result?.result || "").trim() ||
-          "The selected VEST transaction was posted successfully.",
-      });
-      onClose?.();
-      return true;
-    } catch (error) {
-      const serverResult = getVESTPostingResult(error?.response?.data);
-      const message = String(
-        serverResult?.errorMsg ||
-          serverResult?.result ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Unable to finalize VEST.",
-      ).trim();
-
-      console.error("VEST finalize error:", error);
-      useSwalValidationAlert({
-        icon: "error",
-        title: "Posting failed",
-        message,
-      });
-      return false;
-    } finally {
-      setLoading(false);
-    }
+    await useHandlePostTran(
+      selectedData,
+      userPw,
+      docType,
+      userCode,
+      setLoading,
+      onClose,
+    );
   };
 
   const pickDocAndBranch = (row) => ({
@@ -753,6 +678,23 @@ const VEST = () => {
   };
 
   // Helper Functions for strict Branch Flow identification
+  // VEST05/VEST08 mirror FGST08: direct physical warehouse -> physical warehouse.
+  // Keep VEST01/VEST03 as the existing sender-to-INTRANSIT flows.
+  const isWarehouseToWarehouse = (tranTypeCode = selectedTranType, list = tranTypes) => {
+    const row = (list || []).find(
+      (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
+    );
+
+    const code = normalizeCode(getTranTypeCode(row) || tranTypeCode);
+    const name = normalizeCode(getTranTypeName(row));
+
+    return (
+      ["VEST05", "VEST08", "WTW", "WW"].includes(code) ||
+      name.includes("WAREHOUSE TO WAREHOUSE") ||
+      name.includes("DIRECT WAREHOUSE")
+    );
+  };
+
   const isInterBranch = (tranTypeCode = selectedTranType, list = tranTypes) => {
     const row = (list || []).find(
       (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
@@ -798,10 +740,15 @@ const VEST = () => {
   };
 
   const isWarehouseTransfer = (tranTypeCode = selectedTranType, list = tranTypes) =>
-    getTranTypeColumn(tranTypeCode, list) === "WH_TRANSFER" || 
+    isWarehouseToWarehouse(tranTypeCode, list) ||
+    getTranTypeColumn(tranTypeCode, list) === "WH_TRANSFER" ||
     getTranTypeColumn(tranTypeCode, list) === "BRANCH_TRANSFER";
 
   const isInterWarehouseOrInterBranch = (tranTypeCode = selectedTranType, list = tranTypes) => {
+    // Direct Warehouse to Warehouse is its own flow even if the dropdown
+    // uses the generic WH_TRANSFER column classification.
+    if (isWarehouseToWarehouse(tranTypeCode, list)) return false;
+
     const normalizedCode = normalizeCode(tranTypeCode);
     const column = getTranTypeColumn(tranTypeCode, list);
     const row = (list || []).find(
@@ -821,7 +768,9 @@ const VEST = () => {
   
 
   const hideFromWarehouseAndLocationSearch = (tranTypeCode = selectedTranType, list = tranTypes) =>
-    isInterWarehouseOrInterBranch(tranTypeCode, list) || isIntransitTransfer(tranTypeCode, list);
+    isWarehouseToWarehouse(tranTypeCode, list) ||
+    isInterWarehouseOrInterBranch(tranTypeCode, list) ||
+    isIntransitTransfer(tranTypeCode, list);
 
 
   const normalizeTranDropDownResponse = (value) => {
@@ -2515,7 +2464,7 @@ const VEST = () => {
     let filterStr = "ActiveOnly";
 
     if (targetBranchCode) {
-      if (isInterWarehouseOrInterBranch()) {
+      if (isWarehouseToWarehouse() || isInterWarehouseOrInterBranch()) {
         filterStr = `ByBC${targetBranchCode}`;
       } else if (isIntransitTransfer()) {
         filterStr = `IntransitOnly`; 
@@ -2539,6 +2488,8 @@ const VEST = () => {
     if (targetBranchCode) {
       if (isIntransitTransfer()) {
         filterStr = `ByBC${targetBranchCode}`;
+      } else if (isWarehouseToWarehouse()) {
+        filterStr = `ByBC${targetBranchCode}`;
       } else if (isInterWarehouseOrInterBranch()) {
         filterStr = `IntransitOnly`;
       }
@@ -2555,10 +2506,25 @@ const VEST = () => {
   };
 
   const validateInterWarehouseFlow = () => {
-    if (!isWarehouseTransfer()) return true;
+    if (
+      !isWarehouseToWarehouse() &&
+      !isInterWarehouseOrInterBranch() &&
+      !isIntransitTransfer() &&
+      !isWarehouseTransfer()
+    ) {
+      return true;
+    }
 
     const fromIsTransit = isHeaderFromIntransit();
     const toIsTransit = isHeaderToIntransit();
+
+    if (!fromWhCode || !toWhCode) {
+      useSwalInfoAlert(
+        "Warehouse Required",
+        "Please select both From Warehouse and To Warehouse.",
+      );
+      return false;
+    }
 
     if (normalizeCode(fromWhCode) === normalizeCode(toWhCode)) {
       useSwalInfoAlert(
@@ -2568,20 +2534,46 @@ const VEST = () => {
       return false;
     }
 
-    if (fromIsTransit && toIsTransit) {
-      useSwalInfoAlert(
-        "Invalid Inter Warehouse Transfer",
-        "Intransit cannot be both the From Warehouse and To Warehouse.",
-      );
-      return false;
+    // VEST05/VEST08 / Warehouse to Warehouse:
+    // direct physical warehouse -> physical warehouse, no INTRANSIT.
+    if (isWarehouseToWarehouse()) {
+      if (fromIsTransit || toIsTransit) {
+        useSwalInfoAlert(
+          "Invalid Warehouse to Warehouse Transfer",
+          "Warehouse to Warehouse must use two physical warehouses. INTRANSIT is not allowed.",
+        );
+        return false;
+      }
+
+      return true;
     }
 
-    if (!fromIsTransit && !toIsTransit) {
-      useSwalInfoAlert(
-        "Intransit Warehouse Required",
-        "For Inter Warehouse transfer, use one Intransit virtual warehouse. Sender flow is Branch Warehouse to Intransit. Receiver flow is Intransit to Branch Warehouse.",
-      );
-      return false;
+    // Existing sender flows (VEST01 / VEST03):
+    // physical warehouse -> INTRANSIT.
+    if (isInterWarehouseOrInterBranch()) {
+      if (fromIsTransit || !toIsTransit) {
+        useSwalInfoAlert(
+          "Invalid Sender Warehouse Setup",
+          "Inter Warehouse/Inter Branch sender flow must be Physical Warehouse to INTRANSIT.",
+        );
+        return false;
+      }
+
+      return true;
+    }
+
+    // Existing receiver flows (VEST02 / VEST04):
+    // INTRANSIT -> physical warehouse.
+    if (isIntransitTransfer()) {
+      if (!fromIsTransit || toIsTransit) {
+        useSwalInfoAlert(
+          "Invalid Receiver Warehouse Setup",
+          "Intransit to Branch/Warehouse flow must be INTRANSIT to a physical warehouse.",
+        );
+        return false;
+      }
+
+      return true;
     }
 
     return true;
@@ -2598,7 +2590,7 @@ const VEST = () => {
       return;
     }
 
-    if (isInterWarehouseOrInterBranch() && !fromWhCode) {
+    if ((isWarehouseToWarehouse() || isInterWarehouseOrInterBranch()) && !fromWhCode) {
        useSwalInfoAlert(
          "From Warehouse Required", 
          "Please select From Warehouse first."
@@ -2632,6 +2624,15 @@ const VEST = () => {
 
       if (isInterWarehouseOrInterBranch() && selectedIsTransit) {
         useSwalInfoAlert("Invalid From Warehouse", "Kapag Inter Branch/Warehouse ang transaction, dapat physical warehouse ang From Warehouse, hindi Intransit.");
+        updateState({ fromwarehouseLookupOpen: false });
+        return;
+      }
+
+      if (isWarehouseToWarehouse() && selectedIsTransit) {
+        useSwalInfoAlert(
+          "Invalid From Warehouse",
+          "Warehouse to Warehouse requires a physical From Warehouse, not INTRANSIT.",
+        );
         updateState({ fromwarehouseLookupOpen: false });
         return;
       }
@@ -2684,6 +2685,15 @@ const VEST = () => {
 
       if (isInterWarehouseOrInterBranch() && !selectedIsTransit) {
         useSwalInfoAlert("Invalid To Warehouse", "Kapag Inter Branch/Warehouse ang transaction, dapat INTRANSIT ang To Warehouse.");
+        updateState({ towarehouseLookupOpen: false });
+        return;
+      }
+
+      if (isWarehouseToWarehouse() && selectedIsTransit) {
+        useSwalInfoAlert(
+          "Invalid To Warehouse",
+          "Warehouse to Warehouse requires a physical To Warehouse, not INTRANSIT.",
+        );
         updateState({ towarehouseLookupOpen: false });
         return;
       }
@@ -3269,15 +3279,7 @@ const VEST = () => {
                               )
                             }
                           />
-                          {!isFormDisabled &&
-                            row.operation === "A" &&
-                            selectedTranType === "IR" && (
-                              <FontAwesomeIcon
-                                icon={faMagnifyingGlass}
-                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                onClick={() => handleItem(index)}
-                              />
-                            )}
+
                         </div>
                       </td>
 
@@ -3317,62 +3319,7 @@ const VEST = () => {
                           type="text"
                           className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                           value={row.quantity || ""}
-                          readOnly={isFormDisabled}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            const sanitizedValue = inputValue.replace(
-                              /[^0-9.-]/g,
-                              "",
-                            );
-                            if (
-                              /^-?\d*\.?\d{0,2}$/.test(sanitizedValue) ||
-                              sanitizedValue === ""
-                            ) {
-                              handleDetailChange(
-                                index,
-                                "quantity",
-                                sanitizedValue,
-                                false,
-                              );
-                            }
-                          }}
-                          onFocus={(e) => {
-                            if (
-                              e.target.value === "0.00" ||
-                              parseFormattedNumber(e.target.value) === 0
-                            ) {
-                              e.target.value = "";
-                            }
-                          }}
-                          onBlur={async (e) => {
-                            const value = e.target.value;
-                            const num = parseFormattedNumber(value);
-                            if (!isNaN(num)) {
-                              await handleDetailChange(
-                                index,
-                                "quantity",
-                                num,
-                                true,
-                              );
-                            }
-                            setFocusedCell(null);
-                          }}
-                          onKeyDown={async (e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const value = e.target.value;
-                              const num = parseFormattedNumber(value);
-                              if (!isNaN(num)) {
-                                await handleDetailChange(
-                                  index,
-                                  "quantity",
-                                  num,
-                                  true,
-                                );
-                              }
-                              e.target.blur();
-                            }
-                          }}
+                          readOnly
                         />
                       </td>
 
@@ -3381,62 +3328,7 @@ const VEST = () => {
                           type="text"
                           className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                           value={row.unitCost || ""}
-                          readOnly={true}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            const sanitizedValue = inputValue.replace(
-                              /[^0-9.]/g,
-                              "",
-                            );
-                            if (
-                              /^\d*\.?\d{0,2}$/.test(sanitizedValue) ||
-                              sanitizedValue === ""
-                            ) {
-                              handleDetailChange(
-                                index,
-                                "unitCost",
-                                sanitizedValue,
-                                false,
-                              );
-                            }
-                          }}
-                          onFocus={(e) => {
-                            if (
-                              e.target.value === "0.00" ||
-                              parseFormattedNumber(e.target.value) === 0
-                            ) {
-                              e.target.value = "";
-                            }
-                          }}
-                          onBlur={async (e) => {
-                            const value = e.target.value;
-                            const num = parseFormattedNumber(value);
-                            if (!isNaN(num)) {
-                              await handleDetailChange(
-                                index,
-                                "unitCost",
-                                num,
-                                true,
-                              );
-                            }
-                            setFocusedCell(null);
-                          }}
-                          onKeyDown={async (e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const value = e.target.value;
-                              const num = parseFormattedNumber(value);
-                              if (!isNaN(num)) {
-                                await handleDetailChange(
-                                  index,
-                                  "unitCost",
-                                  num,
-                                  true,
-                                );
-                              }
-                              e.target.blur();
-                            }
-                          }}
+                          readOnly
                         />
                       </td>
 
@@ -3456,6 +3348,8 @@ const VEST = () => {
                         />
                       </td>
 
+                      {/* Vehicle master/identity information is display-only in VEST.
+                          Only warehouse and location fields may be changed. */}
                       {[
                         ["make", 120],
                         ["modelYear", 110],
@@ -3474,20 +3368,8 @@ const VEST = () => {
                             className="global-tran-td-inputclass-ui"
                             style={{ width }}
                             value={row[field] || ""}
-                            readOnly={field === "make"}
-                            disabled={isFormDisabled}
-                            maxLength={
-                              field === "modelYear"
-                                ? 4
-                                : vehicleFieldMaxLengths[field]
-                            }
-                            onChange={(e) => {
-                              const value =
-                                field === "modelYear"
-                                  ? e.target.value.replace(/\D/g, "").slice(0, 4)
-                                  : e.target.value;
-                              handleDetailChange(index, field, value, false);
-                            }}
+                            readOnly
+                            tabIndex={-1}
                           />
                         </td>
                       ))}
@@ -3560,7 +3442,10 @@ const VEST = () => {
                             value={row.toWHcode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !isInterWarehouseOrInterBranch() && (
+                          {!isFormDisabled &&
+                            row.operation !== "S" &&
+                            !isInterWarehouseOrInterBranch() &&
+                            !isWarehouseToWarehouse() && (
                             <FontAwesomeIcon
                               icon={faMagnifyingGlass}
                               className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -3608,7 +3493,11 @@ const VEST = () => {
                             value={row.tolocCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !isIntransitWarehouse(row.toWHcode) && !isWarehouseTransfer(selectedTranType, tranTypes) && (
+                          {!isFormDisabled &&
+                            row.operation !== "S" &&
+                            !isIntransitWarehouse(row.toWHcode) &&
+                            (!isWarehouseTransfer(selectedTranType, tranTypes) ||
+                              isWarehouseToWarehouse()) && (
                             <FontAwesomeIcon
                               icon={faMagnifyingGlass}
                               className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -3635,19 +3524,7 @@ const VEST = () => {
                             value={row.acctCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  showAccountModal: true,
-                                  accountModalSource: "invAcct",
-                                });
-                              }}
-                            />
-                          )}
+
                         </div>
                       </td>
 
@@ -3662,19 +3539,7 @@ const VEST = () => {
                             value={row.rcCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  showRcModal: true,
-                                  accountModalSource: "rcCode",
-                                });
-                              }}
-                            />
-                          )}
+
                         </div>
                       </td>
 
@@ -3696,28 +3561,9 @@ const VEST = () => {
                             type="text"
                             className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                             value={row.slCode || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "slCode",
-                                e.target.value,
-                              )
-                            }
                             readOnly
                           />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  showSlModal: true,
-                                  accountModalSource: "slCode",
-                                });
-                              }}
-                            />
-                          )}
+
                         </div>
                       </td>
 

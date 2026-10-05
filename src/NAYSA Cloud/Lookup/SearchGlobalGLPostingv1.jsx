@@ -67,6 +67,8 @@ const GlobalGLPostingModalv1 = ({
   const hasPasswordValue = String(userPassword ?? "").length > 0;
 
   const firstFocusableRef = useRef(null);
+  const tableViewportRef = useRef(null);
+  const [tableViewportWidth, setTableViewportWidth] = useState(0);
   const STICKY_COUNT = 3;
   const selectHeaderRef = useRef(null);
   const viewHeaderRef = useRef(null);
@@ -209,7 +211,7 @@ useEffect(() => {
   const startItem = totalItems > 0 ? 1 : 0;
   const endItem = totalItems;
   const activeFilterChips = Object.entries(filters).filter(([, v]) => v);
-  const columnWidths = useMemo(() => {
+  const preferredColumnWidths = useMemo(() => {
     return visibleCols.reduce((widths, col) => {
       const values = displayData.map((row) =>
         renderValue(col, row?.[col.key], col.roundingOff),
@@ -226,6 +228,28 @@ useEffect(() => {
       return widths;
     }, {});
   }, [displayData, visibleCols]);
+
+  useLayoutEffect(() => {
+    const viewport = tableViewportRef.current;
+    if (!viewport) return;
+    const updateWidth = () => setTableViewportWidth(viewport.clientWidth);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [isMobile, mobileViewMode, isMinimized]);
+
+  const columnWidths = useMemo(() => {
+    const widths = { ...preferredColumnWidths };
+    const lastColumn = visibleCols[visibleCols.length - 1];
+    const preferredTotal = ACTION_COL_W + SELECT_COL_W + visibleCols.reduce((total, col) => total + widths[col.key], 0);
+    if (lastColumn && tableViewportWidth > preferredTotal) {
+      widths[lastColumn.key] += tableViewportWidth - preferredTotal;
+    }
+    return widths;
+  }, [preferredColumnWidths, visibleCols, tableViewportWidth]);
+
+  const tableWidth = ACTION_COL_W + SELECT_COL_W + visibleCols.reduce((total, col) => total + columnWidths[col.key], 0);
 
   const handleFilterChange = (e, key) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const clearAllFilters = () => setFilters({});
@@ -439,8 +463,8 @@ useEffect(() => {
               )) : <div className="py-10 text-center text-gray-500">No records found.</div>}
             </div>
           ) : (
-            <div className="h-full w-full overflow-auto custom-scrollbar">
-              <table className="min-w-max border-separate border-spacing-0">
+            <div ref={tableViewportRef} className="h-full w-full overflow-auto custom-scrollbar">
+              <table className="border-separate border-spacing-0" style={{ width: tableWidth, tableLayout: "fixed" }}>
                 <thead className="sticky top-0 z-[80] bg-slate-200">
                   <tr className="bg-slate-200 whitespace-nowrap text-[10px] sm:text-[11px]">
                     <th ref={viewHeaderRef} className="sticky left-0 bg-slate-200 z-[70] px-3 py-2 font-bold global-lookup-th-ui border-b border-r" style={{ width: ACTION_COL_W, minWidth: ACTION_COL_W, maxWidth: ACTION_COL_W }}>View</th>
@@ -489,17 +513,17 @@ useEffect(() => {
                 <tbody className="bg-white">
                   {displayData.length > 0 ? displayData.map((row, rIdx) => (
                     <tr key={getRowId(row) ?? rIdx} onDoubleClick={() => handleViewRow(row)} className={`text-[10px] sm:text-[11px] hover:bg-blue-50 ${rIdx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                      <td className="sticky left-0 z-[30] px-2 py-[6px] text-center border-r bg-inherit" style={{ width: ACTION_COL_W, minWidth: ACTION_COL_W, maxWidth: ACTION_COL_W }}>
+                      <td className="sticky left-0 z-[30] px-2 py-[6px] text-center border-r border-b border-slate-200 bg-inherit" style={{ width: ACTION_COL_W, minWidth: ACTION_COL_W, maxWidth: ACTION_COL_W }}>
                         <button onClick={(e) => { e.stopPropagation(); handleViewRow(row); }} className="px-2 py-0.5 bg-blue-500 text-white rounded"><FontAwesomeIcon icon={faEye} /></button>
                       </td>
-                      <td className="sticky z-[30] text-center bg-inherit" style={{ left: stickyLefts[1], width: SELECT_COL_W, minWidth: SELECT_COL_W, maxWidth: SELECT_COL_W }}>
+                      <td className="sticky z-[30] text-center border-b border-slate-200 bg-inherit" style={{ left: stickyLefts[1], width: SELECT_COL_W, minWidth: SELECT_COL_W, maxWidth: SELECT_COL_W }}>
                         <input type="checkbox" checked={selectedIds.has(getRowId(row))} onChange={() => toggleSelect(row)} className="h-4 w-4 text-blue-600 rounded" />
                       </td>
                       {visibleCols.map((col, vIdx) => {
                         const meta = stickyMeta(vIdx + 2);
                         const width = columnWidths[col.key] ?? MIN_DATA_COL_W;
                         return (
-                          <td key={col.key} className={`px-3 py-[5px] truncate ${meta.sticky ? "sticky z-[20] bg-inherit" : ""} ${col.renderType === "number" ? "text-right" : ""}`} style={{ left: meta.left, width, minWidth: width, maxWidth: width }}>
+                          <td key={col.key} className={`px-3 py-[5px] truncate border-b border-slate-200 ${meta.sticky ? "sticky z-[20] bg-inherit" : ""} ${col.renderType === "number" ? "text-right" : ""}`} style={{ left: meta.left, width, minWidth: width, maxWidth: width }}>
                             {renderValue(col, row[col.key], col.roundingOff)}
                           </td>
                         );

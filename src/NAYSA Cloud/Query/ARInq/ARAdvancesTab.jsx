@@ -138,6 +138,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
   // table refs + UI state persistence refs
   const tableRefTop = useRef(null); // summary table
   const tableRefBottom = useRef(null); // detail table
+  const detailedSectionRef = useRef(null);
   const tableStateTopRef = useRef({
     filters: {},
     sortConfig: { key: null, direction: null },
@@ -540,9 +541,10 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
 
   // Row actions
   const handleViewTop = useCallback(
-    (row) => {
-      fetchRecordperCustomer(row);
+    async (row) => {
+      await fetchRecordperCustomer(row);
       updateState({ custName: row.custName, custCode: row.custCode });
+      requestAnimationFrame(() => detailedSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     },
     [fetchRecordperCustomer]
   );
@@ -735,7 +737,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
       </div>
 
       {/* === Detailed (BOTTOM TABLE) === */}
-      <div className="global-tran-tab-div-ui">
+      <div ref={detailedSectionRef} className="global-tran-tab-div-ui" style={{ scrollMarginTop: "120px" }}>
         <div className="global-tran-tab-nav-ui">
           <div className="flex flex-row sm:flex-row">
             <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">

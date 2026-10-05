@@ -52,6 +52,9 @@ const GlobalLookupModalv1 = ({
   btnCaption,
   onSelectionChange,
   onSelectionReset,
+  selectionValidator,
+  viewOnly = false,
+  onInspectRow,
   singleSelect = false,
   autoSelectAll = false,
   modalMaxWidthClass = "max-w-8xl",
@@ -62,6 +65,8 @@ const GlobalLookupModalv1 = ({
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [selected, setSelected] = useState([]); // selection order preserved by push/remove
+  const selectedRef = useRef([]);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
   const [filters, setFilters] = useState({});
   const [globalSearch, setGlobalSearch] = useState("");
   const [columnConfig, setColumnConfig] = useState([]);
@@ -305,31 +310,27 @@ const GlobalLookupModalv1 = ({
   };
 
   const toggleSelect = (row) => {
-    setSelected((prev) => {
-      const exists = prev.some((s) => s.groupId === row.groupId);
-      const nextSelected = singleSelect
-        ? exists ? [] : [row]
-        : exists
-          ? prev.filter((s) => s.groupId !== row.groupId)
-          : [...prev, row];
-
-      if (typeof onSelectionReset === "function") {
-        onSelectionReset(nextSelected);
-      }
-
-      return nextSelected;
-    });
+    if (viewOnly) return;
+    const current = selectedRef.current;
+    const exists = current.some((s) => s.groupId === row.groupId);
+    const nextSelected = singleSelect
+      ? exists ? [] : [row]
+      : exists
+        ? current.filter((s) => s.groupId !== row.groupId)
+        : [...current, row];
+    if (selectionValidator && !selectionValidator(nextSelected)) return;
+    selectedRef.current = nextSelected;
+    setSelected(nextSelected);
+    onSelectionReset?.(nextSelected);
   };
 
   const toggleSelectAll = () => {
-    setSelected((prev) => {
-      const nextSelected = prev.length === filtered.length ? [] : [...filtered];
-      if (typeof onSelectionReset === "function") {
-        onSelectionReset(nextSelected);
-      }
-      // select all in current filtered order
-      return nextSelected;
-    });
+    if (viewOnly) return;
+    const nextSelected = selectedRef.current.length === filtered.length ? [] : [...filtered];
+    if (selectionValidator && !selectionValidator(nextSelected)) return;
+    selectedRef.current = nextSelected;
+    setSelected(nextSelected);
+    onSelectionReset?.(nextSelected);
   };
 
   // ✅ returns selection order
@@ -557,9 +558,10 @@ const baseVisibleCols = useMemo(() => {
   }, [data, endpoint, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !autoSelectAll || records.length === 0) return;
+    if (!isOpen || viewOnly || !autoSelectAll || records.length === 0) return;
+    if (selectionValidator && !selectionValidator(records)) return;
     setSelected(records);
-  }, [isOpen, autoSelectAll, records]);
+  }, [isOpen, autoSelectAll, records, viewOnly, selectionValidator]);
 
   // init widths (auto for missing keys; keep persisted/user widths)
   useEffect(() => {
@@ -733,8 +735,8 @@ const baseVisibleCols = useMemo(() => {
       (acc, c) => acc + (colWidths[c.key] || 150),
       0
     );
-    return sum + (singleSelect ? 0 : selectColWidth) + RIGHT_EDGE_GUTTER_PX;
-  }, [orderedVisibleCols, colWidths, singleSelect]);
+    return sum + (singleSelect || viewOnly ? 0 : selectColWidth) + RIGHT_EDGE_GUTTER_PX;
+  }, [orderedVisibleCols, colWidths, singleSelect, viewOnly]);
   
   const fitFactor = useMemo(() => {
   if (!viewportWidth) return 1;
@@ -748,7 +750,7 @@ const baseVisibleCols = useMemo(() => {
   }, [viewportWidth, tableMinWidth]);
 
 
-  const effectiveSelectColWidth = singleSelect ? 0 : selectColWidth * fitFactor;
+  const effectiveSelectColWidth = singleSelect || viewOnly ? 0 : selectColWidth * fitFactor;
  
 
   // reset horizontal scroll if width/page changes
@@ -862,7 +864,7 @@ const baseVisibleCols = useMemo(() => {
     if (e.key === "Enter") {
       e.preventDefault();
       const row = getDataRowByHighlight();
-      if (row) toggleSelect(row);
+      if (row && !viewOnly) toggleSelect(row);
       return;
     }
   };
@@ -1433,7 +1435,7 @@ const handleExportExcelClick = async (customFileName) => {
                     <table className="w-full table-fixed divide-y divide-gray-100">
                       <thead>
                         <tr className="bg-slate-200">
-                          {!singleSelect && (
+                          {!singleSelect && !viewOnly && (
                             <th
                               className="global-lookup-th-ui"
                               style={{ width: effectiveSelectColWidth, minWidth: effectiveSelectColWidth  }}
@@ -1492,7 +1494,7 @@ const handleExportExcelClick = async (customFileName) => {
 
                         {/* Filter row */}
                         <tr className="bg-slate-200">
-                          {!singleSelect && (
+                          {!singleSelect && !viewOnly && (
                             <td
                               className="bg-slate-200"
                               style={{ width: effectiveSelectColWidth, minWidth: effectiveSelectColWidth  }}
@@ -1551,7 +1553,7 @@ const handleExportExcelClick = async (customFileName) => {
                               const isExpanded = expandedGroups[uniqueId];
 
                               const colSpan =
-                                orderedVisibleCols.length + (singleSelect ? 0 : 1) + 1;
+                                orderedVisibleCols.length + (singleSelect || viewOnly ? 0 : 1) + 1;
 
                               return (
                                 <tr
@@ -1602,6 +1604,10 @@ const handleExportExcelClick = async (customFileName) => {
                                   if (dataIndex >= 0) setHighlightIndex(dataIndex);
                                 }}
                                 onDoubleClick={() => {
+                                  if (viewOnly) {
+                                    onInspectRow?.(row);
+                                    return;
+                                  }
                                   if (singleSelect) {
                                     setSelected([row]);
                                     handleGetSelected();
@@ -1610,10 +1616,10 @@ const handleExportExcelClick = async (customFileName) => {
                                   }
                                 }}
                                 onClick={() => {
-                                  if (singleSelect) toggleSelect(row);
+                                  if (singleSelect && !viewOnly) toggleSelect(row);
                                 }}
                               >
-                                {!singleSelect && (
+                                {!singleSelect && !viewOnly && (
                                   <td
                                     className="px-2 py-1 text-center"
                                     style={{ width: effectiveSelectColWidth, minWidth: effectiveSelectColWidth  }}
@@ -1680,7 +1686,7 @@ const handleExportExcelClick = async (customFileName) => {
                         ) : (
                           <tr>
                             <td
-                              colSpan={orderedVisibleCols.length + (singleSelect ? 0 : 1) + 1}
+                              colSpan={orderedVisibleCols.length + (singleSelect || viewOnly ? 0 : 1) + 1}
                               className="px-4 py-6 text-center text-gray-500 text-lg"
                             >
                               No matching records found.
@@ -1759,7 +1765,7 @@ const handleExportExcelClick = async (customFileName) => {
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center text-xs text-gray-600">
           <div className="flex items-center gap-3 flex-wrap">
-            {!singleSelect && (
+            {!singleSelect && !viewOnly && (
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1780,7 +1786,7 @@ const handleExportExcelClick = async (customFileName) => {
               Clear Filters
             </button>
 
-            {!singleSelect && (
+            {!singleSelect && !viewOnly && (
               <button
                 type="button"
                 onClick={clearSelection}
@@ -1793,18 +1799,18 @@ const handleExportExcelClick = async (customFileName) => {
               </button>
             )}
 
-            {!singleSelect && (
+            {!singleSelect && !viewOnly && (
               <div className="font-semibold text-gray-700">Selected: {selected.length}</div>
             )}
 
-            <button
+            {!viewOnly && <button
               onClick={handleGetSelected}
               disabled={selected.length === 0}
               className="px-4 py-2 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
               title="Enter also toggles selection for highlighted row"
             >
               {btnCaption}
-            </button>
+            </button>}
           </div>
 
           <div className="flex items-center gap-2">

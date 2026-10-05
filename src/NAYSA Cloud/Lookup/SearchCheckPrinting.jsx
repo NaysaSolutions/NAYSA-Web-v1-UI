@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
-import { X, Printer, Eye, EyeOff, RefreshCcw } from "lucide-react";
+import { Check, X, Printer, Eye, EyeOff, Minus, Maximize2 } from "lucide-react";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import {
   useSwalErrorAlert,
@@ -122,15 +123,6 @@ const SAMPLE_FIELDS = [
     sortOrder: 6,
   },
 ];
-
-const FIELD_META = {
-  checkDate: "border-red-400 bg-red-50/70 text-red-700",
-  amountInWords: "border-blue-400 bg-blue-50/70 text-blue-700",
-  payeeName: "border-green-400 bg-green-50/70 text-green-700",
-  checkAmount: "border-purple-400 bg-purple-50/70 text-purple-700",
-  forAccountOnly: "border-orange-400 bg-orange-50/70 text-orange-700",
-  cvNo: "border-cyan-400 bg-cyan-50/70 text-cyan-700",
-};
 
 const numberOrZero = (value) => {
   const num = Number(value);
@@ -295,6 +287,13 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
+const joinDisplayValues = (...values) =>
+  [...new Set(
+    values
+      .map((value) => String(value || "").trim().replace(/\s*-\s*$/, ""))
+      .filter((value) => value && value !== "-" && value !== "—")
+  )].join(" · ");
+
 const getFieldValue = (field, checkData, showForAccountOnly) => {
   if (!field) return "";
 
@@ -338,6 +337,25 @@ export default function CheckPrintPreviewModal({
   const [showForAccountOnly, setShowForAccountOnly] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [loadedTemplate, setLoadedTemplate] = useState(null);
+  const [checkName, setCheckName] = useState("");
+  const [appliedCheckName, setAppliedCheckName] = useState("");
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const dragStateRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setIsMinimized(false);
+    setModalPosition({ x: 0, y: 0 });
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const initialCheckName = String(checkData?.payeeName || "");
+    setCheckName(initialCheckName);
+    setAppliedCheckName(initialCheckName);
+  }, [open, checkData?.payeeName]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -426,17 +444,88 @@ export default function CheckPrintPreviewModal({
     [fields, showForAccountOnly]
   );
 
+  const previewCheckData = {
+    ...checkData,
+    payeeName: appliedCheckName,
+  };
+
   if (!open) return null;
 
   const paperWidth = numberOrZero(templateHeader.paperWidth) || DEFAULT_PAPER.paperWidth;
   const paperHeight = numberOrZero(templateHeader.paperHeight) || DEFAULT_PAPER.paperHeight;
   const offsetX = numberOrZero(templateHeader.offsetX);
   const offsetY = numberOrZero(templateHeader.offsetY);
+  const bankLabel = joinDisplayValues(
+    templateHeader.bankCode || bankCode,
+    templateHeader.bankName
+  );
+  const templateLabel = joinDisplayValues(
+    templateHeader.templateCode,
+    templateHeader.templateName
+  );
+  const normalizedCheckName = checkName.trim();
+  const canApplyCheckName = Boolean(normalizedCheckName) && normalizedCheckName !== appliedCheckName;
+
+  const handleApplyCheckName = () => {
+    const nextCheckName = checkName.trim();
+    if (!nextCheckName || nextCheckName === appliedCheckName) return;
+    setAppliedCheckName(nextCheckName);
+  };
+
+  const handleModalPointerDown = (event) => {
+    if (event.button !== 0) return;
+
+    const modalElement = event.currentTarget.parentElement;
+    const rect = modalElement.getBoundingClientRect();
+    dragStateRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: modalPosition.x,
+      originY: modalPosition.y,
+      baseLeft: rect.left - modalPosition.x,
+      baseTop: rect.top - modalPosition.y,
+      width: rect.width,
+      height: rect.height,
+    };
+
+    const handlePointerMove = (moveEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+
+      const proposedX = drag.originX + moveEvent.clientX - drag.startX;
+      const proposedY = drag.originY + moveEvent.clientY - drag.startY;
+      const margin = 8;
+      const minX = margin - drag.baseLeft;
+      const maxX = window.innerWidth - margin - drag.baseLeft - drag.width;
+      const minY = margin - drag.baseTop;
+      const maxY = window.innerHeight - margin - drag.baseTop - drag.height;
+
+      setModalPosition({
+        x: Math.min(Math.max(proposedX, minX), Math.max(minX, maxX)),
+        y: Math.min(Math.max(proposedY, minY), Math.max(minY, maxY)),
+      });
+    };
+
+    const handlePointerUp = () => {
+      dragStateRef.current = null;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    event.preventDefault();
+  };
+
+  const handleToggleMinimize = () => {
+    setIsMinimized((current) => !current);
+    setModalPosition({ x: 0, y: 0 });
+  };
 
   const handlePrint = () => {
     const printFields = visibleFields
       .map((field) => {
-        const value = escapeHtml(getFieldValue(field, checkData, showForAccountOnly));
+        const value = escapeHtml(getFieldValue(field, previewCheckData, showForAccountOnly));
         const x = numberOrZero(field.xPosition) + offsetX;
         const y = numberOrZero(field.yPosition) + offsetY;
         const width = numberOrZero(field.fieldWidth);
@@ -531,57 +620,48 @@ export default function CheckPrintPreviewModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-900/40 px-4 py-6">
-      <div className="relative flex max-h-[94vh] w-full max-w-[1120px] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-        {isLoading && (
+    <div className={`fixed inset-0 z-[9998] flex px-4 py-3 ${
+      isMinimized
+        ? "pointer-events-none items-end justify-end bg-transparent"
+        : "items-center justify-center bg-slate-900/40"
+    }`}>
+      <div
+        className="pointer-events-auto relative flex max-h-[94vh] w-full flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        style={{
+          maxWidth: isMinimized ? "320px" : `${paperWidth * pxPerMm + 32}px`,
+          transform: `translate3d(${modalPosition.x}px, ${modalPosition.y}px, 0)`,
+        }}
+      >
+        {isLoading && !isMinimized && (
           <div className="absolute inset-0 z-[2] flex items-center justify-center bg-white/60">
             <LoadingSpinner />
           </div>
         )}
 
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-blue-50 px-4 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-[15px] font-bold text-blue-900">
-              Check Print Preview
-            </h2>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500">
-              {templateHeader.bankCode || bankCode || "No Bank"} 
-              {templateHeader.templateName ? ` • ${templateHeader.templateName}` : ""}
-              {checkData?.cvNo ? ` • ${checkData.cvNo}` : ""}
-            </p>
-          </div>
+        <div
+          className="flex h-10 shrink-0 cursor-move select-none items-center justify-between border-b border-blue-100 bg-blue-50 px-4"
+          onPointerDown={handleModalPointerDown}
+          onDoubleClick={handleToggleMinimize}
+        >
+          <h2 className="truncate text-[15px] font-bold text-blue-900">
+            Check Print Preview
+          </h2>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setShowForAccountOnly((prev) => !prev)}
-              className={`flex h-8 items-center gap-1 rounded-md px-3 text-[11px] font-semibold transition ${
-                showForAccountOnly
-                  ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
-                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-              }`}
-              title="Show/Hide For A/C Only"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={handleToggleMinimize}
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md bg-white text-slate-600 shadow-sm transition hover:bg-slate-100"
+              title={isMinimized ? "Restore" : "Minimize"}
             >
-              {showForAccountOnly ? <Eye size={14} /> : <EyeOff size={14} />}
-              <span className="hidden sm:inline">
-                {showForAccountOnly ? "For A/C Only: Show" : "For A/C Only: Hide"}
-              </span>
+              {isMinimized ? <Maximize2 size={14} /> : <Minus size={15} />}
             </button>
-
             <button
               type="button"
-              onClick={handlePrint}
-              disabled={!loadedTemplate && !templateData}
-              className="flex h-8 items-center gap-1 rounded-md bg-blue-600 px-3 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Printer size={14} />
-              Print
-            </button>
-
-            <button
-              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-600 transition hover:bg-slate-200"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md bg-white text-slate-600 shadow-sm transition hover:bg-slate-100"
               title="Close"
             >
               <X size={15} />
@@ -589,16 +669,93 @@ export default function CheckPrintPreviewModal({
           </div>
         </div>
 
-        <div className="overflow-auto bg-slate-100 p-4">
-          <div className="mx-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {!isMinimized && <div className="overflow-auto bg-slate-100 p-1.5">
+          <div className="mx-auto mb-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-100 pb-1.5 text-[10px] text-slate-500">
+              <div className="min-w-0">
+                <span className="mr-1 font-bold uppercase tracking-wide text-slate-400">CV</span>
+                <span className="font-semibold text-slate-700">{checkData?.cvNo || "—"}</span>
+              </div>
+              <div className="min-w-0 border-l border-slate-200 pl-4">
+                <span className="mr-1 font-bold uppercase tracking-wide text-slate-400">Template</span>
+                <span className="font-semibold text-slate-700">{templateLabel || "Not loaded"}</span>
+              </div>
+              <div className="min-w-0 border-l border-slate-200 pl-4">
+                <span className="mr-1 font-bold uppercase tracking-wide text-slate-400">Bank</span>
+                <span className="font-semibold text-slate-700">{bankLabel || "—"}</span>
+                {templateHeader.bankAcctNo && (
+                  <span className="ml-1 text-slate-400">({templateHeader.bankAcctNo})</span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <FieldRenderer
+                    id="checkPrintName"
+                    label="Check Name"
+                    type="text"
+                    value={checkName}
+                    onChange={setCheckName}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleApplyCheckName();
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleApplyCheckName}
+                  disabled={!canApplyCheckName}
+                  className={`inline-flex h-8 w-[78px] shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition ${
+                    canApplyCheckName
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "cursor-default border border-blue-200 !bg-blue-50 !text-blue-700"
+                  }`}
+                  title="Apply Check Name"
+                >
+                  <Check size={13} />
+                  Apply
+                </button>
+              </div>
+
+              <div className="flex shrink-0 items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  disabled={!loadedTemplate && !templateData}
+                  className="inline-flex h-8 w-[78px] shrink-0 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Printer size={13} />
+                  Print
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowForAccountOnly((prev) => !prev)}
+                  className={`inline-flex h-8 w-[78px] shrink-0 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition ${
+                    showForAccountOnly
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  }`}
+                  title={showForAccountOnly ? "Hide For A/C Only" : "Show For A/C Only"}
+                >
+                  {showForAccountOnly ? <Eye size={13} /> : <EyeOff size={13} />}
+                  <span>A/C</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mx-auto w-fit rounded-md border border-slate-300 bg-white p-1 shadow-sm">
             <div
-              className="relative mx-auto border border-slate-400 bg-white"
+              className="relative mx-auto bg-white"
               style={{
                 width: `${paperWidth * pxPerMm}px`,
                 height: `${paperHeight * pxPerMm}px`,
-                backgroundImage:
-                  "radial-gradient(circle, rgba(148,163,184,0.35) 1px, transparent 1px)",
-                backgroundSize: "8px 8px",
               }}
             >
               {/* <div className="absolute left-[12px] top-[115px] text-[11px] font-bold text-slate-600">
@@ -622,9 +779,7 @@ export default function CheckPrintPreviewModal({
                 return (
                   <div
                     key={field.fieldKey}
-                    className={`absolute flex select-none items-center overflow-hidden border border-dashed px-2 ${
-                      FIELD_META[field.fieldKey] || "border-slate-400 bg-white text-slate-700"
-                    }`}
+                    className="absolute select-none overflow-hidden text-black"
                     style={{
                       left: x,
                       top: y,
@@ -634,39 +789,20 @@ export default function CheckPrintPreviewModal({
                       fontWeight: field.fontWeight || "400",
                       fontStyle: field.fontStyle || "normal",
                       fontFamily: field.fontName || "Arial Narrow",
-                      justifyContent:
-                        field.textAlign === "center"
-                          ? "center"
-                          : field.textAlign === "right"
-                            ? "flex-end"
-                            : "flex-start",
+                      textAlign: field.textAlign || "left",
+                      lineHeight: 1.1,
                       whiteSpace: "pre",
                       transform: `rotate(${numberOrZero(field.rotationAngle)}deg)`,
                       transformOrigin: "left top",
                     }}
                   >
-                    {getFieldValue(field, checkData, showForAccountOnly)}
+                    {getFieldValue(field, previewCheckData, showForAccountOnly)}
                   </div>
                 );
               })}
             </div>
           </div>
-
-          <div className="mx-auto mt-3 grid max-w-[1010px] grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 md:grid-cols-3">
-            <div>
-              <span className="font-bold">Bank:</span>{" "}
-              {templateHeader.bankCode || bankCode || ""}
-            </div>
-            <div>
-              <span className="font-bold">Template:</span>{" "}
-              {templateHeader.templateName || "No template loaded"}
-            </div>
-            <div>
-              <span className="font-bold">CV No.:</span>{" "}
-              {checkData?.cvNo || ""}
-            </div>
-          </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
