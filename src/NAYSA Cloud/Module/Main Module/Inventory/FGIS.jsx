@@ -89,7 +89,6 @@ import {
 const FGIS = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsGLRef = useRef([]);
-  const categoryAccountCacheRef = useRef({});
   const { user } = useAuth();
 
   const navigate = useNavigate();
@@ -1337,73 +1336,7 @@ useEffect(() => {
     ),
   });
 
-  const getCategoryAccountEndpoint = (item = {}) => {
-    const invType = getWOIssueInventoryType(item);
-
-    return {
-      FG: "getFGCategoryAccount",
-      RM: "getRMCategoryAccount",
-      MS: "getMSCategoryAccount",
-    }[invType] || "getFGCategoryAccount";
-  };
-
-  const fetchDefaultDrAccountByCategory = async (categCode, item = {}) => {
-    const category = String(categCode || "").trim();
-    if (!category) return { code: "", name: "" };
-
-    const endpoint = getCategoryAccountEndpoint(item);
-    const cacheKey = `${endpoint}:${category}`;
-
-    if (categoryAccountCacheRef.current[cacheKey]) {
-      return categoryAccountCacheRef.current[cacheKey];
-    }
-
-    const payload = {
-      categCode: category,
-      rmcategCode: category,
-      mscategCode: category,
-      fgcategCode: category,
-    };
-
-    try {
-      let response;
-
-      try {
-        response = await fetchDataJson(endpoint, payload);
-      } catch (getError) {
-        if (getError?.response?.status !== 405) throw getError;
-
-        try {
-          response = await postRequest(endpoint, {
-            PARAMS: JSON.stringify({ json_data: payload }),
-          });
-        } catch (postParamsError) {
-          response = await postRequest(endpoint, {
-            json_data: payload,
-            ...payload,
-          });
-        }
-      }
-
-      const rows = parseLookupResultRows(response);
-      const row = rows[0] || {};
-      const account = getDefaultDrAccountFromItem(row);
-
-      categoryAccountCacheRef.current[cacheKey] = account;
-      return account;
-    } catch (error) {
-      console.warn(`Unable to fetch default DR Account for category ${category}:`, error);
-      return { code: "", name: "" };
-    }
-  };
-
-  const resolveDefaultDrAccount = async (item) => {
-    const accountFromLookup = getDefaultDrAccountFromItem(item);
-    if (accountFromLookup.code) return accountFromLookup;
-
-    const categoryCode = getItemCategoryCode(item);
-    return fetchDefaultDrAccountByCategory(categoryCode, item);
-  };
+  const resolveDefaultDrAccount = (item) => getDefaultDrAccountFromItem(item);
 
   const fetchInventoryLookupRowForItem = async (item = {}) => {
     const itemCode = String(getFirstValue(item.itemCode, item.ITEM_CODE, item.item_code, item.rmCode, item.RM_CODE, item.msCode, item.MS_CODE, item.fgCode, item.FG_CODE)).trim();
@@ -1509,7 +1442,7 @@ useEffect(() => {
       enrichedRow = mergeBlankInventoryFields(enrichedRow, masterLookupRow);
     }
 
-    const defaultDrAccount = await resolveDefaultDrAccount(enrichedRow);
+    const defaultDrAccount = resolveDefaultDrAccount(enrichedRow);
     return {
       ...enrichedRow,
       acctCode: enrichedRow.acctCode || enrichedRow.drAcctCode || defaultDrAccount.code || "",
@@ -1550,7 +1483,7 @@ useEffect(() => {
       itemsArray.map(async (item) => {
         const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? item?.qtyOnHand ?? 0) || 0;
         const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0) || 0;
-        const defaultDrAccount = await resolveDefaultDrAccount(item);
+        const defaultDrAccount = resolveDefaultDrAccount(item);
 
         return {
           itemCode: item?.itemCode ?? "",
@@ -2045,10 +1978,7 @@ useEffect(() => {
     if (isFormDisabled) return;
     if (!["Upsert", "GenerateGL"].includes(action)) return;
 
-    const preparedDetailRows = await Promise.all(
-      (state.detailRows || []).map((row) => enrichInventoryDetailRow(row))
-    );
-    updateState({ detailRows: preparedDetailRows });
+    const preparedDetailRows = state.detailRows || [];
 
     const formatDateForSql = (value) => {
       if (!value) return null;
@@ -2177,9 +2107,6 @@ useEffect(() => {
             brandName: row.brandName || "",
             brand_name: row.brandName || "",
             categCode: row.categCode || "",
-            categoryCode: row.categCode || "",
-            invAcct: row.invAcct || row.invAcctCode || row.drAcctCode || row.acctCode || "",
-            invAcctCode: row.invAcctCode || row.invAcct || row.drAcctCode || row.acctCode || "",
             uomCode: row.uomCode || "",
 
             quantity: quantityValue,
@@ -2205,6 +2132,8 @@ useEffect(() => {
             slCode: row.slCode || vendCode || "",
 
             uniqueKey: row.uniqueKey || "",
+            woIssueItems: row.woIssueItems || [],
+            pickingAllocations: row.pickingAllocations || [],
             operation: row.operation || "S",
           };
         }),
@@ -2740,7 +2669,7 @@ useEffect(() => {
       normalizedRowsBase.map(async (row) => {
         if (row.drAcctCode) return row;
 
-        const defaultDrAccount = await resolveDefaultDrAccount(row);
+        const defaultDrAccount = resolveDefaultDrAccount(row);
         return {
           ...row,
           drAcctCode: defaultDrAccount.code || "",
@@ -2782,7 +2711,7 @@ useEffect(() => {
     const enrichedRow = await enrichInventoryDetailRow(row);
     if (enrichedRow.drAcctCode) return enrichedRow;
 
-    const defaultDrAccount = await resolveDefaultDrAccount(enrichedRow);
+    const defaultDrAccount = resolveDefaultDrAccount(enrichedRow);
     return {
       ...enrichedRow,
       drAcctCode: defaultDrAccount.code || "",
@@ -2791,8 +2720,57 @@ useEffect(() => {
     };
   };
 
-  const applyPickedWOIssueItem = async (header, issueItem, itemIndex = 0) => {
-    if (!header || !issueItem) return;
+  const getPickedWOIssueItems = (issueItems = []) =>
+    (Array.isArray(issueItems) ? issueItems : []).filter((row) =>
+      (parseFormattedNumber(row?.qtyPicked ?? row?.quantityPicked ?? 0) || 0) > 0
+    );
+
+  const buildWOReferenceFGRow = async (header = {}, issueItems = []) => {
+    const quantityValue = getFirstValue(
+      header.quantity,
+      header.QUANTITY,
+      header.woQty,
+      header.WO_QTY,
+      header.remainingQty,
+      header.REMAINING_QTY,
+      0,
+    );
+    const unitCostValue = getFirstValue(header.unitCost, header.UNIT_COST, header.woUnitCost, header.WO_UNITCOST, 0);
+    const pickedIssueItems = getPickedWOIssueItems(issueItems);
+    const pickingAllocations = pickedIssueItems.flatMap((row) =>
+      Array.isArray(row.pickingAllocations) ? row.pickingAllocations : []
+    );
+    const baseRow = {
+      woNo: getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO),
+      itemCode: getFirstValue(header.itemCode, header.item_code, header.ITEM_CODE, header.fgCode, header.FG_CODE),
+      itemName: getFirstValue(header.itemName, header.itemDesc, header.item_name, header.ITEM_NAME, header.ITEM_DESC, header.fgName, header.FG_NAME),
+      brandCode: getFirstValue(header.brandCode, header.brand_code, header.BRAND_CODE),
+      brandName: getFirstValue(header.brandName, header.brand_name, header.BRAND_NAME),
+      categCode: getItemCategoryCode(header),
+      uomCode: getFirstValue(header.uomCode, header.uom_code, header.UOM_CODE),
+      quantity: formatNumber(quantityValue, 6),
+      unitCost: formatNumber(unitCostValue, 6),
+      amount: formatNumber((parseFormattedNumber(quantityValue) || 0) * (parseFormattedNumber(unitCostValue) || 0), 2),
+      itemAmount: formatNumber((parseFormattedNumber(quantityValue) || 0) * (parseFormattedNumber(unitCostValue) || 0), 2),
+      qtyOnHand: formatNumber(getFirstValue(header.qtyOnHand, header.qtyHand, header.QTY_ON_HAND, header.QTY_HAND, quantityValue), 6),
+      qtyHand: formatNumber(getFirstValue(header.qtyHand, header.qtyOnHand, header.QTY_HAND, header.QTY_ON_HAND, quantityValue), 6),
+      whouseCode: getFirstValue(header.whouseCode, header.whCode, header.WH_CODE, state.WHcode),
+      whouseName: getFirstValue(header.whouseName, header.whName, state.WHname),
+      locCode: getFirstValue(header.locCode, header.LOC_CODE, state.locCode),
+      locName: getFirstValue(header.locName, header.LOC_NAME, state.locName),
+      rcCode: state.rcCode || "",
+      slCode: "",
+      groupId: getFirstValue(header.groupId, header.group_id, header.woId, header.WO_ID),
+      uniqueKey: getFirstValue(header.uniqueKey, header.unique_key),
+      woIssueItems: pickedIssueItems,
+      pickingAllocations,
+      operation: "S",
+    };
+    return baseRow;
+  };
+
+  const applyPickedWOReferenceItem = async (header, issueItems = []) => {
+    if (!header) return;
 
     const woStatus = String(getFirstValue(header.woStatus, header.WO_STATUS)).toUpperCase();
     if (woStatus && !["O", "R"].includes(woStatus)) {
@@ -2807,14 +2785,14 @@ useEffect(() => {
     const selectedWoNo =
       getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO) ||
       state.woNo;
-    const enrichedIssueItem = await enrichInventoryDetailRow(issueItem);
-    const pickedRow = await resolveDetailRowAccount(normalizeWODetailRow(enrichedIssueItem, itemIndex));
-    const pickedIdentity = getWODetailIdentity(pickedRow, itemIndex);
+    const pickedRow = await buildWOReferenceFGRow(header, issueItems);
+    const pickedIdentity = `wo:${selectedWoNo}`;
     const currentRows = Array.isArray(state.detailRows) ? state.detailRows : [];
     let didReplace = false;
 
     const mergedRows = currentRows.map((row, index) => {
-      if (getWODetailIdentity(row, index) !== pickedIdentity) return row;
+      const rowWoNo = getFirstValue(row.woNo, row.WO_NO, row.wo_no);
+      if ((rowWoNo ? `wo:${rowWoNo}` : getWODetailIdentity(row, index)) !== pickedIdentity) return row;
       didReplace = true;
       return {
         ...row,
@@ -2900,7 +2878,7 @@ useEffect(() => {
       const reference = await fetchWOReference(selectedWO);
       if (!reference) return;
 
-      await applyWOReference(
+      await applyPickedWOReferenceItem(
         reference.header,
         reference.details,
       );
@@ -3021,24 +2999,24 @@ useEffect(() => {
     }
 
     if (["manual-pick", "auto-pick"].includes(action)) {
-      if (!workOrder) return;
       const pickedIssueItems = Array.isArray(issueItems) ? issueItems : woLookupIssueItems;
-      const pickedItem =
-        item ||
-        (selectedItemIndex !== undefined && selectedItemIndex !== null
-          ? pickedIssueItems[selectedItemIndex]
-          : null);
-
-      if (!pickedItem) return;
 
       setWOLookupIssueItems(pickedIssueItems);
-      await applyPickedWOIssueItem(workOrder, pickedItem, selectedItemIndex ?? 0);
       setWOLookupInventoryRows([]);
       return;
     }
 
+    if (action === "load-all") {
+      if (!workOrder) return;
+      const pickedIssueItems = Array.isArray(issueItems) ? issueItems : woLookupIssueItems;
+
+      setWOLookupIssueItems(pickedIssueItems);
+      await applyPickedWOReferenceItem(workOrder, pickedIssueItems);
+      return;
+    }
+
     if (!workOrder) return;
-    await applyWOReference(workOrder, woLookupIssueItems);
+    await applyPickedWOReferenceItem(workOrder, woLookupIssueItems);
   };
 
 

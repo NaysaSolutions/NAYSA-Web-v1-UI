@@ -661,6 +661,7 @@ const SearchWOIS = ({
       action: "load-all",
       workOrder: selectedWO,
       item: selectedItem,
+      issueItems,
       inventory: displayedInventoryRows,
     });
   };
@@ -1268,7 +1269,7 @@ const SearchWOIS = ({
                   <div className="flex shrink-0 items-center gap-2">
                     <ActionButton
                       icon={faWarehouse}
-                      label="Load Only"
+                      label="Load"
                       onClick={handleLoadAll}
                       disabled={!selectedWO}
                       variant="secondary"
