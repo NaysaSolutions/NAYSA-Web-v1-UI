@@ -29,6 +29,7 @@ import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
+import WOLookupModal from "../../../Lookup/SearchWOIS.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import ItemBrandMatrixLookupModal from "../../../Lookup/SearchItemBrandMatrix.jsx";
@@ -144,6 +145,8 @@ useEffect(() => {
     branchCode: "HO",
     branchName: "Head Office",
 
+    tranType: "REG",
+
     // Responsibility Center / Requesting Dept
     // Responsibility Center / Requesting Dept
     reqRcCode: "",
@@ -170,6 +173,8 @@ useEffect(() => {
     vendCode: "",
     refPoNo1: "",
     refPrNo2: "",
+    woNo: "",
+    isOpenReferenceWO: false,
     remarks: "",
     billtermCode: "",
     billtermName: "",
@@ -211,6 +216,7 @@ useEffect(() => {
     showAccountModal: false,
     showRcModal: false,
     showSlModal: false,
+    showWOLookup: false,
     accountModalSource: null,
     // Modal flags
     warehouseLookupOpen: false,
@@ -227,6 +233,9 @@ useEffect(() => {
     globalLookupRow: [],
     globalLookupHeader: [],
   });
+  const [woLookupIssueItems, setWOLookupIssueItems] = useState([]);
+  const [woLookupInventoryRows, setWOLookupInventoryRows] = useState([]);
+  const [woLookupLoading, setWOLookupLoading] = useState(false);
 
   const updateState = (updates) => {
     setState((prev) => ({ ...prev, ...updates }));
@@ -298,6 +307,7 @@ useEffect(() => {
     dateNeeded,
     refPoNo1,
     refPrNo2,
+    woNo,
     remarks,
     billtermCode,
     billtermName,
@@ -329,6 +339,7 @@ useEffect(() => {
     showAccountModal,
     showRcModal,
     showSlModal,
+    showWOLookup,
     accountModalSource,
     brandLookupOpen,
 
@@ -484,6 +495,8 @@ useEffect(() => {
       dateNeeded: today, // <-- DEFAULT TO TODAY
       refPoNo1: "",
       refPrNo2: "",
+      woNo: "",
+      isOpenReferenceWO: false,
       remarks: "",
       documentNo: "",
       documentID: "",
@@ -511,11 +524,13 @@ useEffect(() => {
       showAccountModal: false,
       showRcModal: false,
       showSlModal: false,
+      showWOLookup: false,
       showAllTranDocNo: false,
       accountModalSource: null,
       msLookupModalOpen: false,
       globalLookupRow: [],
       globalLookupHeader: [],
+      tranType: "REG",
       WHcode: "",
       WHname: "",
       locCode: "",
@@ -557,6 +572,37 @@ useEffect(() => {
       // optional: WHcode: row?.whCode ?? state.WHcode,
     });
   };
+
+  const handleTranTypeChange = (value) => {
+    const nextTranType = value || "REG";
+
+    if (nextTranType !== "PROD") {
+        updateState({
+            tranType: nextTranType,
+            woNo: "",
+            isOpenReferenceWO: false,
+            showWOLookup: false,
+
+            detailRows: state.isOpenReferenceWO
+                ? []
+                : state.detailRows,
+
+            detailRowsGL: state.isOpenReferenceWO
+                ? []
+                : state.detailRowsGL,
+        });
+
+        if (state.isOpenReferenceWO) {
+            updateTotalsDisplay(0);
+        }
+
+        return;
+    }
+
+    updateState({
+        tranType: nextTranType,
+    });
+};
 
   const replicateFirstRowValueToBlankRows = async (
     rows,
@@ -844,12 +890,21 @@ useEffect(() => {
         documentID: "",
         documentStatus: "",
         status: "OPEN",
+        tranType: getFirstValue(
+    data.tranType,
+    data.tran_type,
+    data.TRANTYPE,
+    data.TRAN_TYPE,
+    "REG"
+),
         isDocNoDisabled: false,
         isFetchDisabled: false,
         WHcode: "",
         WHname: "",
         locCode: "",
         locName: "",
+        woNo: "",
+        isOpenReferenceWO: false,
         detailRows: [],
         detailRowsGL: [],
       });
@@ -1017,6 +1072,8 @@ useEffect(() => {
         reqRcName: retrievedReqRcName || retrievedReqRcCode || "",
         refPoNo1: getFirstValue(data.refDocNo1, data.refNo1),
         refPrNo2: getFirstValue(data.refDocNo2, data.refNo2),
+        woNo: getFirstValue(data.woNo, data.wo_no, data.WO_NO),
+        isOpenReferenceWO: Boolean(getFirstValue(data.woNo, data.wo_no, data.WO_NO)),
         remarks: data.remarks || "",
         WHcode: retrievedWhCode || "",
         WHname: retrievedWhName || retrievedWhCode || "",
@@ -1068,6 +1125,107 @@ useEffect(() => {
     return [];
   };
 
+  const getApiErrorMessage = (error) =>
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.message ||
+    "Unknown server error";
+
+  const getWOIssueInventoryType = (issueItem = {}) => {
+    const rawType = String(
+      getFirstValue(
+        issueItem.invType,
+        issueItem.INV_TYPE,
+        issueItem.type,
+        issueItem.TYPE,
+        issueItem.inventoryType,
+        issueItem.INVENTORY_TYPE,
+        "FG",
+      )
+    ).trim().toUpperCase();
+
+    if (rawType.includes("RM") || rawType.includes("RAW")) return "RM";
+    if (rawType.includes("MS") || rawType.includes("MATERIAL") || rawType.includes("SUPPL")) return "MS";
+    if (rawType.includes("VE") || rawType.includes("VEHICLE")) return "VE";
+    return "FG";
+  };
+
+  const getWOIssueInventoryLookupEndpoint = (issueItem = {}) => {
+    const invType = getWOIssueInventoryType(issueItem);
+
+    return {
+      FG: "getInvLookupFG",
+      RM: "getInvLookupRM",
+      MS: "getInvLookupMS",
+      VE: "getInvLookupVE",
+    }[invType] || "getInvLookupFG";
+  };
+
+  const normalizeWOInventoryRow = (row = {}, index = 0, issueItem = {}) => {
+    const qtyHandValue = getFirstValue(row.qtyHand, row.QTY_HAND, row.qtyOnHand, row.QTY_ON_HAND, row.onHandQty, row.ON_HAND_QTY, 0);
+    const qtyAllocatedValue = getFirstValue(row.qtyAllocated, row.QTY_ALLOCATED, row.qtyAlloc, row.allocatedQty, row.ALLOCATED_QTY, 0);
+    const qtyAvailableValue = getFirstValue(row.qtyAvailable, row.QTY_AVAILABLE, row.remainingAvailable, row.REMAINING_AVAILABLE, qtyHandValue);
+    const qtyPickedValue = getFirstValue(row.qtyPicked, row.QTY_PICKED, row.pickQty, row.PICK_QTY, 0);
+
+    return {
+      ...row,
+      lnNo: getFirstValue(row.lnNo, row.lineNo, row.line_no, row.priorityNo, index + 1),
+      itemCode: getFirstValue(row.itemCode, row.item_code, row.ITEM_CODE, issueItem.itemCode),
+      whCode: getFirstValue(row.whCode, row.WH_CODE, row.whouseCode, row.warehouseCode, state.WHcode),
+      whouseCode: getFirstValue(row.whouseCode, row.whCode, row.warehouseCode, state.WHcode),
+      locCode: getFirstValue(row.locCode, row.LOC_CODE, row.locationCode, state.locCode),
+      lotNo: getFirstValue(row.lotNo, row.LOT_NO),
+      controlNo: getFirstValue(row.controlNo, row.CONTROL_NO, row.uniqueKey, row.unique_key),
+      bbDate: formatDateOnly(getFirstValue(row.bbDate, row.BB_DATE, row.bestBeforeDate)),
+      qcStatus: getFirstValue(row.qcStatus, row.QC_STATUS, row.qualityStatus, row.qstatCode, row.QSTAT_CODE),
+      qtyHand: formatNumber(qtyHandValue, 6),
+      qtyOnHand: formatNumber(qtyHandValue, 6),
+      onHandQty: formatNumber(qtyHandValue, 6),
+      qtyAllocated: formatNumber(qtyAllocatedValue, 6),
+      allocatedQty: formatNumber(qtyAllocatedValue, 6),
+      qtyAvailable: formatNumber(qtyAvailableValue, 6),
+      remainingAvailable: formatNumber(qtyAvailableValue, 6),
+      qtyPicked: formatNumber(qtyPickedValue, 6),
+      pickQty: formatNumber(qtyPickedValue, 6),
+      balance: formatNumber(
+        getFirstValue(
+          row.balance,
+          row.BALANCE,
+          (parseFormattedNumber(qtyAvailableValue) || 0) - (parseFormattedNumber(qtyPickedValue) || 0),
+        ),
+        6,
+      ),
+    };
+  };
+
+  const getWOIssueStockRows = async (issueItem = {}, index = 0) => {
+    const endpoint = getWOIssueInventoryLookupEndpoint(issueItem);
+    const issueItemCode = String(issueItem.itemCode || "").trim();
+
+    const response = await fetchDataJson(endpoint, {
+      userCode: state.userCode || user?.USER_CODE || user?.userCode || "",
+      branchCode: state.branchCode || "",
+      whouseCode: state.WHcode || "",
+      locCode: state.locCode || "",
+      itemCode: issueItemCode,
+      docType: "FGIS",
+      tranType: "IL",
+    });
+
+    return parseLookupResultRows(response)
+      .filter((row) => {
+        const rowItemCode = String(
+          getFirstValue(row.itemCode, row.item_code, row.ITEM_CODE)
+        ).trim();
+        const qtyHand = parseFormattedNumber(
+          getFirstValue(row.qtyHand, row.QTY_HAND, row.qtyOnHand, row.QTY_ON_HAND, row.onHandQty, row.ON_HAND_QTY, 0)
+        ) || 0;
+
+        return (!issueItemCode || rowItemCode === issueItemCode) && qtyHand > 0;
+      })
+      .map((row, rowIndex) => normalizeWOInventoryRow(row, rowIndex, issueItem));
+  };
+
   const getItemCategoryCode = (item) =>
     pickFirstValue(
       item?.categCode,
@@ -1077,16 +1235,38 @@ useEffect(() => {
       item?.CATEGORY_CODE,
       item?.itemCategCode,
       item?.ITEM_CATEG_CODE,
+      item?.fgCategCode,
+      item?.fgcategCode,
+      item?.FGCATEG_CODE,
+      item?.rmCategCode,
+      item?.rmcategCode,
+      item?.RMCATEG_CODE,
+      item?.msCategCode,
+      item?.mscategCode,
+      item?.MSCATEG_CODE,
     );
 
   const getDefaultDrAccountFromItem = (item) => ({
-    // Default DR Account comes from ms_categ.EXPACCT_CODE based on the selected item's category.
+    // Default DR Account comes from the category inventory account based on the selected item's category.
     // The field remains editable in Item Detail after defaulting.
     code: pickFirstValue(
       item?.drAcctCode,
       item?.DRACCT_CODE,
       item?.defaultDrAcctCode,
       item?.DEFAULT_DRACCT_CODE,
+      item?.invAcct,
+      item?.inv_acct,
+      item?.INV_ACCT,
+      item?.invAcctCode,
+      item?.invacctCode,
+      item?.invacct_code,
+      item?.inv_acct_code,
+      item?.INVACCT_CODE,
+      item?.INV_ACCT_CODE,
+      item?.inventoryAcct,
+      item?.inventoryAcctCode,
+      item?.INVENTORY_ACCT,
+      item?.INVENTORY_ACCT_CODE,
       item?.expAcctCode,
       item?.expacctCode,
       item?.EXPACCT_CODE,
@@ -1106,6 +1286,14 @@ useEffect(() => {
       item?.DRACCT_NAME,
       item?.defaultDrAcctName,
       item?.DEFAULT_DRACCT_NAME,
+      item?.invAcctName,
+      item?.invacctName,
+      item?.invacct_name,
+      item?.inv_acct_name,
+      item?.INVACCT_NAME,
+      item?.INV_ACCT_NAME,
+      item?.inventoryAcctName,
+      item?.INVENTORY_ACCT_NAME,
       item?.expAcctName,
       item?.expacctName,
       item?.EXPACCT_NAME,
@@ -1122,23 +1310,39 @@ useEffect(() => {
     ),
   });
 
-  const fetchDefaultDrAccountByCategory = async (categCode) => {
+  const getCategoryAccountEndpoint = (item = {}) => {
+    const invType = getWOIssueInventoryType(item);
+
+    return {
+      FG: "getFGCategoryAccount",
+      RM: "getRMCategoryAccount",
+      MS: "getMSCategoryAccount",
+    }[invType] || "getFGCategoryAccount";
+  };
+
+  const fetchDefaultDrAccountByCategory = async (categCode, item = {}) => {
     const category = String(categCode || "").trim();
     if (!category) return { code: "", name: "" };
 
-    if (categoryAccountCacheRef.current[category]) {
-      return categoryAccountCacheRef.current[category];
+    const endpoint = getCategoryAccountEndpoint(item);
+    const cacheKey = `${endpoint}:${category}`;
+
+    if (categoryAccountCacheRef.current[cacheKey]) {
+      return categoryAccountCacheRef.current[cacheKey];
     }
 
     try {
-      // Backend should return ms_categ.expacct_code and the COA name for the selected category.
-      // Suggested endpoint payload: { categCode: "OS" }
-      const response = await fetchDataJson("getFGCategoryAccount", { categCode: category });
+      const response = await fetchDataJson(endpoint, {
+        categCode: category,
+        rmcategCode: category,
+        mscategCode: category,
+        fgcategCode: category,
+      });
       const rows = parseLookupResultRows(response);
       const row = rows[0] || {};
       const account = getDefaultDrAccountFromItem(row);
 
-      categoryAccountCacheRef.current[category] = account;
+      categoryAccountCacheRef.current[cacheKey] = account;
       return account;
     } catch (error) {
       console.warn(`Unable to fetch default DR Account for category ${category}:`, error);
@@ -1151,7 +1355,7 @@ useEffect(() => {
     if (accountFromLookup.code) return accountFromLookup;
 
     const categoryCode = getItemCategoryCode(item);
-    return fetchDefaultDrAccountByCategory(categoryCode);
+    return fetchDefaultDrAccountByCategory(categoryCode, item);
   };
 
   const handleCloseFGLookup = async (selectedItems) => {
@@ -1315,6 +1519,8 @@ useEffect(() => {
 
   // When user clicks the "Add Line" button
   const handleAddRowClick = () => {
+    if (isFormDisabled || state.isOpenReferenceWO) return;
+
     // Block if RC or Requesting Dept is blank
     if (!rcCode || !reqRcCode) {
       Swal.fire({
@@ -1326,8 +1532,6 @@ useEffect(() => {
       });
       return;
     }
-
-    if (isFormDisabled) return;
 
     // Toggle dropdown
     setShowTypeDropdown((prev) => !prev);
@@ -1376,7 +1580,7 @@ useEffect(() => {
   };
 
   const handleOpenFGLookup = async () => {
-    if (isFormDisabled) return;
+    if (isFormDisabled || state.isOpenReferenceWO) return;
 
     if (!state.WHcode) {
       Swal.fire({
@@ -1739,6 +1943,8 @@ useEffect(() => {
         documentID,
         header,
 
+        tranType,
+
         cutoffCode,
         rcCode,
         reqRcCode,
@@ -1750,6 +1956,7 @@ useEffect(() => {
         locName,
 
         attention,
+        woNo,
         vendCode,
         vendName,
 
@@ -1766,9 +1973,11 @@ useEffect(() => {
         fgisNo: documentID ? documentNo || "" : "",
         fgisId: documentID || "",
         fgisDate: header?.rr_date || new Date().toISOString().split("T")[0],
+        tranType: tranType || "REG",
         cutoffCode: cutoffCode || "",
 
         refNo: attention || "",
+        woNo: woNo || "",
         rcCode: rcCode || "",
         reqRcCode: reqRcCode || "",
         reqRcName: reqRcName || "",
@@ -2212,6 +2421,452 @@ useEffect(() => {
         });
       }
     }
+  };
+
+  const parseWOResponse = (response) => {
+    const unwrap = (value) => {
+      if (value?.data?.data) return unwrap(value.data.data);
+      if (value?.data) return unwrap(value.data);
+      if (Array.isArray(value) && value[0]?.result !== undefined) return unwrap(value[0].result);
+      if (value?.result !== undefined) return unwrap(value.result);
+
+      if (typeof value === "string") {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return [];
+        }
+      }
+
+      return value;
+    };
+
+    const parsed = unwrap(response);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object") return [parsed];
+    return [];
+  };
+
+  const parseWOGetResponse = (response) => {
+    const unwrap = (value) => {
+      if (value?.data?.data !== undefined) return unwrap(value.data.data);
+      if (value?.data !== undefined) return unwrap(value.data);
+      if (Array.isArray(value) && value[0]?.result !== undefined) return unwrap(value[0].result);
+      if (value?.result !== undefined) return unwrap(value.result);
+
+      if (typeof value === "string") {
+        try {
+          return unwrap(JSON.parse(value));
+        } catch {
+          return {};
+        }
+      }
+
+      return value || {};
+    };
+
+    const parsed = unwrap(response);
+    const header = parsed?.hd || parsed?.header || parsed;
+    const details =
+      parsed?.dt1 ||
+      parsed?.detail ||
+      parsed?.details ||
+      header?.dt1 ||
+      header?.detail ||
+      header?.details ||
+      [];
+
+    return {
+      header,
+      details: Array.isArray(details) ? details : [],
+    };
+  };
+
+  const normalizeWODetailRow = (row = {}, index = 0) => {
+    const quantityValue = getFirstValue(
+      row.quantity,
+      row.QUANTITY,
+      row.qty,
+      row.QTY,
+      row.requiredQty,
+      row.REQUIRED_QTY,
+      row.qtyNeeded,
+      row.QTY_NEEDED,
+      row.unservedQty,
+      row.UNSERVED_QTY,
+      row.worQty,
+      row.WOR_QTY,
+      row.remainingQty,
+      row.REMAINING_QTY,
+    ) || 0;
+    const unitCostValue = getFirstValue(row.unitCost, row.unit_cost, row.UNIT_COST, row.woUnitCost, row.WO_UNITCOST) || 0;
+    const itemAmountValue =
+      getFirstValue(row.itemAmount, row.item_amount, row.ITEM_AMOUNT, row.amount, row.AMOUNT) ||
+      (parseFormattedNumber(quantityValue || 0) || 0) * (parseFormattedNumber(unitCostValue || 0) || 0);
+
+    return {
+      ...row,
+      lnNo: getFirstValue(row.lnNo, row.lineNo, row.line_no, index + 1),
+      itemCode: getFirstValue(row.itemCode, row.item_code, row.ITEM_CODE, row.itemNo, row.ITEM_NO),
+      itemName: getFirstValue(row.itemName, row.itemDesc, row.item_name, row.ITEM_NAME, row.ITEM_DESC),
+      brandCode: getFirstValue(row.brandCode, row.brand_code, row.BRAND_CODE),
+      brandName: getFirstValue(row.brandName, row.brand_name, row.BRAND_NAME),
+      categCode: getFirstValue(row.categCode, row.categ_code, row.CATEG_CODE),
+      uomCode: getFirstValue(row.uomCode, row.uom_code, row.UOM_CODE),
+      quantity: formatNumber(quantityValue, 6),
+      unitCost: formatNumber(unitCostValue, 6),
+      amount: formatNumber(itemAmountValue, 2),
+      itemAmount: formatNumber(itemAmountValue, 2),
+      lotNo: getFirstValue(row.lotNo, row.lot_no, row.LOT_NO),
+      qstatCode: getFirstValue(row.qstatCode, row.qsCode, row.qstat_code, row.QSTAT_CODE),
+      itemStat: getFirstValue(row.itemStat, row.qstatCode, row.qsCode, row.qstat_code, row.QSTAT_CODE),
+      bbDate: formatDateOnly(getFirstValue(row.bbDate, row.bb_date, row.BB_DATE)),
+      qtyHand: formatNumber(getFirstValue(row.qtyHand, row.qty_hand, row.qtyOnHand, row.onHandQty, row.qtyAvailable, row.remainingAvailable, row.QTY_HAND, quantityValue), 6),
+      qtyOnHand: formatNumber(getFirstValue(row.qtyOnHand, row.qtyHand, row.onHandQty, row.qtyAvailable, row.remainingAvailable, row.qty_hand, row.QTY_ON_HAND, quantityValue), 6),
+      qtyPicked: formatNumber(getFirstValue(row.qtyPicked, row.quantityPicked, row.qty_picked, row.QTY_PICKED, 0), 6),
+      quantityPicked: formatNumber(getFirstValue(row.quantityPicked, row.qtyPicked, row.qty_picked, row.QTY_PICKED, 0), 6),
+      balance: formatNumber(getFirstValue(row.balance, row.BALANCE, Math.max((parseFormattedNumber(quantityValue) || 0) - (parseFormattedNumber(getFirstValue(row.qtyPicked, row.quantityPicked, 0)) || 0), 0)), 6),
+      pickingAllocations: Array.isArray(row.pickingAllocations) ? row.pickingAllocations : [],
+      whouseCode: getFirstValue(row.whouseCode, row.whCode, row.whouse_code, row.WHCode, state.WHcode),
+      whouseName: getFirstValue(row.whouseName, row.whName, row.whouse_name, row.WHName, state.WHname),
+      locCode: getFirstValue(row.locCode, row.LocCode, row.loc_code, state.locCode),
+      locName: getFirstValue(row.locName, row.LocName, row.loc_name, state.locName),
+      acctCode: getFirstValue(row.acctCode, row.acct_code, row.drAcctCode, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
+      drAcctCode: getFirstValue(row.drAcctCode, row.acctCode, row.acct_code, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
+      drAcctName: getFirstValue(row.drAcctName, row.acctName, row.acct_name, row.invAcctName, row.invacctName, row.invacct_name, row.INVACCT_NAME),
+      rcCode: getFirstValue(row.rcCode, row.rc_code, state.rcCode),
+      slTypeCode: getFirstValue(row.slTypeCode, row.sltypeCode, row.sltype_code),
+      sltypeCode: getFirstValue(row.sltypeCode, row.slTypeCode, row.sltype_code),
+      slCode: getFirstValue(row.slCode, row.sl_code),
+      groupId: getFirstValue(row.groupId, row.group_id),
+      uniqueKey: getFirstValue(row.uniqueKey, row.unique_key),
+      operation: row.operation || "S",
+    };
+  };
+
+  const applyWOReference = async (header, detailRowsFromResponse = null) => {
+    if (!header) return;
+
+    const rows = Array.isArray(detailRowsFromResponse)
+      ? detailRowsFromResponse
+      : header?.dt1 || header?.details || header?.detailRows || [];
+    const woStatus = String(getFirstValue(header.woStatus, header.WO_STATUS)).toUpperCase();
+
+    if (woStatus && !["O", "R"].includes(woStatus)) {
+      Swal.fire({
+        icon: "warning",
+        title: "Invalid WO Status",
+        text: "Only open or released Work Orders are allowed for FGIS.",
+      });
+      return;
+    }
+
+    const selectedWoNo = getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO) || state.woNo;
+    const normalizedRowsBase = Array.isArray(rows)
+      ? rows.map((row, index) => normalizeWODetailRow(row, index))
+      : state.detailRows;
+
+    const normalizedRows = await Promise.all(
+      normalizedRowsBase.map(async (row) => {
+        if (row.drAcctCode) return row;
+
+        const defaultDrAccount = await resolveDefaultDrAccount(row);
+        return {
+          ...row,
+          drAcctCode: defaultDrAccount.code || "",
+          drAcctName: defaultDrAccount.name || "",
+          acctCode: defaultDrAccount.code || row.acctCode || "",
+        };
+      })
+    );
+    const totalQty = normalizedRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.quantity ?? row.qtyNeeded ?? 0) || 0),
+      0,
+    );
+
+    updateTotalsDisplay(totalQty);
+    updateState({
+      woNo: selectedWoNo,
+      isOpenReferenceWO: true,
+      remarks: getFirstValue(header.remarks, header.particular, header.PARTICULAR) || state.remarks,
+      detailRows: normalizedRows.map((row, index) => ({ ...row, lnNo: index + 1 })),
+      detailRowsGL: [],
+      showWOLookup: false,
+    });
+    setShowTypeDropdown(false);
+  };
+
+  const getWODetailIdentity = (row = {}, index = 0) => {
+    const groupId = getFirstValue(row.groupId, row.group_id, row.GROUP_ID);
+    if (groupId) return `group:${groupId}`;
+
+    const uniqueKey = getFirstValue(row.uniqueKey, row.unique_key, row.UNIQUE_KEY);
+    if (uniqueKey) return `key:${uniqueKey}`;
+
+    const lineNo = getFirstValue(row.lnNo, row.lineNo, row.line_no, row.LINE_NO, index + 1);
+    const itemCode = getFirstValue(row.itemCode, row.item_code, row.ITEM_CODE);
+    return `line:${lineNo}|item:${itemCode}`;
+  };
+
+  const resolveDetailRowAccount = async (row) => {
+    if (row.drAcctCode) return row;
+
+    const defaultDrAccount = await resolveDefaultDrAccount(row);
+    return {
+      ...row,
+      drAcctCode: defaultDrAccount.code || "",
+      drAcctName: defaultDrAccount.name || "",
+      acctCode: defaultDrAccount.code || row.acctCode || "",
+    };
+  };
+
+  const applyPickedWOIssueItem = async (header, issueItem, itemIndex = 0) => {
+    if (!header || !issueItem) return;
+
+    const woStatus = String(getFirstValue(header.woStatus, header.WO_STATUS)).toUpperCase();
+    if (woStatus && !["O", "R"].includes(woStatus)) {
+      Swal.fire({
+        icon: "warning",
+        title: "Invalid WO Status",
+        text: "Only open or released Work Orders are allowed for FGIS.",
+      });
+      return;
+    }
+
+    const selectedWoNo =
+      getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO) ||
+      state.woNo;
+    const pickedRow = await resolveDetailRowAccount(normalizeWODetailRow(issueItem, itemIndex));
+    const pickedIdentity = getWODetailIdentity(pickedRow, itemIndex);
+    const currentRows = Array.isArray(state.detailRows) ? state.detailRows : [];
+    let didReplace = false;
+
+    const mergedRows = currentRows.map((row, index) => {
+      if (getWODetailIdentity(row, index) !== pickedIdentity) return row;
+      didReplace = true;
+      return {
+        ...row,
+        ...pickedRow,
+        lnNo: row.lnNo || pickedRow.lnNo,
+      };
+    });
+
+    if (!didReplace) {
+      mergedRows.push(pickedRow);
+    }
+
+    const numberedRows = mergedRows.map((row, index) => ({ ...row, lnNo: index + 1 }));
+    const totalQty = numberedRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.quantity ?? row.qtyNeeded ?? 0) || 0),
+      0,
+    );
+
+    updateTotalsDisplay(totalQty);
+    updateState({
+      woNo: selectedWoNo,
+      isOpenReferenceWO: true,
+      remarks: getFirstValue(header.remarks, header.particular, header.PARTICULAR) || state.remarks,
+      detailRows: numberedRows,
+      detailRowsGL: [],
+    });
+    setShowTypeDropdown(false);
+  };
+
+  const fetchWOReference = async (selectedWO = null) => {
+    const selectedWoNo =
+      typeof selectedWO === "string"
+        ? selectedWO
+        : getFirstValue(selectedWO?.woNo, selectedWO?.WO_NO, selectedWO?.WoNo, selectedWO?.WONo, selectedWO?.wo_no, selectedWO?.worNo, selectedWO?.WOR_NO);
+    const selectedBranchCode = getFirstValue(selectedWO?.branchCode, selectedWO?.BRANCH_CODE) || state.branchCode;
+
+    if (!selectedBranchCode) {
+      Swal.fire({ icon: "info", title: "Branch Required", text: "Please select a branch first before opening Reference WO." });
+      return;
+    }
+
+    const woNoToLoad = selectedWoNo || state.woNo;
+
+    if (!woNoToLoad) {
+      updateState({ showWOLookup: true });
+      return null;
+    }
+
+    const response = await postRequest("getWO", {
+      branchCode: selectedBranchCode,
+      woNo: woNoToLoad,
+      woId: getFirstValue(selectedWO?.woId, selectedWO?.WO_ID),
+      whouseCode: state.WHcode,
+      locCode: state.locCode,
+    });
+
+    const { header, details } = parseWOGetResponse(response);
+
+    if (!header || response?.success === false) {
+      Swal.fire({
+        icon: "info",
+        title: "No Records",
+        text: response?.message || "Work Order was not found.",
+      });
+      return null;
+    }
+
+    return {
+      header: {
+        ...selectedWO,
+        ...header,
+        woNo: getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO) || woNoToLoad,
+        branchCode: selectedBranchCode,
+      },
+      details,
+    };
+  };
+
+  const loadWOReference = async (selectedWO = null) => {
+    updateState({ isLoading: true });
+
+    try {
+      const reference = await fetchWOReference(selectedWO);
+      if (!reference) return;
+
+      await applyWOReference(
+        reference.header,
+        reference.details,
+      );
+    } catch (error) {
+      console.error("FGIS WO load error:", error);
+      Swal.fire({ icon: "error", title: "WO Load Failed", text: error?.message || "Unable to load Work Order." });
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleOpenWOReferenceLookup = () => {
+    if (isFormDisabled || state.isOpenReferenceWO) return;
+
+    if (state.tranType !== "PROD") {
+        Swal.fire({
+            icon: "info",
+            title: "Production Only",
+            text: "Open Reference Work Order is only available for Production transactions.",
+        });
+        return;
+    }
+
+    if (!state.branchCode) {
+        Swal.fire({
+            icon: "info",
+            title: "Branch Required",
+            text: "Please select a branch first before opening Reference WO.",
+        });
+        return;
+    }
+
+    setWOLookupIssueItems([]);
+    setWOLookupInventoryRows([]);
+    updateState({ showWOLookup: true });
+    setShowTypeDropdown(false);
+};
+
+  const handleSelectWOLookupPreview = async (row) => {
+    if (!row) return;
+
+    if (row?.dt1 || row?.details || row?.detailRows) {
+      const rows = row?.dt1 || row?.details || row?.detailRows || [];
+      setWOLookupIssueItems(rows.map((detailRow, index) => normalizeWODetailRow(detailRow, index)));
+      setWOLookupInventoryRows([]);
+      return;
+    }
+
+    setWOLookupLoading(true);
+
+    try {
+      const reference = await fetchWOReference(row);
+      const rows = Array.isArray(reference?.details)
+        ? reference.details
+        : reference?.header?.dt1 || reference?.header?.details || reference?.header?.detailRows || [];
+
+      setWOLookupIssueItems(rows.map((detailRow, index) => normalizeWODetailRow(detailRow, index)));
+      setWOLookupInventoryRows([]);
+    } catch (error) {
+      console.error("FGIS WO preview error:", error);
+      setWOLookupIssueItems([]);
+      setWOLookupInventoryRows([]);
+      Swal.fire({ icon: "error", title: "WO Preview Failed", text: error?.message || "Unable to load Work Order issue items." });
+    } finally {
+      setWOLookupLoading(false);
+    }
+  };
+
+  const handleSelectWOIssueItemPreview = async (item, index = 0) => {
+    if (!item?.itemCode) {
+      setWOLookupInventoryRows([]);
+      return;
+    }
+
+    setWOLookupLoading(true);
+
+    try {
+      const normalizedRows = await getWOIssueStockRows(item, index);
+      const totalQtyOnHand = normalizedRows.reduce(
+        (sum, row) => sum + (parseFormattedNumber(row.qtyHand) || 0),
+        0,
+      );
+
+      setWOLookupInventoryRows(normalizedRows);
+      setWOLookupIssueItems((prevRows) =>
+        prevRows.map((row, rowIndex) => {
+          const sameRow =
+            rowIndex === index ||
+            String(row.itemCode || "") === String(item.itemCode || "");
+
+          if (!sameRow) return row;
+
+          return {
+            ...row,
+            qtyHand: formatNumber(totalQtyOnHand, 6),
+            qtyOnHand: formatNumber(totalQtyOnHand, 6),
+          };
+        })
+      );
+    } catch (error) {
+      console.error("FGIS WO item availability error:", error);
+      setWOLookupInventoryRows([]);
+      Swal.fire({
+        icon: "error",
+        title: `${getWOIssueInventoryType(item)} Location Balance`,
+        text: getApiErrorMessage(error),
+      });
+    } finally {
+      setWOLookupLoading(false);
+    }
+  };
+
+  const handleApplyWOLookup = async ({ action, workOrder, item, selectedItemIndex, issueItems, inventory } = {}) => {
+    if (action === "reset") {
+      setWOLookupIssueItems([]);
+      setWOLookupInventoryRows([]);
+      return;
+    }
+
+    if (["manual-pick", "auto-pick"].includes(action)) {
+      if (!workOrder) return;
+      const pickedIssueItems = Array.isArray(issueItems) ? issueItems : woLookupIssueItems;
+      const pickedItem =
+        item ||
+        (selectedItemIndex !== undefined && selectedItemIndex !== null
+          ? pickedIssueItems[selectedItemIndex]
+          : null);
+
+      if (!pickedItem) return;
+
+      setWOLookupIssueItems(pickedIssueItems);
+      await applyPickedWOIssueItem(workOrder, pickedItem, selectedItemIndex ?? 0);
+      setWOLookupInventoryRows([]);
+      return;
+    }
+
+    if (!workOrder) return;
+    await applyWOReference(workOrder, woLookupIssueItems);
   };
 
 
@@ -2813,10 +3468,33 @@ useEffect(() => {
                   disabled={isFormDisabled}
                   onChange={(val) => updateState({ attention: val })}
                 />
+
+                <FieldRenderer
+                  id="woNo"
+                  label="Work Order No."
+                  type="text"
+                  value={woNo || ""}
+                  readOnly
+                  disabled
+                />
               </div>
 
               {/* Column 2 */}
               <div className="global-tran-textbox-group-div-ui">
+
+    <FieldRenderer
+        id="tranType"
+        label="Tran Type"
+        type="select"
+        required
+        value={state.tranType || "REG"}
+        disabled={isFormDisabled || state.isOpenReferenceWO}
+        options={[
+            { value: "REG", label: "Regular" },
+            { value: "PROD", label: "Production" },
+        ]}
+        onChange={handleTranTypeChange}
+    />
                 <FieldRenderer
                   id="rcName"
                   label="Responsibility Center"
@@ -2834,6 +3512,8 @@ useEffect(() => {
                     })
                   }
                 />
+
+                
 
                 <FieldRenderer
                   id="reqRcName"
@@ -2991,13 +3671,16 @@ useEffect(() => {
                           style={transactionActionsCellStyle}
                         >
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              className="global-tran-td-button-add-ui"
-                              onClick={() => handleAddBlankRow(originalIndex)}
-                            >
-                              <FontAwesomeIcon icon={faPlus} />
-                            </button>
+                            {!state.isOpenReferenceWO && (
+                              <button
+                                type="button"
+                                className="global-tran-td-button-add-ui"
+                                onClick={() => handleAddBlankRow(originalIndex)}
+                                disabled={state.isOpenReferenceWO}
+                              >
+                                <FontAwesomeIcon icon={faPlus} />
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="global-tran-td-button-delete-ui"
@@ -3019,16 +3702,79 @@ useEffect(() => {
           {/* Detail Footer: Add Button + Total */}
           <div className="global-tran-tab-footer-main-div-ui">
             <div className="global-tran-tab-footer-button-div-ui">
-              <div className="inline-block">
+              <div className="relative inline-block">
+                {showTypeDropdown && !state.isOpenReferenceWO && (
+                  <div className="absolute bottom-[110%] left-0 z-[9999] mb-2 w-[220px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] dark:border-slate-700 dark:bg-slate-800">
+                    <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
+                        Add Item
+                      </div>
+                    </div>
+
+                    <div className="p-1.5">
+                      <button
+                        type="button"
+                        className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+                        onClick={handleOpenFGLookup}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                            <FontAwesomeIcon icon={faPlus} />
+                          </span>
+                          <div className="flex flex-col items-start">
+                            <span>Finished Goods</span>
+                            <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                              Add FG item
+                            </span>
+                          </div>
+                        </div>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                          FG
+                        </span>
+                      </button>
+
+                      {state.tranType === "PROD" && detailRows.length === 0 && (
+    <>
+        <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
+
+        <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+            onClick={handleOpenWOReferenceLookup}
+        >
+            <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                    <FontAwesomeIcon icon={faSearch} />
+                </span>
+
+                <div className="flex flex-col items-start">
+                    <span>Open Reference WO</span>
+                    <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                        Pull items from WO
+                    </span>
+                </div>
+            </div>
+
+            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                WO
+            </span>
+        </button>
+    </>
+)}
+                    </div>
+                  </div>
+                )}
+
                 <button
-                  onClick={handleOpenFGLookup}
-                  disabled={isFormDisabled || !rcCode || !reqRcCode || !state.WHcode}
+                  type="button"
+                  onClick={handleAddRowClick}
+                  disabled={isFormDisabled || state.isOpenReferenceWO || !rcCode || !reqRcCode}
                   className={`global-tran-tab-footer-button-add-ui ${
-                    isFormDisabled || !rcCode || !reqRcCode || !state.WHcode
+                    isFormDisabled || state.isOpenReferenceWO || !rcCode || !reqRcCode
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
-                  style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                  style={{ visibility: (isFormDisabled || state.isOpenReferenceWO) ? "hidden" : "visible" }}
                 >
                   <FontAwesomeIcon icon={faPlus} className="mr-2" />
                   Add
@@ -3262,6 +4008,42 @@ useEffect(() => {
           onResponse={{ documentNo }}
           onSelected={handleTranDocNoSelection}
           onClose={() => updateState({ showAllTranDocNo: false })}
+        />
+      )}
+
+      {showWOLookup && (
+        <WOLookupModal
+          isOpen={showWOLookup}
+          branchCode={state.branchCode || ""}
+          whouseCode={state.WHcode || ""}
+          locCode={state.locCode || ""}
+          endpoint="getFGISWO"
+          requestMethod="post"
+          docType="FGIS"
+          moduleLabel="FGIS"
+          documentID={documentID || ""}
+          documentNo={documentNo || ""}
+          userCode={state.userCode || user?.USER_CODE || user?.userCode || ""}
+          title="Search Work Order"
+          subtitle="Open or released Work Orders with remaining quantity"
+          noRecordMessage="No Work Order available for FGIS."
+          tipMessage="Tip: click a Work Order to preview its issue-slip item details."
+          issueItems={woLookupIssueItems}
+          inventoryRows={woLookupInventoryRows}
+          loading={woLookupLoading}
+          onSelectWorkOrder={handleSelectWOLookupPreview}
+          onSelectIssueItem={handleSelectWOIssueItemPreview}
+          onApply={handleApplyWOLookup}
+          onClose={() => {
+            setWOLookupIssueItems([]);
+            setWOLookupInventoryRows([]);
+            updateState({ showWOLookup: false });
+          }}
+          onCancel={() => {
+            setWOLookupIssueItems([]);
+            setWOLookupInventoryRows([]);
+            updateState({ showWOLookup: false });
+          }}
         />
       )}
 
