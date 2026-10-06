@@ -627,7 +627,7 @@ const AppContent = () => {
     const params = new URLSearchParams(location.search);
     const page = params.get("page");
 
-    if (!["PRApprovalModal", "JOApprovalModal"].includes(page)) {
+    if (!["PRApprovalModal", "JOApprovalModal", "POApprovalModal", "CVApprovalModal"].includes(page)) {
       return;
     }
 

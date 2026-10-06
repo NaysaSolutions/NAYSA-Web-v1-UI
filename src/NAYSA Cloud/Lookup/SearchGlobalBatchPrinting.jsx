@@ -149,9 +149,19 @@ const SearchGlobalBatchPrinting = ({
     () => rows.length > 0 && selectedIds.length === rows.length,
     [rows, selectedIds],
   );
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedIds.includes(String(row.tranId))),
+    [rows, selectedIds],
+  );
+  const hasPendingApproval = useMemo(
+    () => selectedRows.some((row) => Number(row.approvalPending || 0) === 1),
+    [selectedRows],
+  );
   const hasDraftAvailable = useMemo(
-    () => rows.some((row) => Number(row.noReprints || 0) === 0),
-    [rows],
+    () => selectedRows.some(
+      (row) => Number(row.noReprints || 0) === 0 || Number(row.approvalPending || 0) === 1,
+    ),
+    [selectedRows],
   );
 
   const handleStartNoChange = (event) => {
@@ -219,14 +229,20 @@ const SearchGlobalBatchPrinting = ({
       return;
     }
 
-    const effectivePrintMode = selectedPrintMode || printMode;
+    const requestedPrintMode = selectedPrintMode || printMode;
+    const effectivePrintMode = requestedPrintMode === "Final" && hasPendingApproval
+      ? "Draft"
+      : requestedPrintMode;
     let transactionIdsToPrint = selectedIds;
 
     if (effectivePrintMode === "Draft") {
-      const selectedRows = rows.filter((row) => selectedIds.includes(String(row.tranId)));
-      const excludedRows = selectedRows.filter((row) => Number(row.noReprints || 0) > 0);
+      const excludedRows = selectedRows.filter(
+        (row) => Number(row.noReprints || 0) > 0 && Number(row.approvalPending || 0) !== 1,
+      );
       transactionIdsToPrint = selectedRows
-        .filter((row) => Number(row.noReprints || 0) === 0)
+        .filter(
+          (row) => Number(row.noReprints || 0) === 0 || Number(row.approvalPending || 0) === 1,
+        )
         .map((row) => String(row.tranId));
 
       if (excludedRows.length) {
@@ -428,16 +444,18 @@ const SearchGlobalBatchPrinting = ({
                   >
                     <FileText size={16} className="text-blue-500" /> Draft
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPrintMenuOpen(false);
-                      handlePrint("Final");
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    <CheckCircle size={16} className="text-blue-500" /> Final
-                  </button>
+                  {!hasPendingApproval && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrintMenuOpen(false);
+                        handlePrint("Final");
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <CheckCircle size={16} className="text-blue-500" /> Final
+                    </button>
+                  )}
                 </div>
               )}
               <button
