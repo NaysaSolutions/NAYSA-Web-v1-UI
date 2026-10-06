@@ -30,6 +30,7 @@ export const reftables = {
     BankMast: "Bank Master Data",
     BillCode: "Billing Codes",
     VendMast: "Payee Master Data",
+    RFPCodeRef: "Request for Payment Codes",
 
     JobCodeRef: "Job Codes",
     AgentRef: "Agent Codes",
