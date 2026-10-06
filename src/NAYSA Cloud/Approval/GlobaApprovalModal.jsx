@@ -296,6 +296,7 @@ const GlobalApprovalModal = forwardRef(
       title = "Approval",
       transactionLabel = "Transaction",
       documentName = transactionLabel,
+      totalLabel = "Total Transactions",
       approverName = "",
       approverImageSrc = "",
       approvalLevel = "",
@@ -998,7 +999,7 @@ const GlobalApprovalModal = forwardRef(
                 </div>
 
                 <div className="border-slate-200 text-right md:order-4 md:border-l md:pl-5">
-                  <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">Total PRs</div>
+                  <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">{totalLabel}</div>
                   <div className="text-[16px] font-bold leading-tight text-slate-900 md:text-[20px]">{statusCounts.total}</div>
                 </div>
 

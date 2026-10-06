@@ -583,6 +583,7 @@ const JOApprovalModal = ({
         title={transactionLabel}
         transactionLabel={transactionLabel}
         documentName={documentName}
+        totalLabel="Total JOs"
         approverName={effectiveApproverName}
         approverImageSrc={effectiveApproverImageSrc}
         approvalLevel={approvalLevel}

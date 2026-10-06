@@ -3103,6 +3103,7 @@ const renderCvGlCell = (columnKey, row, index) => {
         >
             Basic Information
         </button>
+        {!isViewDocument && (
         <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
           <button
             type="button"
@@ -3128,6 +3129,7 @@ const renderCvGlCell = (columnKey, row, index) => {
             </div>
           )}
         </div>
+        )}
     </div>
 
     {/* Header Form Section - Main Grid Container */}

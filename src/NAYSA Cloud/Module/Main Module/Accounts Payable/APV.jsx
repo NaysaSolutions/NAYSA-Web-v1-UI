@@ -4844,6 +4844,7 @@ const APV = () => {
             >
               Basic Information
             </button>
+            {!isViewDocument && (
             <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
               <button
                 type="button"
@@ -4879,6 +4880,7 @@ const APV = () => {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* APV Header Form Section */}

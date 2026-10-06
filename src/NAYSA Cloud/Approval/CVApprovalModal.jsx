@@ -607,6 +607,7 @@ const CVApprovalModal = ({
         title={transactionLabel}
         transactionLabel={transactionLabel}
         documentName={documentName}
+        totalLabel="Total CVs"
         approverName={effectiveApproverName}
         approverImageSrc={effectiveApproverImageSrc}
         approvalLevel={approvalLevel}

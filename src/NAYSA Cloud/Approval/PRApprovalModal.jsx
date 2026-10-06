@@ -583,6 +583,7 @@ const PRApprovalModal = ({
         title={transactionLabel}
         transactionLabel={transactionLabel}
         documentName={documentName}
+        totalLabel="Total PRs"
         approverName={effectiveApproverName}
         approverImageSrc={effectiveApproverImageSrc}
         approvalLevel={approvalLevel}

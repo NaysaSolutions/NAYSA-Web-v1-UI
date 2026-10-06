@@ -580,6 +580,7 @@ const POApprovalModal = ({
         title={transactionLabel}
         transactionLabel={transactionLabel}
         documentName={documentName}
+        totalLabel="Total POs"
         approverName={effectiveApproverName}
         approverImageSrc={effectiveApproverImageSrc}
         approvalLevel={approvalLevel}

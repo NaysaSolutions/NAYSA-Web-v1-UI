@@ -1287,6 +1287,7 @@ const APCM = () => {
             <button className={`global-tran-tab-padding-ui ${activeTab === 'basic' ? 'global-tran-tab-text_active-ui' : 'global-tran-tab-text_inactive-ui'}`}>
               Basic Information
             </button>
+            {!isViewDocument && (
             <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
               <button type="button" className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800" onClick={() => setShowOpenReferencesDropdown((current) => !current)} aria-expanded={showOpenReferencesDropdown} aria-label="Open References">
                 <FontAwesomeIcon icon={faFolderOpen} />Open References<FontAwesomeIcon icon={faChevronDown} className="text-xs" />
@@ -1299,6 +1300,7 @@ const APCM = () => {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative items-stretch" id="apcm_hd">
