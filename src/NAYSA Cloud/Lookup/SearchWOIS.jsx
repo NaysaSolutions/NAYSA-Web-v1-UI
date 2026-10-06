@@ -45,6 +45,7 @@ const SearchWOIS = ({
   onCancel,
   onSelectWorkOrder,
   onSelectIssueItem,
+  filterWorkOrders,
   onApply,
 
   // Same WO reference inputs used by SearchWO.jsx
@@ -185,13 +186,19 @@ const SearchWOIS = ({
     return "FG";
   };
 
+  const isFGIssueItem = (issueItem = {}) => getIssueInventoryType(issueItem) === "FG";
+
+  const getIssueItemCode = (issueItem = {}) =>
+    valueOf(issueItem, "itemCode", "ITEM_CODE", "item_code", "fgCode", "FG_CODE", "rmCode", "RM_CODE", "msCode", "MS_CODE");
+
+  const getIssueItemName = (issueItem = {}) =>
+    valueOf(issueItem, "itemName", "ITEM_NAME", "item_name", "itemDesc", "ITEM_DESC", "fgName", "FG_NAME", "rmName", "RM_NAME", "msName", "MS_NAME");
+
   const getAllocationEndpoint = (issueItem = {}) => {
     const invType = getIssueInventoryType(issueItem);
 
     return {
       FG: "getFGUpdateStockAllocation",
-      RM: "getRMUpdateStockAllocation",
-      MS: "getMSUpdateStockAllocation",
     }[invType];
   };
 
@@ -218,7 +225,9 @@ const SearchWOIS = ({
       ...row,
       id: valueOf(row, "id", "ID") || `${valueOf(row, "stockCardRefId", "STOCK_CARD_REF_ID") || index}`,
       lnNo: valueOf(row, "priorityNo", "lineNo", "LINE_NO") || index + 1,
-      itemCode: valueOf(row, "itemCode", "ITEM_CODE") || valueOf(issueItem, "itemCode", "ITEM_CODE"),
+      itemCode:
+        valueOf(row, "itemCode", "ITEM_CODE", "item_code", "fgCode", "FG_CODE") ||
+        getIssueItemCode(issueItem),
       whCode: valueOf(row, "warehouseCode", "whouseCode", "whCode", "WH_CODE"),
       whouseCode: valueOf(row, "warehouseCode", "whouseCode", "whCode", "WH_CODE"),
       warehouseCode: valueOf(row, "warehouseCode", "whouseCode", "whCode", "WH_CODE"),
@@ -269,7 +278,13 @@ const SearchWOIS = ({
           ? await postRequest(endpoint, payload)
           : await fetchDataJson(endpoint, payload);
 
-      setWorkOrders(toRows(response));
+      const rows = toRows(response);
+      const filteredRows =
+        typeof filterWorkOrders === "function"
+          ? await filterWorkOrders(rows)
+          : rows;
+
+      setWorkOrders(Array.isArray(filteredRows) ? filteredRows : rows);
     } catch (error) {
       console.error("SearchWOIS lookup error:", error);
       console.error(
@@ -314,7 +329,7 @@ const SearchWOIS = ({
     String(valueOf(issueItem, "groupId", "GROUP_ID", "group_id") || "").trim();
 
   const getLineNo = (issueItem = {}, index = selectedItemIndex) =>
-    Number(valueOf(issueItem, "lnNo", "lineNo", "LINE_NO") || Number(index ?? 0) + 1);
+    Number(valueOf(issueItem, "sourceWOLineNo", "sourceLineNo", "lnNo", "lineNo", "LINE_NO") || Number(index ?? 0) + 1);
 
   const buildAllocationBasePayload = (issueItem = selectedItem, index = selectedItemIndex) => ({
     docCode: docType || moduleLabel || "FGIS",
@@ -326,13 +341,19 @@ const SearchWOIS = ({
     locCode: locCode || "",
     groupId: getIssueGroupId(issueItem),
     lineNo: getLineNo(issueItem, index),
-    itemCode: valueOf(issueItem, "itemCode", "ITEM_CODE") || "",
+    itemCode: getIssueItemCode(issueItem) || "",
     requestedQty: getRequestedQty(issueItem),
     userCode,
     skipRegen: "Y",
   });
 
   const loadAllocationRows = async (issueItem, index = 0) => {
+    if (!isFGIssueItem(issueItem)) {
+      setAllocationRows([]);
+      setExistingAllocations([]);
+      return;
+    }
+
     const endpoint = getAllocationEndpoint(issueItem);
 
     if (!endpoint) {
@@ -442,11 +463,11 @@ const SearchWOIS = ({
 
     if (!selectedItem) return sourceRows;
 
-    const selectedItemCode = String(valueOf(selectedItem, "itemCode", "ITEM_CODE") || "").trim();
+    const selectedItemCode = String(getIssueItemCode(selectedItem) || "").trim();
     if (!selectedItemCode) return sourceRows;
 
     const rowsWithItemCode = sourceRows.filter((row) =>
-      String(valueOf(row, "itemCode", "ITEM_CODE") || "").trim() === selectedItemCode
+      String(getIssueItemCode(row) || "").trim() === selectedItemCode
     );
 
     return rowsWithItemCode.length ? rowsWithItemCode : sourceRows;
@@ -533,7 +554,7 @@ const SearchWOIS = ({
     const { nextIssueItems, nextSelectedItem } = applyPickedRowsToIssueItems(rows);
 
     if (!documentID || !documentNo || !getIssueGroupId(selectedItem)) {
-      onApply?.({
+      await onApply?.({
         action,
         workOrder: selectedWO,
         item: nextSelectedItem,
@@ -559,7 +580,7 @@ const SearchWOIS = ({
         }),
       });
 
-      onApply?.({
+      await onApply?.({
         action,
         workOrder: selectedWO,
         item: nextSelectedItem,
@@ -611,6 +632,8 @@ const SearchWOIS = ({
         0
       );
     }
+
+    if (!isFGIssueItem(selectedItem)) return 0;
 
     return num(
       valueOf(
@@ -716,7 +739,15 @@ const SearchWOIS = ({
     });
 
     setAllocationRows(nextRows);
-    await savePickingAllocation(nextRows, "auto-pick");
+    const didSave = await savePickingAllocation(nextRows, "auto-pick");
+
+    if (didSave) {
+      setSelectedItem(null);
+      setSelectedItemIndex(null);
+      setSelectedInventoryIndex(null);
+      setAllocationRows([]);
+      setExistingAllocations([]);
+    }
   };
 
   const handleReset = async () => {
@@ -1042,12 +1073,11 @@ const SearchWOIS = ({
                     {issueItems.map((row, index) => {
                       const selected =
                         selectedItem &&
-                        valueOf(selectedItem, "itemCode", "ITEM_CODE") ===
-                          valueOf(row, "itemCode", "ITEM_CODE");
+                        getIssueItemCode(selectedItem) === getIssueItemCode(row);
 
                       return (
                         <tr
-                          key={`${valueOf(row, "itemCode", "ITEM_CODE")}-${index}`}
+                          key={`${getIssueItemCode(row)}-${valueOf(row, "sourceWOLineNo", "lnNo", "lineNo", "LINE_NO", index)}-${index}`}
                           onClick={() => handleIssueItemSelect(row, index)}
                           className={`cursor-pointer border-b border-slate-100 transition dark:border-slate-800 ${
                             selected
@@ -1059,10 +1089,10 @@ const SearchWOIS = ({
                             {valueOf(row, "invType", "INV_TYPE", "type", "TYPE")}
                           </td>
                           <td className="border-r border-slate-100 px-3 py-2 font-semibold text-blue-700 dark:border-slate-800 dark:text-blue-300">
-                            {valueOf(row, "itemCode", "ITEM_CODE")}
+                            {getIssueItemCode(row)}
                           </td>
                           <td className="max-w-[260px] truncate border-r border-slate-100 px-3 py-2 dark:border-slate-800">
-                            {valueOf(row, "itemName", "ITEM_NAME")}
+                            {getIssueItemName(row)}
                           </td>
                           <td className="border-r border-slate-100 px-3 py-2 dark:border-slate-800">
                             {valueOf(row, "uomCode", "UOM_CODE")}
@@ -1098,7 +1128,7 @@ const SearchWOIS = ({
               <div className="border-b border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900">
                 <div className="grid h-full grid-cols-[105px_minmax(180px,1fr)_95px_minmax(160px,1fr)_95px_120px] grid-rows-2 items-center gap-x-2 gap-y-2">
                   <CompactLabel text="Item Code" />
-                  <CompactValue value={valueOf(selectedItem, "itemCode", "ITEM_CODE") || ""} />
+                  <CompactValue value={getIssueItemCode(selectedItem) || ""} />
 
                   <CompactLabel text="PC Code" />
                   <CompactValue value={valueOf(selectedItem, "pcCode", "PC_CODE") || ""} />
@@ -1123,7 +1153,7 @@ const SearchWOIS = ({
 
                   <CompactLabel text="Item Description" />
                   <CompactValue
-                    value={valueOf(selectedItem, "itemName", "ITEM_NAME") || ""}
+                    value={getIssueItemName(selectedItem) || ""}
                   />
 
                   <CompactLabel text="PC Description" />

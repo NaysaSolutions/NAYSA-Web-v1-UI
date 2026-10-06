@@ -2131,7 +2131,11 @@ useEffect(() => {
             sltypeCode: row.sltypeCode || row.slTypeCode || "",
             slCode: row.slCode || vendCode || "",
 
-            uniqueKey: row.uniqueKey || "",
+            sourceWOLineNo: row.sourceWOLineNo || "",
+            sourceWOIssueIdentity: row.sourceWOIssueIdentity || "",
+            sourceWOIssueItemCode: row.sourceWOIssueItemCode || row.itemCode || "",
+            sourceWOIssueQty: parseFormattedNumber(row.sourceWOIssueQty || row.quantity || 0) || 0,
+            uniqueKey: row.uniqueKey || row.sourceWOIssueIdentity || "",
             woIssueItems: row.woIssueItems || [],
             pickingAllocations: row.pickingAllocations || [],
             operation: row.operation || "S",
@@ -2578,6 +2582,36 @@ useEffect(() => {
     };
   };
 
+  const getWOIssueItemCode = (row = {}) =>
+    getFirstValue(
+      row.itemCode,
+      row.item_code,
+      row.ITEM_CODE,
+      row.itemNo,
+      row.ITEM_NO,
+      row.fgCode,
+      row.FG_CODE,
+      row.rmCode,
+      row.RM_CODE,
+      row.msCode,
+      row.MS_CODE,
+    );
+
+  const getWOIssueItemName = (row = {}) =>
+    getFirstValue(
+      row.itemName,
+      row.itemDesc,
+      row.item_name,
+      row.ITEM_NAME,
+      row.ITEM_DESC,
+      row.fgName,
+      row.FG_NAME,
+      row.rmName,
+      row.RM_NAME,
+      row.msName,
+      row.MS_NAME,
+    );
+
   const normalizeWODetailRow = (row = {}, index = 0) => {
     const quantityValue = getFirstValue(
       row.quantity,
@@ -2603,8 +2637,8 @@ useEffect(() => {
     return {
       ...row,
       lnNo: getFirstValue(row.lnNo, row.lineNo, row.line_no, index + 1),
-      itemCode: getFirstValue(row.itemCode, row.item_code, row.ITEM_CODE, row.itemNo, row.ITEM_NO),
-      itemName: getFirstValue(row.itemName, row.itemDesc, row.item_name, row.ITEM_NAME, row.ITEM_DESC),
+      itemCode: getWOIssueItemCode(row),
+      itemName: getWOIssueItemName(row),
       brandCode: getFirstValue(row.brandCode, row.brand_code, row.BRAND_CODE),
       brandName: getFirstValue(row.brandName, row.brand_name, row.BRAND_NAME),
       categCode: getItemCategoryCode(row),
@@ -2642,6 +2676,21 @@ useEffect(() => {
       operation: row.operation || "S",
     };
   };
+
+  const normalizeFGWOLookupIssueRows = (rows = []) =>
+    (Array.isArray(rows) ? rows : [])
+      .map((row, index) => {
+        const originalLineNo = getFirstValue(row.lnNo, row.lineNo, row.line_no, row.LINE_NO, index + 1);
+        const normalizedRow = normalizeWODetailRow(row, index);
+
+        return {
+          ...normalizedRow,
+          groupId: normalizedRow.groupId || `WO_LINE:${originalLineNo}`,
+          sourceWOLineNo: originalLineNo,
+        };
+      })
+      .filter((row) => getWOIssueInventoryType(row) === "FG")
+      .map((row, index) => ({ ...row, lnNo: index + 1 }));
 
   const applyWOReference = async (header, detailRowsFromResponse = null) => {
     if (!header) return;
@@ -2767,6 +2816,148 @@ useEffect(() => {
       operation: "S",
     };
     return baseRow;
+  };
+
+  const getWOIssuePickedQty = (item = {}, allocations = []) => {
+    const pickedFromItem =
+      parseFormattedNumber(getFirstValue(item.qtyPicked, item.quantityPicked, item.qty_picked, item.QTY_PICKED, 0)) || 0;
+
+    if (pickedFromItem > 0) return pickedFromItem;
+
+    return (Array.isArray(allocations) ? allocations : []).reduce(
+      (sum, row) => sum + (parseFormattedNumber(getFirstValue(row.pickQty, row.qtyPicked, row.QTY_PICKED, 0)) || 0),
+      0,
+    );
+  };
+
+  const getWOIssueApplyIdentity = (item = {}, index = 0) => {
+    const groupId = getFirstValue(item.groupId, item.group_id, item.GROUP_ID);
+    if (groupId) return `woissue:group:${groupId}`;
+
+    const uniqueKey = getFirstValue(item.uniqueKey, item.unique_key, item.UNIQUE_KEY);
+    if (uniqueKey) return `woissue:key:${uniqueKey}`;
+
+    const sourceLineNo = getFirstValue(
+      item.sourceWOLineNo,
+      item.sourceLineNo,
+      item.woLineNo,
+      item.originalLineNo,
+      item.lnNo,
+      item.lineNo,
+      item.line_no,
+      index + 1,
+    );
+    return `woissue:line:${sourceLineNo}|item:${getWOIssueItemCode(item)}`;
+  };
+
+  const buildWOReferenceIssueDetailRow = async (header = {}, item = {}, selectedIndex = 0, inventoryRows = []) => {
+    const allocations = Array.isArray(item.pickingAllocations) && item.pickingAllocations.length
+      ? item.pickingAllocations
+      : (Array.isArray(inventoryRows) ? inventoryRows : []).filter((row) =>
+          (parseFormattedNumber(getFirstValue(row.pickQty, row.qtyPicked, row.QTY_PICKED, 0)) || 0) > 0
+        );
+    const pickedQty = getWOIssuePickedQty(item, allocations);
+    const unitCostValue = getFirstValue(item.unitCost, item.unit_cost, item.UNIT_COST, item.woUnitCost, item.WO_UNITCOST, 0);
+    const firstAllocation = allocations[0] || {};
+    const normalizedItem = normalizeWODetailRow(
+      {
+        ...item,
+        itemCode: getWOIssueItemCode(item) || getWOIssueItemCode(firstAllocation),
+        itemName: getWOIssueItemName(item) || getWOIssueItemName(firstAllocation),
+        quantity: pickedQty,
+        qtyPicked: pickedQty,
+        quantityPicked: pickedQty,
+        qtyHand: getFirstValue(item.qtyHand, item.qtyOnHand, item.onHandQty, item.QTY_HAND, item.QTY_ON_HAND, pickedQty),
+        qtyOnHand: getFirstValue(item.qtyOnHand, item.qtyHand, item.onHandQty, item.QTY_ON_HAND, item.QTY_HAND, pickedQty),
+        unitCost: unitCostValue,
+        amount: pickedQty * (parseFormattedNumber(unitCostValue) || 0),
+        itemAmount: pickedQty * (parseFormattedNumber(unitCostValue) || 0),
+        lotNo: getFirstValue(firstAllocation.lotNo, firstAllocation.LOT_NO, item.lotNo, item.LOT_NO),
+        qstatCode: getFirstValue(firstAllocation.qualityStatus, firstAllocation.qstatCode, firstAllocation.qcStatus, item.qstatCode, item.itemStat),
+        itemStat: getFirstValue(firstAllocation.qualityStatus, firstAllocation.qstatCode, firstAllocation.qcStatus, item.itemStat, item.qstatCode),
+        bbDate: getFirstValue(firstAllocation.bestBeforeDate, firstAllocation.bbDate, firstAllocation.BB_DATE, item.bbDate, item.BB_DATE),
+        whouseCode: getFirstValue(firstAllocation.warehouseCode, firstAllocation.whouseCode, firstAllocation.whCode, item.whouseCode, item.whCode, state.WHcode),
+        whouseName: getFirstValue(firstAllocation.warehouseName, firstAllocation.whouseName, item.whouseName, state.WHname),
+        locCode: getFirstValue(firstAllocation.locationCode, firstAllocation.locCode, item.locCode, state.locCode),
+        locName: getFirstValue(firstAllocation.locationName, firstAllocation.locName, item.locName, state.locName),
+      },
+      selectedIndex,
+    );
+    const enrichedRow = await resolveDetailRowAccount({
+      ...normalizedItem,
+      woNo: getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO),
+      sourceWOLineNo: getFirstValue(item.sourceWOLineNo, item.sourceLineNo, item.woLineNo, item.lnNo, item.lineNo, selectedIndex + 1),
+      sourceWOIssueIdentity: getWOIssueApplyIdentity(item, selectedIndex),
+      sourceWOIssueItemCode: getWOIssueItemCode(item),
+      sourceWOIssueQty: pickedQty,
+      woIssueItems: [{ ...item, pickingAllocations: allocations }],
+      pickingAllocations: allocations,
+      operation: "S",
+    });
+
+    return enrichedRow;
+  };
+
+  const removeWOIssueItemFromLookup = (rows = [], item = {}, selectedIndex = null) => {
+    const selectedIdentity = getWOIssueApplyIdentity(item, selectedIndex ?? 0);
+
+    return (Array.isArray(rows) ? rows : [])
+      .filter((row, index) => {
+        if (selectedIndex !== null && selectedIndex !== undefined) {
+          return index !== selectedIndex;
+        }
+
+        return getWOIssueApplyIdentity(row, index) !== selectedIdentity;
+      })
+      .map((row, index) => ({ ...row, lnNo: index + 1 }));
+  };
+
+  const applyPickedWOIssueItem = async (header, item, selectedIndex = 0, inventoryRows = [], issueItems = []) => {
+    if (!header || !item) return;
+
+    const pickedQty = getWOIssuePickedQty(item, item.pickingAllocations || inventoryRows);
+    if (pickedQty <= 0) return;
+
+    const selectedWoNo =
+      getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO) ||
+      state.woNo;
+    const pickedRow = await buildWOReferenceIssueDetailRow(header, item, selectedIndex, inventoryRows);
+    const pickedIdentity = pickedRow.sourceWOIssueIdentity;
+    const currentRows = Array.isArray(state.detailRows) ? state.detailRows : [];
+    let didReplace = false;
+
+    const mergedRows = currentRows.map((row) => {
+      if (row.sourceWOIssueIdentity !== pickedIdentity) return row;
+      didReplace = true;
+      return {
+        ...row,
+        ...pickedRow,
+        lnNo: row.lnNo || pickedRow.lnNo,
+      };
+    });
+
+    if (!didReplace) {
+      mergedRows.push(pickedRow);
+    }
+
+    const numberedRows = mergedRows.map((row, index) => ({ ...row, lnNo: index + 1 }));
+    const totalQty = numberedRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.quantity ?? row.qtyNeeded ?? 0) || 0),
+      0,
+    );
+    const remainingIssueItems = removeWOIssueItemFromLookup(issueItems, item, selectedIndex);
+
+    updateTotalsDisplay(totalQty);
+    updateState({
+      woNo: selectedWoNo,
+      isOpenReferenceWO: true,
+      remarks: getFirstValue(header.remarks, header.particular, header.PARTICULAR) || state.remarks,
+      detailRows: numberedRows,
+      detailRowsGL: [],
+    });
+    setWOLookupIssueItems(remainingIssueItems);
+    setWOLookupInventoryRows([]);
+    setShowTypeDropdown(false);
   };
 
   const applyPickedWOReferenceItem = async (header, issueItems = []) => {
@@ -2922,7 +3113,7 @@ useEffect(() => {
 
     if (row?.dt1 || row?.details || row?.detailRows) {
       const rows = row?.dt1 || row?.details || row?.detailRows || [];
-      setWOLookupIssueItems(rows.map((detailRow, index) => normalizeWODetailRow(detailRow, index)));
+      setWOLookupIssueItems(normalizeFGWOLookupIssueRows(rows));
       setWOLookupInventoryRows([]);
       return;
     }
@@ -2935,7 +3126,7 @@ useEffect(() => {
         ? reference.details
         : reference?.header?.dt1 || reference?.header?.details || reference?.header?.detailRows || [];
 
-      setWOLookupIssueItems(rows.map((detailRow, index) => normalizeWODetailRow(detailRow, index)));
+      setWOLookupIssueItems(normalizeFGWOLookupIssueRows(rows));
       setWOLookupInventoryRows([]);
     } catch (error) {
       console.error("FGIS WO preview error:", error);
@@ -2947,9 +3138,50 @@ useEffect(() => {
     }
   };
 
+  const filterWOLookupRowsWithFGIssueItems = async (rows = []) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const filterResults = await Promise.all(
+      sourceRows.map(async (row) => {
+        try {
+          const inlineDetails = row?.dt1 || row?.details || row?.detailRows;
+          const details = inlineDetails
+            ? inlineDetails
+            : (await fetchWOReference(row))?.details || [];
+
+          return normalizeFGWOLookupIssueRows(details).length > 0;
+        } catch (error) {
+          console.warn("Unable to check WO issue items for FG inventory:", error);
+          return false;
+        }
+      })
+    );
+
+    return sourceRows.filter((_, index) => filterResults[index]);
+  };
+
   const handleSelectWOIssueItemPreview = async (item, index = 0) => {
     if (!item?.itemCode) {
       setWOLookupInventoryRows([]);
+      return;
+    }
+
+    if (getWOIssueInventoryType(item) !== "FG") {
+      setWOLookupInventoryRows([]);
+      setWOLookupIssueItems((prevRows) =>
+        prevRows.map((row, rowIndex) => {
+          const sameRow =
+            rowIndex === index ||
+            String(row.itemCode || "") === String(item.itemCode || "");
+
+          if (!sameRow) return row;
+
+          return {
+            ...row,
+            qtyHand: formatNumber(0, 6),
+            qtyOnHand: formatNumber(0, 6),
+          };
+        })
+      );
       return;
     }
 
@@ -2998,7 +3230,21 @@ useEffect(() => {
       return;
     }
 
-    if (["manual-pick", "auto-pick"].includes(action)) {
+    if (action === "auto-pick") {
+      if (!workOrder || !item) return;
+      const pickedIssueItems = Array.isArray(issueItems) ? issueItems : woLookupIssueItems;
+
+      await applyPickedWOIssueItem(
+        workOrder,
+        item,
+        selectedItemIndex,
+        inventory,
+        pickedIssueItems,
+      );
+      return;
+    }
+
+    if (action === "manual-pick") {
       const pickedIssueItems = Array.isArray(issueItems) ? issueItems : woLookupIssueItems;
 
       setWOLookupIssueItems(pickedIssueItems);
@@ -4181,6 +4427,7 @@ useEffect(() => {
           issueItems={woLookupIssueItems}
           inventoryRows={woLookupInventoryRows}
           loading={woLookupLoading}
+          filterWorkOrders={filterWOLookupRowsWithFGIssueItems}
           onSelectWorkOrder={handleSelectWOLookupPreview}
           onSelectIssueItem={handleSelectWOIssueItemPreview}
           onApply={handleApplyWOLookup}
