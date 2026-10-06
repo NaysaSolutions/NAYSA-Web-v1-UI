@@ -3,7 +3,7 @@ import Swal from "sweetalert2";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMagnifyingGlass, faClipboardCheck } from "@fortawesome/free-solid-svg-icons";
 
-import { fetchDataJson } from "../Configuration/BaseURL.jsx";
+import { fetchDataJson, postRequest } from "../Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const getValue = (row, ...keys) => {
@@ -76,11 +76,12 @@ const SearchWO = ({
 
     // Reusable settings
     endpoint = "getFGPRWO",
+    requestMethod = "get",
     docType = "FGPR",
     moduleLabel = "",
     title = "Search Work Order",
-    subtitle = "Closed Work Orders only · WO_STATUS = C and Remaining Qty > 0",
-    noRecordMessage = "",
+    subtitle="Closed Work Orders only - WO_STATUS = C and Remaining Qty > 0",
+    noRecordMessage="No closed Work Order available for FGIS.",
     tipMessage = "",
 }) => {
     const [filter, setFilter] = useState("");
@@ -95,23 +96,43 @@ const SearchWO = ({
         setLoading(true);
 
         try {
-            const response = await fetchDataJson(endpoint, {
+            const payload = {
                 branchCode,
                 filter: searchText,
                 whouseCode,
                 locCode,
                 docType,
-            });
+            };
+            const response = String(requestMethod).toLowerCase() === "post"
+                ? await postRequest(endpoint, payload)
+                : await fetchDataJson(endpoint, payload);
 
             setRows(toRows(response));
         } catch (error) {
-            console.error("SearchWO lookup error:", error);
-            Swal.fire({
-                icon: "error",
-                title: "WO Lookup Failed",
-                text: error?.message || `Unable to load closed Work Orders for ${label}.`,
-            });
-        } finally {
+    console.error("SearchWO lookup error:", error);
+
+    console.error(
+        "FGIS SearchWO Backend Error:",
+        error?.response?.data?.details
+    );
+
+    console.error(
+        "Full Backend Response:",
+        JSON.stringify(error?.response?.data, null, 2)
+    );
+
+    const backendMessage =
+        error?.response?.data?.details ||
+        error?.response?.data?.message ||
+        error?.message ||
+        `Unable to load Work Orders for ${label}.`;
+
+    Swal.fire({
+        icon: "error",
+        title: "WO Lookup Failed",
+        text: backendMessage,
+    });
+} finally {
             setLoading(false);
         }
     };
