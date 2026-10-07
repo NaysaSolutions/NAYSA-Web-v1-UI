@@ -245,6 +245,26 @@ const calculateCheckTotals = (rows = []) => {
   return nextTotals;
 };
 
+const calculateSummaryReconciliationTotals = (rows = []) => {
+  const nextTotals = rows.reduce(
+    (totals, row) => {
+      if (String(row?.reconItem || "").trim().toUpperCase() === "ADJUSTED AMOUNT") {
+        return totals;
+      }
+
+      totals.totalPerBank += normalizeNumber(row?.perBank);
+      totals.totalPerBook += normalizeNumber(row?.perBook);
+      return totals;
+    },
+    { totalPerBank: 0, totalPerBook: 0 },
+  );
+
+  return {
+    ...nextTotals,
+    variance: nextTotals.totalPerBank - nextTotals.totalPerBook,
+  };
+};
+
 const isUserDefinedSummaryRow = (row) => String(row?.sequence || "").toUpperCase().startsWith("UD");
 
 const renumberUserDefinedSummaryRows = (rows = []) => {
@@ -1549,13 +1569,13 @@ const BankReconProcessing = () => {
 
   const totals = useMemo(() => {
     const baseTotals = header || emptyTotals;
-    if (checkRows.length === 0) return baseTotals;
+    const checkTotals = checkRows.length > 0 ? calculateCheckTotals(checkRows) : {};
+    const summaryTotals = summaryRows.length > 0
+      ? calculateSummaryReconciliationTotals(summaryRows)
+      : {};
 
-    return {
-      ...baseTotals,
-      ...calculateCheckTotals(checkRows),
-    };
-  }, [checkRows, header]);
+    return { ...baseTotals, ...checkTotals, ...summaryTotals };
+  }, [checkRows, header, summaryRows]);
 
   const checkColumns = useMemo(
     () => [

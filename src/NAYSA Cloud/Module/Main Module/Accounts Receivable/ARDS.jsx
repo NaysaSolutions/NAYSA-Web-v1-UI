@@ -1165,6 +1165,8 @@ const ARDS = () => {
 
       {showSpinner && <LoadingSpinner />}
 
+      </div>
+
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
@@ -1179,7 +1181,6 @@ const ARDS = () => {
          onRowDoubleClick={handleHistoryRowPick}
           historyExportName={`${documentTitle} History`}
         />
-      </div>
       </div>
      </div>
    );

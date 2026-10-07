@@ -1187,7 +1187,7 @@ const performAddRow = async ({
         lnNo: "",
         w2307: "",
         siNo: "00000000",
-        siDate: documentDate,
+        siDate: selectedARType === "AR12" ? normalizeLookupDate(documentDate) : documentDate,
         siAmount:"0.00",
         appliedAmount: "0.00",
         unappliedAmount: "0.00",
@@ -2756,7 +2756,6 @@ const renderArGlCell = (columnKey, row, index) => {
                     <FieldRenderer
                       id="chainCode"
                       label="Chain Code"
-                      required
                       type="lookup"
                       value={chainCode || ""}
                       disabled={handleFieldBehavior("disableOnSaved")}
@@ -2768,7 +2767,6 @@ const renderArGlCell = (columnKey, row, index) => {
                     <FieldRenderer
                       id="chainName"
                       label="Chain Name"
-                      required
                       type="text"
                       value={chainName || ""}
                       disabled
