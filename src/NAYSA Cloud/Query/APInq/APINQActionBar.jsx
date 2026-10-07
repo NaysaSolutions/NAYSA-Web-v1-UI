@@ -8,7 +8,7 @@ import {
 
 /**
  * Props:
- * - activeTab: "inquiry" | "advances" | "aging" | "deferred"
+ * - activeTab: "inquiry" | "advances" | "aging" | "schedule"
  * - onAction: (actionId: string) => void
  * - help: { pdfLink?: string, videoLink?: string }
  * - busy?: boolean
@@ -36,6 +36,13 @@ export default function APINQActionBar({ activeTab, onAction, help = {}, busy = 
 
         aging: [
             { id: "reprocess", label: "Find", icon: faMagnifyingGlass, color: "bg-blue-600" },
+            { id: "reset", label: "Reset", icon: faUndo, color: "bg-blue-600" },
+            // { id: "print", label: "Print", icon: faPrint, color: "bg-blue-600" },
+            // { id: "export", label: "Export", icon: faFileExport, color: "bg-blue-600" },
+        ],
+        
+        schedule: [
+            { id: "find", label: "Find", icon: faMagnifyingGlass, color: "bg-blue-600" },
             { id: "reset", label: "Reset", icon: faUndo, color: "bg-blue-600" },
             // { id: "print", label: "Print", icon: faPrint, color: "bg-blue-600" },
             // { id: "export", label: "Export", icon: faFileExport, color: "bg-blue-600" },

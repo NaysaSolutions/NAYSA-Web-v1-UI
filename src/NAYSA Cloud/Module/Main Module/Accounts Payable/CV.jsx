@@ -1680,6 +1680,13 @@ const handleCopy = async () => {
                   status:"Open",
                   documentDate:useGetCurrentDayV2(), 
                   noReprints:"0",
+                  appLevel:0,
+                  detailRowsApp:[],
+                  showApprovalStatusModal:false,
+                  isDocNoDisabled:false,
+                  isFetchDisabled:false,
+                  isSaveDisabled:false,
+                  isResetDisabled:false,
 
                   bankCode: state.defaultBankCode || "",
                   bankAcctName: state.defaultBankAcctName || "",

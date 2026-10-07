@@ -173,10 +173,15 @@ const getDocumentNo = (row) =>
   String(
     row?.documentNo ||
       row?.docNo ||
+      row?.cvNo ||
+      row?.CV_NO ||
+      row?.poNo ||
+      row?.PO_NO ||
+      row?.joNo ||
+      row?.JO_NO ||
       row?.prNo ||
       row?.PR_NO ||
       row?.tranNo ||
-      row?.tranId ||
       "",
   ).trim();
 
@@ -1251,7 +1256,7 @@ const GlobalApprovalModal = forwardRef(
               </div>
 
               <div
-                className="relative hidden min-h-0 min-w-0 flex-1 overflow-auto md:block"
+                className="relative hidden min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain md:block"
               >
                 <table
                   className="table-fixed border-separate border-spacing-0 text-[11px]"
@@ -1260,16 +1265,22 @@ const GlobalApprovalModal = forwardRef(
                     minWidth: Math.max(detailTableWidth, 760),
                   }}
                 >
+                  <colgroup>
+                    {hasColumns && <col style={{ width: ACTION_COL_WIDTH }} />}
+                    {columns.map((column) => (
+                      <col
+                        key={`width-${column.key}`}
+                        style={{ width: columnWidths[column.key] }}
+                      />
+                    ))}
+                  </colgroup>
                   <thead className="sticky top-0 z-30 bg-slate-200 text-slate-800">
                     <tr>
                       {hasColumns && (
                         <th
-                          className="sticky left-0 top-0 z-50 border-b border-r border-slate-300 bg-slate-200 px-1.5 py-2 text-left font-bold shadow-[4px_0_6px_-6px_rgba(15,23,42,0.35)]"
+                          className="sticky left-0 z-50 border-b border-r border-slate-300 bg-slate-200 px-1.5 py-2 text-left font-bold shadow-[4px_0_6px_-6px_rgba(15,23,42,0.35)]"
                           style={{
                             left: 0,
-                            width: ACTION_COL_WIDTH,
-                            minWidth: ACTION_COL_WIDTH,
-                            maxWidth: ACTION_COL_WIDTH,
                           }}
                         >
                           <div className="flex h-full items-center justify-start gap-2">
@@ -1303,16 +1314,13 @@ const GlobalApprovalModal = forwardRef(
                             column.align === "right" ? "text-right" : "text-left"
                           } relative cursor-pointer select-none ${
                             isFrozenColumn
-                              ? "sticky top-0 z-40 border-r border-slate-300 bg-slate-200"
+                              ? "sticky z-40 border-r border-slate-300 bg-slate-200"
                               : ""
                           }`}
                           style={{
                             left: isFrozenColumn
                               ? frozenColumnLefts[columnIndex]
                               : undefined,
-                            width: columnWidths[column.key],
-                            minWidth: columnWidths[column.key],
-                            maxWidth: columnWidths[column.key],
                           }}
                         >
                           <div className="flex items-center justify-between gap-2 overflow-hidden">
@@ -1343,12 +1351,9 @@ const GlobalApprovalModal = forwardRef(
                     <tr className="bg-slate-200">
                       {hasColumns && (
                         <th
-                          className="sticky top-[34px] z-50 border-b border-r border-slate-300 bg-slate-200 px-1 py-1 shadow-[4px_0_6px_-6px_rgba(15,23,42,0.35)]"
+                          className="sticky z-50 border-b border-r border-slate-300 bg-slate-200 px-1 py-1 shadow-[4px_0_6px_-6px_rgba(15,23,42,0.35)]"
                           style={{
                             left: 0,
-                            width: ACTION_COL_WIDTH,
-                            minWidth: ACTION_COL_WIDTH,
-                            maxWidth: ACTION_COL_WIDTH,
                           }}
                         >
                           <div className="translate-x-1 truncate whitespace-nowrap text-center text-[8px] font-semibold leading-5 text-slate-600">
@@ -1364,16 +1369,13 @@ const GlobalApprovalModal = forwardRef(
                           key={`filter-${column.key}`}
                           className={`border-b border-slate-300 px-1 py-1 ${
                             isFrozenColumn
-                              ? "sticky top-[34px] z-40 border-r bg-slate-200"
+                              ? "sticky z-40 border-r bg-slate-200"
                               : ""
                           }`}
                           style={{
                             left: isFrozenColumn
                               ? frozenColumnLefts[columnIndex]
                               : undefined,
-                            width: columnWidths[column.key],
-                            minWidth: columnWidths[column.key],
-                            maxWidth: columnWidths[column.key],
                           }}
                         >
                           {renderColumnFilter(column)}
@@ -1410,9 +1412,6 @@ const GlobalApprovalModal = forwardRef(
                             className={`sticky z-10 border-b border-r border-slate-200 px-0.5 py-0.5 text-center shadow-[4px_0_6px_-6px_rgba(15,23,42,0.35)] group-hover:bg-blue-100 ${rowBackgroundClass}`}
                             style={{
                               left: 0,
-                              width: ACTION_COL_WIDTH,
-                              minWidth: ACTION_COL_WIDTH,
-                              maxWidth: ACTION_COL_WIDTH,
                             }}
                           >
                             <div className="grid grid-cols-[22px_repeat(5,28px)] items-center justify-center gap-1">
@@ -1519,9 +1518,6 @@ const GlobalApprovalModal = forwardRef(
                                 left: isFrozenColumn
                                   ? frozenColumnLefts[columnIndex]
                                   : undefined,
-                                width: columnWidths[column.key],
-                                minWidth: columnWidths[column.key],
-                                maxWidth: columnWidths[column.key],
                               }}
                             >
                               {formatCellValue(row?.[column.key], column)}
