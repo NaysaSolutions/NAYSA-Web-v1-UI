@@ -220,6 +220,8 @@ const SearchWOIS = ({
     const qtyAllocatedValue = valueOf(row, "allocatedQty", "qtyAllocated", "QTY_ALLOCATED") || 0;
     const qtyAvailableValue = valueOf(row, "remainingAvailable", "qtyAvailable", "QTY_AVAILABLE") || qtyHandValue;
     const qtyPickedValue = valueOf(row, "pickQty", "qtyPicked", "QTY_PICKED") || 0;
+    const unitCostValue = valueOf(row, "unitCost", "unit_cost", "UNIT_COST", "cost", "itemCost", "unitPrice", "wac", "WAC") || 0;
+    const wacValue = valueOf(row, "wac", "WAC", "unitCost", "unit_cost", "UNIT_COST") || 0;
 
     return {
       ...row,
@@ -249,6 +251,9 @@ const SearchWOIS = ({
       qtyPicked: qtyPickedValue,
       pickQty: qtyPickedValue,
       balance: Math.max(num(qtyAvailableValue) - num(qtyPickedValue), 0),
+      unitCost: unitCostValue,
+      unit_cost: unitCostValue,
+      wac: wacValue,
       [fifoProp]: valueOf(row, fifoProp, fifoSql),
       [wacProp]: valueOf(row, wacProp, wacSql),
     };
@@ -310,10 +315,11 @@ const SearchWOIS = ({
     }
   };
 
-  const getRequestedQty = (issueItem = {}) =>
-    num(
+  const getRequestedQty = (issueItem = {}) => {
+    const requiredQty = num(
       valueOf(
         issueItem,
+        "originalRequiredQty",
         "requiredQty",
         "REQUIRED_QTY",
         "qtyNeeded",
@@ -324,6 +330,16 @@ const SearchWOIS = ({
         "QTY"
       )
     );
+    const issuedQty = num(valueOf(issueItem, "issuedQty", "ISSUED_QTY", "qtyIssued", "QTY_ISSUED"));
+    const remainingValue = valueOf(issueItem, "unservedQty", "UNSERVED_QTY", "remainingQty", "REMAINING_QTY");
+    const hasRemainingValue = remainingValue !== "";
+    const remainingQty = hasRemainingValue ? num(remainingValue) : null;
+    const computedRemainingQty = Math.max(requiredQty - issuedQty, 0);
+
+    if (hasRemainingValue && remainingQty > 0) return remainingQty;
+    if (hasRemainingValue && issuedQty >= requiredQty) return remainingQty;
+    return computedRemainingQty;
+  };
 
   const getIssueGroupId = (issueItem = {}) =>
     String(valueOf(issueItem, "groupId", "GROUP_ID", "group_id") || "").trim();
@@ -529,6 +545,8 @@ const SearchWOIS = ({
           qualityStatus: valueOf(row, "qualityStatus", "qstatCode", "qcStatus"),
           qstatCode: valueOf(row, "qualityStatus", "qstatCode", "qcStatus"),
           bestBeforeDate: valueOf(row, "bestBeforeDate", "bbDate"),
+          unitCost: num(valueOf(row, "unitCost", "unit_cost", "UNIT_COST", "cost", "itemCost", "unitPrice", "wac")),
+          wac: num(valueOf(row, "wac", "WAC", "unitCost", "unit_cost", "UNIT_COST")),
           pickQty: num(valueOf(row, "pickQty", "qtyPicked", "QTY_PICKED")),
         };
       });
