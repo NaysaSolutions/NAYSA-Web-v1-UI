@@ -12,6 +12,7 @@ export const docTypes = {
   CV: "CV",
   JV: "JV",
   APV:"APV",
+  APRFP:"APRFP",
   PCV:"PCV",
   SOA:"SOA",
   ARCM:"ARCM",
@@ -64,6 +65,7 @@ export const docTypeNames = {
     PCV: "Petty Cash Voucher Transaction",
     // Accounts Payable Module
     APV: "Accounts Payable Voucher Transaction",
+    APRFP: "Request for Payment Transaction",
     APDM: "AP Debit Memo Voucher Transaction",
     APCM: "AP Credit Memo Voucher Transaction",
     CV: "Check Voucher Transaction",

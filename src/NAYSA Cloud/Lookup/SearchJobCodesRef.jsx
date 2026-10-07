@@ -1,27 +1,24 @@
-import React, { useEffect, useMemo, useState } from "react";
+/* eslint-disable react/prop-types */
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes, faSpinner } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+
+const pickCode = (row) => row?.jobCode ?? row?.JobCode ?? row?.JOB_CODE ?? "";
+const pickName = (row) => row?.jobName ?? row?.JobName ?? row?.JOB_NAME ?? "";
+const pickUom = (row) => row?.uomCode ?? row?.UomCode ?? row?.UOM_CODE ?? "";
+const normalizeActive = (value) => String(value ?? "Y").trim().toUpperCase();
+const isActiveJobCode = (row) => {
+  const activeValue = normalizeActive(
+    row?.active ?? row?.Active ?? row?.ACTIVE ?? row?.status ?? row?.Status ?? row?.STATUS
+  );
+  return !["N", "NO", "FALSE", "0"].includes(activeValue);
+};
 
 const JobCodeLookupModal = ({ isOpen, onClose, customParam, activeOnly = true }) => {
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({ jobCode: "", jobName: "", uomCode: "" });
   const [loading, setLoading] = useState(false);
-
-  const pickCode = (r) => r?.jobCode ?? r?.JobCode ?? r?.JOB_CODE ?? "";
-  const pickName = (r) => r?.jobName ?? r?.JobName ?? r?.JOB_NAME ?? "";
-  const pickUom = (r) => r?.uomCode ?? r?.UomCode ?? r?.UOM_CODE ?? "";
-
-  const normalizeActive = (value) =>
-    String(value ?? "Y").trim().toUpperCase();
-
-  const isActiveJobCode = (r) => {
-    const activeValue = normalizeActive(
-      r?.active ?? r?.Active ?? r?.ACTIVE ?? r?.status ?? r?.Status ?? r?.STATUS
-    );
-
-    return !["N", "NO", "FALSE", "0"].includes(activeValue);
-  };
 
   const parseLookupResult = (result) => {
     const raw =
@@ -134,7 +131,6 @@ const JobCodeLookupModal = ({ isOpen, onClose, customParam, activeOnly = true })
                   <th className="px-4 py-2 text-left font-bold text-blue-900">Job Code</th>
                   <th className="px-4 py-2 text-left font-bold text-blue-900">Job Description</th>
                   <th className="px-4 py-2 text-left font-bold text-blue-900">UOM</th>
-                  <th className="px-4 py-2 text-left font-bold text-blue-900">Action</th>
                 </tr>
                 <tr>
                   <th className="px-2 py-1">
@@ -161,7 +157,6 @@ const JobCodeLookupModal = ({ isOpen, onClose, customParam, activeOnly = true })
                       onChange={(e) => setFilters((p) => ({ ...p, uomCode: e.target.value }))}
                     />
                   </th>
-                  <th />
                 </tr>
               </thead>
 
@@ -176,23 +171,11 @@ const JobCodeLookupModal = ({ isOpen, onClose, customParam, activeOnly = true })
                       <td className="px-4 py-1">{pickCode(r)}</td>
                       <td className="px-4 py-1">{pickName(r)}</td>
                       <td className="px-4 py-1">{pickUom(r)}</td>
-                      <td className="px-4 py-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleApply(r);
-                          }}
-                          className="px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                        >
-                          Apply
-                        </button>
-                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="4" className="text-center py-6 text-gray-500">
+                    <td colSpan="3" className="text-center py-6 text-gray-500">
                       No records found
                     </td>
                   </tr>

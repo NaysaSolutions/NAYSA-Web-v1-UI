@@ -25,6 +25,7 @@ import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import CheckPrintPreviewModal from "../../../Lookup/SearchCheckPrinting.jsx";
+import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
 
 
 // Configuration
@@ -95,6 +96,8 @@ import {
   parseFormattedNumber,
   useSwalErrorAlert,
   useSwalInfoAlert,
+  useSwalProceedConfirm,
+  useSwalSuccessAlert,
   useSwalshowSaveSuccessDialog,
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
@@ -279,7 +282,10 @@ const CV = () => {
     showPostModal:false,
     showAttachModal:false,
     showSignatoryModal:false,
+    showApprovalStatusModal:false,
     showAllTranDocNo:false,
+    appLevel:0,
+    detailRowsApp:[],
    });
 
   const updateState = (updates) => {
@@ -298,6 +304,7 @@ const CV = () => {
   status,
   userCode,
   noReprints,
+  appLevel,
 
   // Tabs & loading
   activeTab,
@@ -396,6 +403,7 @@ const CV = () => {
   showPostModal,
   showAttachModal,
   showSignatoryModal,
+  showApprovalStatusModal,
   showAPBalanceModal,
   showAllTranDocNo
 
@@ -430,11 +438,28 @@ const isCashPayment = selectedPayTypeCode.includes("CV02") || selectedPayTypeNam
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
+  const maxApprovalLevel = Number(currentUserRow?.cvMaxAppLevel || 0);
+  const currentApprovalLevel = Number(appLevel || 0);
+  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED", "CLOSED"];
+  const showApprovalStatus =
+    Boolean(documentID) &&
+    maxApprovalLevel > 0 &&
+    !approvalStatusHiddenStatuses.includes(String(displayStatus || "").trim().toUpperCase());
+  const approvalStatus = (() => {
+    if (!showApprovalStatus) return "";
+    if (currentApprovalLevel === -1) return "Disapproved Transaction";
+    if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
+    return `Awaiting for L${currentApprovalLevel + 1} Approval`;
+  })();
+  const approvalStatusColor = currentApprovalLevel === -1
+    ? "text-rose-500 dark:text-rose-400 animate-pulse"
+    : statusColor;
+  const isApprovalLocked = currentApprovalLevel > 0 && currentApprovalLevel <= maxApprovalLevel;
   const isTransactionOpen = ["", "O", "OPEN"].includes(
     String(displayStatus || "").trim().toUpperCase(),
   );
   const isFormDisabled =
-  isViewDocumentUrl ||
+  isViewDocumentUrl || isApprovalLocked ||
   ["Finalized", "Cancelled", "Closed"].includes(displayStatus);
   const isBankSelectionDisabled = isFormDisabled || !isTransactionOpen;
 
@@ -842,6 +867,9 @@ useEffect(() => {
         detailRows: [],
         detailRowsGL:[],
         documentStatus:"",
+        appLevel:0,
+        detailRowsApp:[],
+        showApprovalStatusModal:false,
         
         // UI state
         activeTab: "basic",
@@ -981,6 +1009,11 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       creditFx2: formatNumber(glRow.creditFx2),
       slRefDate: normalizeCvDateForInput(glRow.slRefDate),
     }));
+    const retrievedApprovalRows = Array.isArray(data.dtApp)
+      ? data.dtApp
+      : data.dtApp
+        ? [data.dtApp]
+        : [];
 
   
     console.log(data)
@@ -1007,6 +1040,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Update state with fetched data
     updateState({
       documentStatus: data.cvStatus,
+      appLevel: data.appLevel || 0,
+      detailRowsApp: retrievedApprovalRows,
       status: data.docStatus,
       noReprints: data.noReprints,
       documentID: data.cvId,
@@ -1591,6 +1626,44 @@ const handleAttach = async () => {
     updateState({ showAttachModal: true });
 };
 
+const handleNotify = async () => {
+  if (!documentID) return;
+
+  const confirmed = await useSwalProceedConfirm(
+    "Notify Approver?",
+    `Do you want to notify the 1st Level Approver for CV ${documentNo || documentID}?`,
+    "Yes, notify",
+  );
+  if (!confirmed) return;
+
+  updateState({ isLoading: true, showSpinner: true });
+  try {
+    await postRequest("approveCV", {
+      json_data: {
+        tranIds: documentID,
+        userCode,
+        userName: currentUserRow?.userName || "",
+        appLevel: 0,
+        mode: "Notify",
+        reason: "",
+        url: `${window.location.origin}/?page=CVApprovalModal`,
+      },
+    });
+
+    await useSwalSuccessAlert(
+      "CV Notified",
+      `CV ${documentNo || documentID} has been notified to its Approver.`,
+    );
+  } catch (error) {
+    useSwalErrorAlert(
+      "CV Notification Failed",
+      error?.response?.data?.details || error?.response?.data?.message || error?.message || "Unable to notify the CV approver.",
+    );
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
 
 
 
@@ -1607,6 +1680,13 @@ const handleCopy = async () => {
                   status:"Open",
                   documentDate:useGetCurrentDayV2(), 
                   noReprints:"0",
+                  appLevel:0,
+                  detailRowsApp:[],
+                  showApprovalStatusModal:false,
+                  isDocNoDisabled:false,
+                  isFetchDisabled:false,
+                  isSaveDisabled:false,
+                  isResetDisabled:false,
 
                   bankCode: state.defaultBankCode || "",
                   bankAcctName: state.defaultBankAcctName || "",
@@ -2952,9 +3032,11 @@ const renderCvGlCell = (columnKey, row, index) => {
               onCancel={handleCancel} 
               onCopy={handleCopy} 
               onAttach={handleAttach}
+              onNotify={handleNotify}
               activeTopTab={topTab} 
               showActions={topTab === "details"} 
               showBIRForm={true}      
+              showNotify={hsDoc?.docApp === "Y" && approvalStatus !== "Approved Transaction"}
               isViewDocument={isViewDocument}
               onDetails={() => setTopTab("details")}
               onHistory={() => setTopTab("history")}
@@ -2963,6 +3045,7 @@ const renderCvGlCell = (columnKey, row, index) => {
               isSaveDisabled={state.isSaveDisabled || isFormDisabled || detailRows.length === 0}
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
+              isNotifyDisabled={!documentID || displayStatus === "Cancelled" || approvalStatus === "Approved Transaction"}
               isPrintDisabled={!documentID || displayStatus === "Cancelled"}
               isPrintBIRDisabled={
                 !documentID ||
@@ -2989,7 +3072,21 @@ const renderCvGlCell = (columnKey, row, index) => {
         <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
           <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
         </div>
-        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+        <div className={`global-tran-headerstat-div-ui ${showApprovalStatus ? "max-sm:!flex-row max-sm:!items-start max-sm:!justify-center max-sm:!gap-x-6" : ""} ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+          {showApprovalStatus && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => updateState({ showApprovalStatusModal: true })}
+                className="global-tran-headerstat-text-ui mx-auto block cursor-pointer rounded px-1 text-center transition-colors hover:bg-sky-50 hover:text-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                title="View Approval Status"
+                aria-label="View Approval Status"
+              >
+                Approval Status
+              </button>
+              <h1 className={`global-tran-stat-text-ui text-center ${approvalStatusColor}`}>{approvalStatus}</h1>
+            </div>
+          )}
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
             <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
@@ -3013,6 +3110,7 @@ const renderCvGlCell = (columnKey, row, index) => {
         >
             Basic Information
         </button>
+        {!isViewDocument && (
         <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
           <button
             type="button"
@@ -3038,6 +3136,7 @@ const renderCvGlCell = (columnKey, row, index) => {
             </div>
           )}
         </div>
+        )}
     </div>
 
     {/* Header Form Section - Main Grid Container */}
@@ -3905,6 +4004,18 @@ const renderCvGlCell = (columnKey, row, index) => {
     checkAmount: currAmount,
     cvNo: documentNo,
   }}
+/>
+
+<GlobalApprovalStatus
+  isOpen={showApprovalStatusModal}
+  onClose={() => updateState({ showApprovalStatusModal: false })}
+  docType={docType}
+  docNo={documentNo}
+  docDate={documentDate}
+  status={approvalStatus}
+  remarks={remarks}
+  maxAppLevel={currentUserRow?.cvMaxAppLevel}
+  data={state.detailRowsApp?.[0] || {}}
 />
 
 

@@ -49,15 +49,22 @@ const userName = user?.USER_NAME || user?.USER_CODE || "User";
     documentID,
   });
 
-  const canPickMode = useMemo(() => Number(noReprints) === 0, [noReprints]);
-
-  const { data: serverData } = useQuery({
-    queryKey: ["documentSignatories", documentID],
+  const { data: serverData, isLoading: isApprovalStatusLoading } = useQuery({
+    queryKey: ["documentSignatories", documentID, docType],
     queryFn: () => useTopDocSign(documentID),
     enabled: isOpen && !!documentID,
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
+
+  const approvalRequired = Number(serverData?.approvalRequired || 0) === 1;
+  const approvalComplete = Number(serverData?.approvalComplete || 0) === 1;
+  const forceDraft = approvalRequired && !approvalComplete;
+  const canPickMode = useMemo(
+    () => Number(noReprints) === 0 && !forceDraft && !isApprovalStatusLoading,
+    [noReprints, forceDraft, isApprovalStatusLoading],
+  );
 
   useEffect(() => {
     if (serverData && !hasLoadedInitialData.current) {
@@ -83,13 +90,14 @@ const userName = user?.USER_NAME || user?.USER_CODE || "User";
 
   const { mutate: saveSignatories, isLoading: isSaving } = useMutation({
     mutationFn: async (mode) => {
-      const payload = { ...form, printMode: mode, docType };
+      const effectiveMode = forceDraft ? "Draft" : mode;
+      const payload = { ...form, printMode: effectiveMode, docType };
       const response = await postRequest(
         "upsertDocSign",
         JSON.stringify(payload),
       );
       if (!response.success) throw new Error("Save failed");
-      return mode;
+      return effectiveMode;
     },
     onSuccess: (mode) => {
       queryClient.invalidateQueries(["documentSignatories", documentID]);
@@ -211,13 +219,13 @@ const userName = user?.USER_NAME || user?.USER_CODE || "User";
                 )}
               </div>
             ) : (
-              <button
-                disabled={isSaving}
-                onClick={() => saveSignatories("Final")}
+                <button
+                  disabled={isSaving || isApprovalStatusLoading}
+                  onClick={() => saveSignatories(forceDraft ? "Draft" : "Final")}
                 className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm ring-1 ring-blue-600"
               >
                 <Printer size={14} />
-                <span>{isSaving ? "Saving..." : "Preview"}</span>
+                <span>{isSaving ? "Saving..." : isApprovalStatusLoading ? "Checking..." : "Preview"}</span>
               </button>
             )}
           </div>

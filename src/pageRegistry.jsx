@@ -34,8 +34,11 @@ export const pageRegistry = {
   PCV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PCV.jsx")),
   APV2307: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/APV2307.jsx")),
   CV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/CV.jsx")),
+  CVApprovalModal: lazyPage(() => import("./NAYSA Cloud/Approval/CVApprovalModal.jsx")),
   CVHistory: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/CVHistory.jsx")),
   CheckTemplateSetup: lazyPage(() => import("./NAYSA Cloud/Matrix/CheckTemplateSetup.jsx")),
+  RFPCodeRef: lazyPage(() => import("./NAYSA Cloud/Reference File/RFPCodeRef.jsx")),
+  RFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/RFP.jsx")),
 
   // Purchasing
   PR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx")),

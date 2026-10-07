@@ -3,6 +3,7 @@ import APINQActionBar from "./APINQActionBar";
 import APInquiryTab from "./APInquiryTab";
 import APAdvancesTab from "./APAdvancesTab";
 import APAgingSummaryTab from "./APAgingSummaryTab";
+import APScheduleTab from "./APScheduleTab";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {faFileLines,faDatabase} from "@fortawesome/free-solid-svg-icons";
 
@@ -11,6 +12,7 @@ const TABS = [
   { key: "inquiry",  label: "AP Query",       component: APInquiryTab },
   { key: "advances", label: "AP Advances",      component: APAdvancesTab },
   { key: "aging",    label: "AP Aging Summary", component: APAgingSummaryTab },
+  { key: "schedule", label: "AP Schedule",       component: APScheduleTab },
 ];
 
 export default function APINQ() {
@@ -35,6 +37,7 @@ export default function APINQ() {
     if (typeof window === "undefined") return;
     delete window.__NAYSA_APADV_CACHE__;
     delete window.__NAYSA_APAGE_CACHE__;
+    delete window.__NAYSA_APSCH_CACHE__;
     if (window.__NAYSA_APINQ_CACHE__) {
       delete window.__NAYSA_APINQ_CACHE__.AP_INQUIRY;
     }

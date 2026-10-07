@@ -12,7 +12,7 @@ import { useSwalSuccessAlert, useSwalErrorAlert, useSwalProceedConfirm } from "@
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines, faChevronDown, faFolderOpen, faBox, faBriefcase, faCoins, faReceipt, faShip } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines, faChevronDown, faFolderOpen, faBox, faBriefcase, faCoins, faReceipt, faShip, faMoneyCheckDollar } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -175,6 +175,7 @@ const buildApvDetailPayloadRow = (row, index, selectedApType) => {
   return {
     lnNo: String(index + 1),
     invType: isReplenishment ? row.invType || "PCV" : row.invType || "",
+    rfpNo: row.rfpNo || "",
     rrNo: isReplenishment ? pcvNo : row.rrNo || "",
     poNo: row.poNo || "",
     siNo: isAdvance ? row.poNo || "" : isReplenishment ? row.siNo || pcvNo : row.siNo || "",
@@ -210,6 +211,7 @@ const buildApvDetailPayloadRow = (row, index, selectedApType) => {
     refPcvNo: isReplenishment ? pcvNo : "",
     refPcvId: isReplenishment ? pcvId : "",
     groupId: row.groupId || "",
+    remarks: row.remarks || "",
   };
 };
 
@@ -408,7 +410,7 @@ const APV = () => {
 
   const openReferenceInquiry = async (referenceType) => {
     setShowOpenReferencesDropdown(false);
-    const targetApType = { RR: "APV01", JO: "APV01", PO: "APV03", PCV: "APV04", LC: "APV07" }[referenceType];
+    const targetApType = { RR: "APV01", JO: "APV01", RFP: "APV01", PO: "APV03", PCV: "APV04", LC: "APV07" }[referenceType];
     if (!documentID && targetApType !== selectedApType) {
       if (detailRows.length > 0 || state.receivingRows.length > 0) {
         useSwalErrorAlert("Open References", "Use the same AP Type for existing invoice lines, or reset the document first.");
@@ -421,6 +423,7 @@ const APV = () => {
     const overrides = { inquiryMode: true, vendCode: "" };
     if (referenceType === "RR") handleOpenReferenceRR(overrides);
     else if (referenceType === "JO") handleOpenReferenceJO(overrides);
+    else if (referenceType === "RFP") handleOpenReferenceRFP(overrides);
     else if (referenceType === "PO") handleOpenReferencePOAdvance(overrides);
     else if (referenceType === "PCV") handleOpenReferencePCV(overrides);
     else if (referenceType === "LC") handleOpenReferenceLCImportation(true);
@@ -562,14 +565,15 @@ const APV = () => {
 
   // AP type controls which transaction sections are available.
   useEffect(() => {
-    const shouldHideInvoiceDetails = isNonPurchasesApType(selectedApType);
+    const hasRfpDetails = detailRows.some((row) => String(row?.invType || "").trim().toUpperCase() === "RFP");
+    const shouldHideInvoiceDetails = isNonPurchasesApType(selectedApType) && !hasRfpDetails;
     updateState({
       fieldVisibility: {
         ...fieldVisibility,
         invoiceDetails: !shouldHideInvoiceDetails,
       },
     });
-  }, [selectedApType]);
+  }, [selectedApType, detailRows]);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -649,6 +653,21 @@ const APV = () => {
     { key: "poAmount", label: "PO / JO Amount", width: 130, type: "amount" },
     { key: "vatCode", label: "VAT Code", width: 100 },
     { key: "vatAmount", label: "VAT Amount", width: 130, type: "amount" },
+  ];
+  const openRFPLookupColumns = [
+    { key: "branchCode", label: "Branch", width: 80 },
+    { key: "rfpNo", label: "RFP No.", width: 120 },
+    { key: "rfpDate", label: "RFP Date", width: 110 },
+    { key: "vendCode", label: "Payee Code", width: 110 },
+    { key: "vendName", label: "Payee Name", width: 220 },
+    { key: "rfpRefNo", label: "Reference No.", width: 130 },
+    { key: "rfpCode", label: "RFP Code", width: 100 },
+    { key: "rfpName", label: "RFP Description", width: 190 },
+    { key: "scope", label: "Scope", width: 220 },
+    { key: "rcCode", label: "RC Code", width: 100 },
+    { key: "rfpAmount", label: "RFP Amount", width: 130, type: "amount" },
+    { key: "appliedAmount", label: "Applied Amount", width: 130, type: "amount" },
+    { key: "balanceAmount", label: "Balance", width: 130, type: "amount" },
   ];
   const getPOAdvanceBalance = (row = {}) => {
     if (row.advanceBalance !== undefined && row.advanceBalance !== null) return Math.max(parseFormattedNumber(row.advanceBalance) || 0, 0);
@@ -1750,6 +1769,22 @@ const APV = () => {
   };
 
 
+  const getRfpBalanceValidationError = (rows = detailRows) => {
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index] || {};
+      if (String(row.invType || "").trim().toUpperCase() !== "RFP") continue;
+      if (row.rfpBalance === undefined || row.rfpBalance === null || row.rfpBalance === "") continue;
+
+      const amount = parseFormattedNumber(row.amount) || 0;
+      const rfpBalance = Math.max(parseFormattedNumber(row.rfpBalance) || 0, 0);
+      if (amount > rfpBalance) {
+        return `Original Amount in row ${index + 1} cannot exceed the RFP Balance of ${formatNumber(rfpBalance)}.`;
+      }
+    }
+    return "";
+  };
+
+
   const buildTransactionPayload = (glRows = detailRowsGL, invoiceRows = detailRows) => ({
     branchCode,
     apvNo: documentNo || "",
@@ -2048,6 +2083,11 @@ const APV = () => {
     if (remarksEl) remarksEl.focus();
     const shouldGenerateGl = action === "GenerateGL" || (action === "Upsert" && (detailRowsGL.length === 0 || state.receivingRows.length > 0));
     if (["GenerateGL", "Upsert"].includes(action)) {
+      const rfpValidationError = getRfpBalanceValidationError();
+      if (rfpValidationError) {
+        useSwalErrorAlert("Invalid RFP Amount", rfpValidationError);
+        return;
+      }
       const advanceValidationError = getAdvanceValidationError();
       if (advanceValidationError) {
         useSwalErrorAlert("Invalid Advances Amount", advanceValidationError);
@@ -2483,6 +2523,62 @@ const APV = () => {
   };
 
 
+  const handleOpenReferenceRFP = async (overrides = {}) => {
+    setShowInvoiceAddDropdown(false);
+    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
+    const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
+    const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
+    if (!lookupVendCode && !overrides.inquiryMode) {
+      updateState({
+        payeeModalOpen: true,
+        modalContext: "openRFP",
+      });
+      return;
+    }
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+      const rawRows = await fetchAPVReferenceSummary({
+        apvtranType: "APV01",
+        referenceType: "RFP",
+        branchCode: lookupBranchCode,
+        vendCode: lookupVendCode,
+      });
+      const normalizedRows = rawRows.map((row, index) => ({
+        ...row,
+        type: "RFP",
+        invType: "RFP",
+        groupId: row.groupId || `${row.rfpId || row.rfpNo || "RFP"}-${row.lineNo || index + 1}`,
+        sourceId: row.sourceId || row.groupId || "",
+        rfpDate: useformatToDatev2(row.rfpDate) || normalizeSlrefDate(row.rfpDate),
+        balanceAmount: parseFormattedNumber(row.balanceAmount ?? row.rfpBalance ?? 0) || 0,
+      }));
+
+      if (!normalizedRows.length) {
+        useSwalErrorAlert("Open Request for Payment", "No open Request for Payment balance was found.");
+        return;
+      }
+
+      updateState({
+        globalLookupRow: normalizedRows,
+        globalLookupHeader: openRFPLookupColumns,
+        globalLookupTitle: "Open Request for Payment",
+        globalLookupBtnCaption: "Get Selected RFP",
+        showRRRefModal: true,
+        modalContext: "openRFP",
+      });
+    } catch (error) {
+      console.error("Failed to fetch open RFP references:", error);
+      useSwalErrorAlert(
+        "Open Request for Payment",
+        error?.response?.data?.message || error?.response?.data?.details || error?.message || "Unable to load open Request for Payment balances.",
+      );
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+
   const handleOpenReferenceRR = async (overrides = {}) => {
     setShowInvoiceAddDropdown(false);
     if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
@@ -2715,6 +2811,7 @@ const APV = () => {
     const isPOAdvanceFlow = modalContext === "openPOAdvance";
     const isLCImportationFlow = modalContext === "openLCImportation";
     const isPCVFlow = modalContext === "openPCV";
+    const isRFPFlow = modalContext === "openRFP";
     const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
     if (!itemsArray.length) return;
     if (referenceInquiryOpen && documentID) return;
@@ -2727,6 +2824,72 @@ const APV = () => {
       if (referenceInquiryOpen) updateState(payeeUpdates);
       const effectiveVendCode = payeeUpdates.vendCode || vendCode;
       const effectiveVendName = payeeUpdates.vendName || vendName;
+      if (isRFPFlow) {
+        const unmappedRfp = itemsArray.find((item) => !String(item.debitAcct || item.acctCode || "").trim());
+        if (unmappedRfp) {
+          useSwalErrorAlert(
+            "Missing RFP GL Account",
+            `Map RFP Code ${unmappedRfp.rfpCode || ""} to a GL Account before selecting this reference.`,
+          );
+          return;
+        }
+        const foundVatCode = effectiveVendName?.vatCode || "";
+        const foundAtcCode = effectiveVendName?.atcCode || "";
+        const [masterVatRow, masterAtcRow, masterVatRate] = await Promise.all([
+          foundVatCode ? useTopVatRow(foundVatCode) : null,
+          foundAtcCode ? useTopATCRow(foundAtcCode) : null,
+          foundVatCode ? getVatRate(foundVatCode) : 0,
+        ]);
+        const mappedRows = await Promise.all(itemsArray.map(async (item) => {
+          const amount = parseFormattedNumber(item.balanceAmount ?? item.rfpBalance ?? item.rfpAmount ?? 0) || 0;
+          const vatAmount = masterVatRate > 0 ? (amount / (1 + masterVatRate)) * masterVatRate : 0;
+          const netOfVat = +(amount - vatAmount).toFixed(2);
+          const atcAmount = foundAtcCode ? await useTopATCAmount(foundAtcCode, netOfVat) : 0;
+          const rfpNo = item.rfpNo || "";
+          return {
+            lnNo: "",
+            invType: "RFP",
+            rfpNo,
+            rrNo: "",
+            poNo: rfpNo,
+            siNo: item.rfpRefNo || "",
+            siDate: useformatToDatev2(item.rfpDate) || normalizeSlrefDate(item.rfpDate) || useGetCurrentDayV2(),
+            amount: formatNumber(amount),
+            siAmount: formatNumber(amount),
+            rfpBalance: formatNumber(amount),
+            debitAcct: item.debitAcct || item.acctCode || "",
+            rcCode: item.rcCode || "",
+            rcName: item.rcName || "",
+            sltypeCode: "SU",
+            slCode: effectiveVendCode || item.vendCode || "",
+            slName: effectiveVendName?.vendName || item.vendName || "",
+            vatCode: foundVatCode,
+            vatName: masterVatRow?.vatName || effectiveVendName?.vatName || "",
+            vatAmount: formatNumber(vatAmount),
+            atcCode: foundAtcCode,
+            atcName: masterAtcRow?.atcName || effectiveVendName?.atcName || "",
+            atcAmount: formatNumber(atcAmount),
+            paytermCode: item.paytermCode || "",
+            dueDate: useformatToDatev2(item.dateNeeded) || normalizeSlrefDate(item.dateNeeded) || useGetCurrentDayV2(),
+            remarks: item.rfpName || "",
+            recRc: item.rcCode ? "Y" : "N",
+            recSl: "Y",
+            sourceId: item.sourceId || item.groupId || "",
+            rfpId: item.rfpId || "",
+            rfpLineNo: item.lineNo || "",
+          };
+        }));
+        const updatedRows = [...detailRows, ...mappedRows];
+        updateInvoiceDetails(updatedRows, {
+          ...payeeUpdates,
+          showRRRefModal: false,
+          modalContext: "",
+          globalLookupTitle: "",
+          globalLookupBtnCaption: "",
+          triggerGLEntries: false,
+        });
+        return;
+      }
       if (isPCVFlow) {
         const mappedRows = await Promise.all(
           itemsArray.map(async (item) => {
@@ -3325,6 +3488,7 @@ const APV = () => {
 
     const isRRFlow = modalContext === "openRR";
     const isJOFlow = modalContext === "openJO";
+    const isRFPFlow = modalContext === "openRFP";
     const isPOAdvanceFlow = modalContext === "openPOAdvance";
     const isPCVFlow = modalContext === "openPCV";
     const isAddPayeeDetailFlow = modalContext === "addPayeeDetail";
@@ -3419,6 +3583,13 @@ const APV = () => {
       } else if (isJOFlow) {
         setTimeout(() => {
           handleOpenReferenceJO({
+            vendCode: foundVendCode,
+            branchCode,
+          });
+        }, 100);
+      } else if (isRFPFlow) {
+        setTimeout(() => {
+          handleOpenReferenceRFP({
             vendCode: foundVendCode,
             branchCode,
           });
@@ -3675,6 +3846,30 @@ const APV = () => {
       }
     }
     updateInvoiceDetails(updatedRows);
+  };
+
+
+  const commitOriginalAmount = async (index, value) => {
+    const row = detailRows[index] || {};
+    const amount = parseFormattedNumber(value);
+    const normalizedAmount = Number.isFinite(amount) ? amount : 0;
+    const isRfpRow = String(row.invType || "").trim().toUpperCase() === "RFP";
+    const hasRfpBalance = row.rfpBalance !== undefined && row.rfpBalance !== null && row.rfpBalance !== "";
+
+    if (isRfpRow && hasRfpBalance) {
+      const rfpBalance = Math.max(parseFormattedNumber(row.rfpBalance) || 0, 0);
+      if (normalizedAmount > rfpBalance) {
+        useSwalErrorAlert(
+          "Invalid RFP Amount",
+          `Original Amount cannot exceed the RFP Balance of ${formatNumber(rfpBalance)}.`,
+        );
+        await handleDetailChange(index, "amount", formatNumber(rfpBalance), true);
+        return false;
+      }
+    }
+
+    await handleDetailChange(index, "amount", formatNumber(normalizedAmount), true);
+    return true;
   };
 
 
@@ -4316,6 +4511,7 @@ const APV = () => {
       Boolean(String(row.poNo || "").trim()),
   );
   const isLcSourcedImportationRow = (row) => isImportationAPType && Boolean(String(row.sourceId || row.sourceNo || "").trim());
+  const isRfpSourcedRow = (row) => String(row?.invType || "").trim().toUpperCase() === "RFP";
   const showAppliedAdvancesColumns = isPurchasesAPType || isImportationAPType;
   const showAdvancesAccountColumn = isPurchasesAPType || isAdvancesAPType || isImportationAPType;
   const showDrAccountColumn = !isAdvancesAPType;
@@ -4330,6 +4526,7 @@ const APV = () => {
     { key: "debitAcct", label: "DR Acct", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
     { key: "rcName", label: "RC Name", width: 260 },
+    { key: "remarks", label: "Remarks", width: 240 },
   ];
   const regularApvDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -4412,6 +4609,8 @@ const APV = () => {
           },
         ]
       : []),
+
+    { key: "remarks", label: "Remarks", width: 240 },
   ];
   const apvDetailColumnDefs = isReplenishmentAPType ? replenishmentDetailColumnDefs : regularApvDetailColumnDefs;
   const apvDetailColumnMasterDefs = [
@@ -4443,6 +4642,7 @@ const APV = () => {
     { key: "advpoVatAmount", label: "Applied Advances VAT", width: 150 },
     { key: "advpoAtcAmount", label: "Applied Advances EWT", width: 150 },
     { key: "advAcct", label: "Advances Account", width: 150 },
+    { key: "remarks", label: "Remarks", width: 240 },
   ];
   const {
     getColumnStyle: getApvDetailColumnStyle,
@@ -4644,6 +4844,7 @@ const APV = () => {
             >
               Basic Information
             </button>
+            {!isViewDocument && (
             <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
               <button
                 type="button"
@@ -4661,6 +4862,7 @@ const APV = () => {
                   {[
                     ["RR", "Open Purchases (RR)", faBox],
                     ["JO", "Open Purchases (JO)", faBriefcase],
+                    ["RFP", "Open Request for Payment", faMoneyCheckDollar],
                     ["PO", "Open Advances", faCoins],
                     ["PCV", "Open Replenishment", faReceipt],
                     ...(canOpenImportationInquiry ? [["LC", "Open Importation", faShip]] : []),
@@ -4678,6 +4880,7 @@ const APV = () => {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* APV Header Form Section */}
@@ -5036,6 +5239,16 @@ const APV = () => {
                               <input type="text" className="w-full global-tran-td-inputclass-ui" value={row.rcName || ""} readOnly disabled={isFormDisabled} />
                             </td>
 
+                            <td data-apv-column-key="remarks" className="global-tran-td-ui">
+                              <input
+                                type="text"
+                                className="w-[230px] global-tran-td-inputclass-ui"
+                                value={row.remarks || ""}
+                                onChange={(e) => handleDetailChange(index, "remarks", e.target.value, false)}
+                                disabled={isFormDisabled}
+                              />
+                            </td>
+
                             {!isFormDisabled && (
                               <td className="global-tran-td-ui text-center sticky right-0" style={transactionActionsCellStyle}>
                                 <div className="flex items-center justify-center gap-1">
@@ -5057,9 +5270,10 @@ const APV = () => {
                                   className="w-[50px] global-tran-td-inputclass-ui"
                                   value={row.invType || ""}
                                   onChange={(e) => handleDetailChange(index, "invType", e.target.value, false)}
-                                  disabled={isFormDisabled || isLcSourcedImportationRow(row)}
+                                  disabled={isFormDisabled || isLcSourcedImportationRow(row) || isRfpSourcedRow(row)}
                                 >
                                   <option value=""></option>
+                                  {isRfpSourcedRow(row) && <option value="RFP">RFP</option>}
                                   {isImportationAPType && <option value="LC">LC</option>}
                                   <option value="FG">FG</option>
                                   <option value="MS">MS</option>
@@ -5079,7 +5293,7 @@ const APV = () => {
                                   value={row.rrNo || ""}
                                   maxLength={25}
                                   onChange={(e) => handleDetailChange(index, "rrNo", e.target.value, false)}
-                                  disabled={isFormDisabled}
+                                  disabled={isFormDisabled || isRfpSourcedRow(row)}
                                 />
                               </td>
                             )}
@@ -5091,7 +5305,7 @@ const APV = () => {
                                   value={row.poNo || ""}
                                   maxLength={25}
                                   onChange={(e) => handleDetailChange(index, "poNo", e.target.value, false)}
-                                  disabled={isFormDisabled || isLcSourcedImportationRow(row) || Boolean(row.apAdvId || row.advpoNo)}
+                                  disabled={isFormDisabled || isLcSourcedImportationRow(row) || isRfpSourcedRow(row) || Boolean(row.apAdvId || row.advpoNo)}
                                 />
                               </td>
                             )}
@@ -5103,7 +5317,7 @@ const APV = () => {
                                   value={row.siNo || ""}
                                   maxLength={25}
                                   onChange={(e) => handleDetailChange(index, "siNo", e.target.value, false)}
-                                  disabled={isFormDisabled || isLcSourcedImportationRow(row)}
+                                  disabled={isFormDisabled || isLcSourcedImportationRow(row) || isRfpSourcedRow(row)}
                                 />
                               </td>
                             )}
@@ -5140,10 +5354,8 @@ const APV = () => {
                                 onKeyDown={async (e) => {
                                   if (e.key === "Enter") {
                                     e.preventDefault();
-                                    const value = e.target.value;
-                                    const num = parseFormattedNumber(value);
-                                    if (!isNaN(num)) {
-                                      await handleDetailChange(index, "amount", num.toFixed(2), true);
+                                    const isValid = await commitOriginalAmount(index, e.currentTarget.value);
+                                    if (isValid) {
                                       amountRefs.current[index + 1]?.focus();
                                     }
                                   }
@@ -5157,11 +5369,7 @@ const APV = () => {
                                 }}
                                 onBlur={async (e) => {
                                   if (isFormDisabled) return;
-                                  const value = e.target.value;
-                                  const num = parseFormattedNumber(value);
-                                  if (!isNaN(num)) {
-                                    await handleDetailChange(index, "amount", num.toFixed(2), true);
-                                  }
+                                  await commitOriginalAmount(index, e.currentTarget.value);
                                 }}
                               />
                             </td>
@@ -5581,6 +5789,16 @@ const APV = () => {
                               </>
                             )}
 
+                            <td data-apv-column-key="remarks" className="global-tran-td-ui">
+                              <input
+                                type="text"
+                                className="w-[230px] global-tran-td-inputclass-ui"
+                                value={row.remarks || ""}
+                                onChange={(e) => handleDetailChange(index, "remarks", e.target.value, false)}
+                                disabled={isFormDisabled}
+                              />
+                            </td>
+
                             {!isFormDisabled && (
                               <td className="global-tran-td-ui text-center sticky right-0" style={transactionActionsCellStyle}>
                                 <div className="flex items-center justify-center gap-1">
@@ -5689,6 +5907,27 @@ const APV = () => {
                                   <div className="flex flex-col items-start">
                                     <span>Open JO Reference</span>
                                     <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Select an open Job Order</span>
+                                  </div>
+                                </div>
+                              </button>
+
+                              <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
+
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-violet-700 transition-all duration-150 hover:bg-violet-50 hover:text-violet-900 dark:text-violet-300 dark:hover:bg-slate-700"
+                                onClick={() => {
+                                  setShowInvoiceAddDropdown(false);
+                                  handleOpenReferenceRFP();
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-slate-700 dark:text-violet-300">
+                                    <FontAwesomeIcon icon={faMoneyCheckDollar} />
+                                  </span>
+                                  <div className="flex flex-col items-start">
+                                    <span>Open RFP</span>
+                                    <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Select an open Request for Payment</span>
                                   </div>
                                 </div>
                               </button>

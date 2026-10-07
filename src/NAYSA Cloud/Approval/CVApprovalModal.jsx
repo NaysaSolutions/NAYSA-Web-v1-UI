@@ -11,9 +11,37 @@ import {
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import GlobalApprovalModal from "@/NAYSA Cloud/Approval/GlobaApprovalModal.jsx";
 
-const ENDPOINT = "getJOApproval";
-const APPROVE_ENDPOINT = "approveJO";
+const ENDPOINT = "getCVApproval";
+const APPROVE_ENDPOINT = "approveCV";
 const EMPTY_PARAMS = {};
+const CV_APPROVAL_COLUMNS = [
+  { key: "branchCode", label: "Branch", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "cvNo", label: "CV No.", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "cvDate", label: "CV Date", classNames: "text-left", hidden: false, renderType: "date", renderFormat: "MM/DD/YYYY" },
+  { key: "payeeCode", label: "Payee Code", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "payeeName", label: "Payee Name", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "bankCode", label: "Bank Code", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "bankAcctName", label: "Bank Account Name", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "checkNo", label: "Check No.", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "checkDate", label: "Check Date", classNames: "text-left", hidden: false, renderType: "date", renderFormat: "MM/DD/YYYY" },
+  { key: "currCode", label: "Currency", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "amount", label: "Amount", classNames: "text-right", hidden: false, renderType: "number", renderFormat: "N2" },
+  { key: "remarks", label: "Remarks", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "preparedBy", label: "Prepared By", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "userApp1", label: "Approver 1", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "appDate1", label: "Approval Date 1", classNames: "text-left", hidden: false, renderType: "date", renderFormat: "MM/DD/YYYY" },
+  { key: "appNote1", label: "Approval Note 1", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "userApp2", label: "Approver 2", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "appDate2", label: "Approval Date 2", classNames: "text-left", hidden: false, renderType: "date", renderFormat: "MM/DD/YYYY" },
+  { key: "appNote2", label: "Approval Note 2", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "userApp3", label: "Approver 3", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "appDate3", label: "Approval Date 3", classNames: "text-left", hidden: false, renderType: "date", renderFormat: "MM/DD/YYYY" },
+  { key: "appNote3", label: "Approval Note 3", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "userApp4", label: "Approver 4", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "appDate4", label: "Approval Date 4", classNames: "text-left", hidden: false, renderType: "date", renderFormat: "MM/DD/YYYY" },
+  { key: "appNote4", label: "Approval Note 4", classNames: "text-left", hidden: false, renderType: "text" },
+  { key: "viewDocument", label: "View Document", classNames: "text-left", hidden: true, renderType: "text" },
+];
 
 const getDirectProfileImage = (row) =>
   row?.profileImageUrl ||
@@ -123,27 +151,19 @@ const buildApprovePayload = (
   appLevel,
   mode,
   reason,
-  url: `${window.location.origin}/?page=JOApprovalModal`,
+  url: `${window.location.origin}/?page=CVApprovalModal`,
 });
 
-const getJODisplayNo = (row, index) =>
-  String(
-    row?.docNo ||
-      row?.joNo ||
-      row?.JO_NO ||
-      row?.documentNo ||
-      row?.tranNo ||
-      row?.tranId ||
-      `JO ${index + 1}`,
-  );
+const getCVDisplayNo = (row, index) =>
+  String(row?.cvNo || `CV ${index + 1}`);
 
-const buildApprovedJOMessage = (approvalRows) => {
+const buildApprovedCVMessage = (approvalRows) => {
   const limit = 5;
 
   const visibleRows = approvalRows.slice(0, limit);
 
   const approvedList = visibleRows
-    .map((row, index) => `${index + 1}. ${getJODisplayNo(row, index)}`)
+    .map((row, index) => `${index + 1}. ${getCVDisplayNo(row, index)}`)
     .join("\n");
 
   const remainingCount = approvalRows.length - limit;
@@ -151,18 +171,18 @@ const buildApprovedJOMessage = (approvalRows) => {
   const moreText =
     approvalRows.length > limit ? `\n...and +${remainingCount} more` : "";
 
-  return `The following JO${
+  return `The following CV${
     approvalRows.length > 1 ? "s have" : " has"
   } been approved:\n${approvedList}${moreText}`;
 };
 
-const buildDisapprovedJOMessage = (approvalRows) => {
+const buildDisapprovedCVMessage = (approvalRows) => {
   const limit = 5;
 
   const visibleRows = approvalRows.slice(0, limit);
 
   const disapprovedList = visibleRows
-    .map((row, index) => `${index + 1}. ${getJODisplayNo(row, index)}`)
+    .map((row, index) => `${index + 1}. ${getCVDisplayNo(row, index)}`)
     .join("\n");
 
   const remainingCount = approvalRows.length - limit;
@@ -170,18 +190,18 @@ const buildDisapprovedJOMessage = (approvalRows) => {
   const moreText =
     approvalRows.length > limit ? `\n...and +${remainingCount} more` : "";
 
-  return `The following JO${
+  return `The following CV${
     approvalRows.length > 1 ? "s have" : " has"
   } been disapproved:\n${disapprovedList}${moreText}`;
 };
 
-const buildCommentedJOMessage = (approvalRows) => {
+const buildCommentedCVMessage = (approvalRows) => {
   const limit = 5;
 
   const visibleRows = approvalRows.slice(0, limit);
 
   const commentedList = visibleRows
-    .map((row, index) => `${index + 1}. ${getJODisplayNo(row, index)}`)
+    .map((row, index) => `${index + 1}. ${getCVDisplayNo(row, index)}`)
     .join("\n");
 
   const remainingCount = approvalRows.length - limit;
@@ -189,12 +209,12 @@ const buildCommentedJOMessage = (approvalRows) => {
   const moreText =
     approvalRows.length > limit ? `\n...and +${remainingCount} more` : "";
 
-  return `Approver's note has been applied to the following JO${
+  return `Approver's note has been applied to the following CV${
     approvalRows.length > 1 ? "s" : ""
   }:\n${commentedList}${moreText}`;
 };
 
-const JOApprovalModal = ({
+const CVApprovalModal = ({
   isOpen,
   approverName,
   department,
@@ -202,8 +222,8 @@ const JOApprovalModal = ({
   params = EMPTY_PARAMS,
   detailRows,
   detailColumns,
-  transactionLabel = "Job Order Approval",
-  documentName = "Job Order",
+  transactionLabel = "Check Voucher Approval",
+  documentName = "Check Voucher",
   onDataLoaded,
   onViewDocument,
   onViewAttachment,
@@ -227,14 +247,18 @@ const JOApprovalModal = ({
     () => JSON.stringify(requestParams),
     [requestParams],
   );
-  const resolvedColumns = Array.isArray(detailColumns) ? detailColumns : columns;
+  const resolvedColumns = Array.isArray(detailColumns)
+    ? detailColumns
+    : columns.length
+      ? columns
+      : CV_APPROVAL_COLUMNS;
   const effectiveApproverName = approverName || currentUserRow?.userName ||  "";
   const effectiveApproverImageSrc = useMemo(
     () => buildProfileImageUrl(resolvedUserCode, getDirectProfileImage(currentUserRow)),
     [currentUserRow, resolvedUserCode],
   );
   const effectiveDepartment = department || currentUserRow?.rcName ||  "";
-  const approvalLevel = currentUserRow?.joAppLevel ||  "";
+  const approvalLevel = currentUserRow?.cvAppLevel ||  "";
   const effectiveColumns = useMemo(
     () =>
       resolvedColumns.filter(
@@ -251,7 +275,7 @@ const JOApprovalModal = ({
       setColumns(Array.isArray(selectedColumns) ? selectedColumns : []);
       loadedColumnsRef.current = true;
     } catch (error) {
-      console.error("Load JO approval columns failed:", error);
+      console.error("Load CV approval columns failed:", error);
       loadedColumnsRef.current = true;
     }
   }, [detailColumns]);
@@ -283,8 +307,8 @@ const JOApprovalModal = ({
 
     noApprovalAlertShownRef.current = true;
     useSwalInfoAlert(
-      "JO Approval",
-      "There is no JO for approval available.",
+      "CV Approval",
+      "There is no CV for approval available.",
     );
     onClose?.();
   }, [onClose]);
@@ -322,13 +346,13 @@ const JOApprovalModal = ({
       }
       return nextRows;
     } catch (error) {
-      console.error("Reload JO approval failed:", error);
+      console.error("Reload CV approval failed:", error);
       setRows([]);
       useSwalErrorAlert(
-        "JO Approval",
+        "CV Approval",
         error?.response?.data?.message ||
           error?.message ||
-          "Unable to reload JO approval detail.",
+          "Unable to reload CV approval detail.",
       );
       return [];
     } finally {
@@ -353,7 +377,7 @@ const JOApprovalModal = ({
       if (!payload.tranIds) return;
 
       const confirm = await useSwalProceedConfirm(
-        "Approve JO?",
+        "Approve CV?",
         `Approve ${approvalCount} selected transaction${
           approvalCount > 1 ? "s" : ""
         }?`,
@@ -374,17 +398,17 @@ const JOApprovalModal = ({
         setIsApproving(false);
 
         await useSwalSuccessAlert(
-          "JO Approved",
-          buildApprovedJOMessage(targetRows),
+          "CV Approved",
+          buildApprovedCVMessage(targetRows),
         );
         await reloadApprovalRows({ showLoading: false });
       } catch (error) {
-        console.error("Approve JO failed:", error);
+        console.error("Approve CV failed:", error);
         useSwalErrorAlert(
-          "JO Approval",
+          "CV Approval",
           error?.response?.data?.message ||
             error?.message ||
-            "Unable to approve selected JO transaction.",
+            "Unable to approve selected CV transaction.",
         );
       } finally {
         setIsApproving(false);
@@ -417,23 +441,23 @@ const JOApprovalModal = ({
           json_data: payload
         };
 
-        // console.log("Disapprove payload:", JSON.stringify(finalPayload));
+        //console.log("Disapprove payload:", JSON.stringify(finalPayload));
         await postRequest(APPROVE_ENDPOINT, finalPayload);
         setIsApproving(false);
 
         await useSwalSuccessAlert(
-          "JO Disapproved",
-          buildDisapprovedJOMessage(targetRows),
+          "CV Disapproved",
+          buildDisapprovedCVMessage(targetRows),
         );
         await reloadApprovalRows({ showLoading: false });
         return true;
       } catch (error) {
-        console.error("Disapprove JO failed:", error);
+        console.error("Disapprove CV failed:", error);
         useSwalErrorAlert(
-          "JO Approval",
+          "CV Approval",
           error?.response?.data?.message ||
             error?.message ||
-            "Unable to disapprove selected JO transaction.",
+            "Unable to disapprove selected CV transaction.",
         );
         return false;
       } finally {
@@ -472,17 +496,17 @@ const JOApprovalModal = ({
 
         await useSwalSuccessAlert(
           "Approver's Note Applied",
-          buildCommentedJOMessage(targetRows),
+          buildCommentedCVMessage(targetRows),
         );
         await reloadApprovalRows({ showLoading: false });
         return true;
       } catch (error) {
-        console.error("Apply JO approver note failed:", error);
+        console.error("Apply CV approver note failed:", error);
         useSwalErrorAlert(
-          "JO Approval",
+          "CV Approval",
           error?.response?.data?.message ||
             error?.message ||
-            "Unable to apply approver's note to selected JO transaction.",
+            "Unable to apply approver's note to selected CV transaction.",
         );
         return false;
       } finally {
@@ -537,15 +561,15 @@ const JOApprovalModal = ({
           showNoApprovalAvailableAlert();
         }
       } catch (error) {
-        console.error("Fetch JO approval failed:", error);
+        console.error("Fetch CV approval failed:", error);
         if (alive) {
           setRows([]);
           setIsInitialLoadComplete(true);
           useSwalErrorAlert(
-            "JO Approval",
+            "CV Approval",
             error?.response?.data?.message ||
               error?.message ||
-              "Unable to load JO approval detail.",
+              "Unable to load CV approval detail.",
           );
         }
       } finally {
@@ -583,7 +607,7 @@ const JOApprovalModal = ({
         title={transactionLabel}
         transactionLabel={transactionLabel}
         documentName={documentName}
-        totalLabel="Total JOs"
+        totalLabel="Total CVs"
         approverName={effectiveApproverName}
         approverImageSrc={effectiveApproverImageSrc}
         approvalLevel={approvalLevel}
@@ -608,5 +632,5 @@ const JOApprovalModal = ({
   );
 };
 
-export default JOApprovalModal;
+export default CVApprovalModal;
 
