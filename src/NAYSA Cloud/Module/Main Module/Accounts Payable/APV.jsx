@@ -408,6 +408,33 @@ const APV = () => {
     return true;
   };
 
+  const validateRfpReferences = (selectedRows) => {
+    const existingSourceIds = new Set(
+      detailRows
+        .filter((row) => String(row.invType || "").trim().toUpperCase() === "RFP")
+        .map((row) => String(row.sourceId || "").trim().toUpperCase())
+        .filter(Boolean),
+    );
+    const selectedSourceIds = new Set();
+
+    for (const row of selectedRows) {
+      const sourceId = String(row.sourceId || "").trim().toUpperCase();
+      if (!sourceId) continue;
+
+      if (existingSourceIds.has(sourceId) || selectedSourceIds.has(sourceId)) {
+        useSwalErrorAlert(
+          "Duplicate RFP Reference",
+          `RFP ${row.rfpNo || "reference"} is already selected in Invoice Details.`,
+        );
+        return false;
+      }
+
+      selectedSourceIds.add(sourceId);
+    }
+
+    return true;
+  };
+
   const openReferenceInquiry = async (referenceType) => {
     setShowOpenReferencesDropdown(false);
     const targetApType = { RR: "APV01", JO: "APV01", RFP: "APV01", PO: "APV03", PCV: "APV04", LC: "APV07" }[referenceType];
@@ -2816,6 +2843,7 @@ const APV = () => {
     if (!itemsArray.length) return;
     if (referenceInquiryOpen && documentID) return;
     if (!validateReferencePayees(itemsArray, !referenceInquiryOpen)) return;
+    if (isRFPFlow && !validateRfpReferences(itemsArray)) return;
     updateState({ isLoading: true, showSpinner: true });
 
     try {
@@ -2825,6 +2853,7 @@ const APV = () => {
       const effectiveVendCode = payeeUpdates.vendCode || vendCode;
       const effectiveVendName = payeeUpdates.vendName || vendName;
       if (isRFPFlow) {
+        const rfpRemarks = itemsArray[0]?.remarks || "";
         const unmappedRfp = itemsArray.find((item) => !String(item.debitAcct || item.acctCode || "").trim());
         if (unmappedRfp) {
           useSwalErrorAlert(
@@ -2882,6 +2911,10 @@ const APV = () => {
         const updatedRows = [...detailRows, ...mappedRows];
         updateInvoiceDetails(updatedRows, {
           ...payeeUpdates,
+          header: {
+            ...header,
+            remarks: rfpRemarks,
+          },
           showRRRefModal: false,
           modalContext: "",
           globalLookupTitle: "",
@@ -6533,7 +6566,10 @@ const APV = () => {
             }
             idKey="groupId"
             viewOnly={referenceInquiryOpen && Boolean(documentID)}
-            selectionValidator={(rows) => validateReferencePayees(rows, !referenceInquiryOpen)}
+            selectionValidator={(rows) =>
+              validateReferencePayees(rows, !referenceInquiryOpen) &&
+              (modalContext !== "openRFP" || validateRfpReferences(rows))
+            }
             onClose={handleCloseRRRefModal}
             onCancel={() => {
               setReferenceInquiryOpen(false);
