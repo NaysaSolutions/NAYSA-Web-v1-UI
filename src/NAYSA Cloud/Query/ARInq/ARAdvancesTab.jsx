@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useRef, useCallback, forwardRef, useMemo } from "react";
-import { fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { fetchData, postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -9,15 +9,17 @@ import {
   faUser,
   faSliders,
   faTableList,
+  faRotateLeft,
 } from "@fortawesome/free-solid-svg-icons";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import {exportGenericHistoryExcel} from "@/NAYSA Cloud/Global/report";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast";
+import COAMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 import { useTopUserRow, useTopBranchRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import { useGetCurrentDay } from "@/NAYSA Cloud/Global/dates";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
-import { formatNumber, parseFormattedNumber } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { formatNumber, parseFormattedNumber, useSwalProceedConfirm, useSwalSuccessAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
@@ -99,6 +101,14 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
   const { user,companyInfo, currentUserRow, refsLoaded, refsLoading } = useAuth();
   const baseKey = "AR_ADVANCES";
   const hydratedRef = useRef(false);
+  const [refund, setRefund] = useState(null);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundDate, setRefundDate] = useState("");
+  const [refundMethod, setRefundMethod] = useState("APV");
+  const [refundCreditAccount, setRefundCreditAccount] = useState(null);
+  const [showRefundAccount, setShowRefundAccount] = useState(false);
+  const [refundRequestId, setRefundRequestId] = useState("");
+  const [isRefunding, setIsRefunding] = useState(false);
 
   const [state, setState] = useState({
     branchCode: "",
@@ -549,6 +559,96 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
     [fetchRecordperCustomer]
   );
 
+  const handleOpenRefund = useCallback((row) => {
+    const balance = Number(parseFormattedNumber(row?.balance) || 0);
+    if (balance <= 0) return;
+    setRefund(row);
+    setRefundAmount(formatNumber(balance));
+    setRefundDate(new Date().toLocaleDateString("en-CA"));
+    setRefundMethod("APV");
+    setRefundCreditAccount(null);
+    setRefundRequestId(crypto.randomUUID());
+  }, []);
+
+  const handleRefundAmountChange = useCallback((value) => {
+    const raw = value.replace(/,/g, "");
+    if (raw.startsWith("-")) {
+      useSwalErrorAlert("Invalid Refund Amount", "Refund Amount cannot be negative.");
+      return;
+    }
+    if (/^\d*(\.\d{0,2})?$/.test(raw)) setRefundAmount(raw);
+  }, []);
+
+  const handleRefundAmountBlur = useCallback(() => {
+    if (!refundAmount.trim()) return;
+    const amount = Number(parseFormattedNumber(refundAmount));
+    const balance = Number(parseFormattedNumber(refund?.balance));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      useSwalErrorAlert("Invalid Refund Amount", "Refund Amount must be greater than zero.");
+      setRefundAmount("");
+      return;
+    }
+    if (amount > balance) {
+      useSwalErrorAlert("Invalid Refund Amount", `Refund Amount cannot exceed the available balance of ${formatNumber(balance)}.`);
+      setRefundAmount(formatNumber(balance));
+      return;
+    }
+    setRefundAmount(formatNumber(amount));
+  }, [refundAmount, refund?.balance]);
+
+  const handleSubmitRefund = useCallback(async () => {
+    if (!refund || isRefunding) return;
+    const amount = Number(parseFormattedNumber(refundAmount));
+    const balance = Number(parseFormattedNumber(refund.balance));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) {
+      useSwalErrorAlert("Invalid Refund Amount", `Refund Amount must be greater than zero and cannot exceed ${formatNumber(balance)}.`);
+      return;
+    }
+    if (!refundCreditAccount?.acctCode) {
+      useSwalErrorAlert("Credit Account Required", "Select the Credit Account for the refund transaction.");
+      return;
+    }
+    if (!refundDate) {
+      useSwalErrorAlert("Refund Date Required", "Select the refund transaction date.");
+      return;
+    }
+
+    const label = refundMethod === "JV" ? "Journal Voucher" : "Non-Purchases APV";
+    const confirmation = await useSwalProceedConfirm(
+      `Create ${label}?`,
+      `Refund ${refund.currCode} ${formatNumber(amount)} from ${refund.docCode} ${refund.docNo}?`,
+      `Create and Post ${refundMethod}`,
+      "Cancel"
+    );
+    if (!confirmation.isConfirmed) return;
+
+    setIsRefunding(true);
+    try {
+      const response = await postRequest("refundARAdvance", {
+        json_data: {
+          arAdvId: refund.arAdvId,
+          branchCode: refund.branchCode,
+          amount,
+          refundDate,
+          creditAcctCode: refundCreditAccount.acctCode,
+          refundMethod,
+          userCode: currentUserRow?.userCode || user?.USER_CODE,
+          requestId: refundRequestId,
+        },
+      });
+      if (!response?.success) throw new Error(response?.details || response?.message || "The refund could not be saved.");
+      const completed = response.data;
+      setRefund(null);
+      updateState({ arAdvancesData: [], arAdvancesDataS: [], arAdvancesDataUnfiltered: [] });
+      await fetchRecord({ silent: true });
+      useSwalSuccessAlert("Refund Recorded", `${completed.documentType} ${completed.documentNo} was created and posted. Remaining balance: ${formatNumber(completed.balance)}.`);
+    } catch (error) {
+      useSwalErrorAlert("Refund Failed", error?.response?.data?.details || error?.response?.data?.message || error.message);
+    } finally {
+      setIsRefunding(false);
+    }
+  }, [refund, isRefunding, refundAmount, refundDate, refundCreditAccount, refundMethod, refundRequestId, currentUserRow?.userCode, user?.USER_CODE, fetchRecord]);
+
   const handleViewRow = useCallback((row) => {
     const url = `${window.location.origin}${row.pathUrl}`;
     window.open(url, "_blank", "noopener,noreferrer");
@@ -598,20 +698,20 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
 
   return (
     <div>
-      {showSpinner && <LoadingSpinner />}
+      {(showSpinner || isRefunding) && <LoadingSpinner />}
 
       {/* === Redesigned Filters Card (3-panel) === */}
      <div className="global-tran-tab-div-ui">
-        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+        <div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {/* Customer Details */}
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faUser} />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <FontAwesomeIcon className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600" icon={faUser} />
                 Customer Details
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="branchName"
                   name="branchName"
@@ -647,13 +747,13 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
             </section>
 
             {/* Filters */}
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faSliders} />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <FontAwesomeIcon className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600" icon={faSliders} />
                 Filters
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="advStatus"
                   name="advStatus"
@@ -672,13 +772,13 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
             </section>
 
             {/* Filter Summary */}
-            <aside className="p-5 bg-gray-50">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faTableList} />
+            <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <FontAwesomeIcon className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600" icon={faTableList} />
                 Filter Summary
               </h3>
 
-              <div className="space-y-3 text-sm">
+              <div className="space-y-2 text-[12px]">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Status:</span>
                   <span className="font-semibold text-gray-800">{status}</span>
@@ -723,6 +823,10 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
               showFilters={true}
               rightActionLabel="View"
               onRowAction={handleViewTop}
+              onRowActionsClick={handleOpenRefund}
+              actionsIcon={faRotateLeft}
+              actionsTitle="Refund Advance"
+              isRowActionsDisabled={(row) => Number(parseFormattedNumber(row?.balance) || 0) <= 0 || isRefunding}
               className="mt-2"
               initialState={initialStateTop}
               docType="AR Advances Summary"
@@ -759,6 +863,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
               className="mt-2"
               initialState={initialStateBottom}
               docType="AR Advances Detailed"
+              totalExemptions={["rate", "percent", "ratio", "id", "code", "ROW_NO", "balance"]}
               onStateChange={(tbl) => {
                 tableStateBottomRef.current = tbl;
                 const cache = getGlobalCache();
@@ -808,6 +913,40 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
           }}
         />
       )}
+
+      {refund && !showRefundAccount && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Refund AR Advance">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="bg-blue-100 px-6 py-4">
+              <h2 className="text-lg font-semibold text-blue-900">Refund AR Advance</h2>
+              <p className="text-sm text-gray-600">Create and post a refund transaction against this customer advance.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 p-6 text-sm">
+              <div className="col-span-2"><span className="text-gray-500">Customer</span><div>{refund.custCode} - {refund.custName}</div></div>
+              <label className="col-span-2 block">
+                <span className="text-gray-600">Refund Via</span>
+                <select value={refundMethod} onChange={(e) => setRefundMethod(e.target.value)} disabled={isRefunding} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2">
+                  <option value="APV">Non-Purchases APV</option>
+                  <option value="JV">Journal Voucher</option>
+                </select>
+              </label>
+              <label className="block"><span className="text-gray-500">Reference</span><input value={`${refund.docCode || ""} ${refund.docNo || ""}`} readOnly className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2" /></label>
+              <label className="block"><span className="text-gray-500">Advances Account</span><input value={refund.acctCode || ""} readOnly className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2" /></label>
+              <label className="block"><span className="text-gray-500">Advance Amount</span><input value={formatNumber(refund.advancesAmount)} readOnly className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-right tabular-nums" /></label>
+              <label className="block"><span className="text-gray-500">Available Balance</span><input value={`${refund.currCode} ${formatNumber(refund.balance)}`} readOnly className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-right text-blue-700 tabular-nums" /></label>
+              <label className="block"><span className="text-gray-600">Refund Amount</span><input inputMode="decimal" value={refundAmount} onChange={(e) => handleRefundAmountChange(e.target.value)} onFocus={() => setRefundAmount((v) => v.replace(/,/g, ""))} onBlur={handleRefundAmountBlur} disabled={isRefunding} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-right tabular-nums" /></label>
+              <label className="block"><span className="text-gray-600">{refundMethod === "JV" ? "JV Date" : "APV Date"}</span><input type="date" value={refundDate} onChange={(e) => setRefundDate(e.target.value)} disabled={isRefunding} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+              <div className="col-span-2"><span className="text-gray-600">Credit Account</span><button type="button" onClick={() => setShowRefundAccount(true)} disabled={isRefunding} className="mt-1 flex w-full items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left hover:bg-blue-50"><span>{refundCreditAccount ? `${refundCreditAccount.acctCode} - ${refundCreditAccount.acctName}` : "Select credit account"}</span><span className="text-blue-600">Search</span></button></div>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-6 py-4">
+              <button type="button" onClick={() => setRefund(null)} disabled={isRefunding} className="rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700">Cancel</button>
+              <button type="button" onClick={handleSubmitRefund} disabled={isRefunding} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">Create {refundMethod === "JV" ? "Journal Voucher" : "Non-Purchases APV"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRefundAccount && <COAMastLookupModal isOpen={showRefundAccount} customParam="ACTIVEALL" onClose={(account) => { if (account) setRefundCreditAccount(account); setShowRefundAccount(false); }} />}
     </div>
   );
 });

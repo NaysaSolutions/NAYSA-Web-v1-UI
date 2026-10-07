@@ -1171,16 +1171,16 @@ const doGenerateCWTReversal = useCallback(
       {/* Filters + JV Header */}
       <div className="mt-32 sm:mt-24 px-1">
         <div id="summary" className="global-tran-tab-div-ui">
-          <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+          <div>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {/* Customer Details */}
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faUser} />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <FontAwesomeIcon className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600" icon={faUser} />
                 Customer Details
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   type="lookup"
                   id="branchName"
@@ -1235,16 +1235,16 @@ const doGenerateCWTReversal = useCallback(
             </section>
 
             {/* Date Range + Status */}
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
                 <FontAwesomeIcon
-                  className="text-blue-600"
+                  className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600"
                   icon={faCalendarAlt}
                 />
                 Date Range
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   type="date"
                   id="startDate"
@@ -1283,10 +1283,10 @@ const doGenerateCWTReversal = useCallback(
             </section>
 
             {/* Journal Voucher */}
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
                 <FontAwesomeIcon
-                  className="text-blue-600"
+                  className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600"
                   icon={faFileLines}
                 />
                 Journal Voucher

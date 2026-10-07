@@ -20,6 +20,7 @@ import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTabl
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 import { useGetCurrentDayV2 } from "@/NAYSA Cloud/Global/dates";
+import APInquirySummaryCard from "./APInquirySummaryCard.jsx";
 
 const ENDPOINT = "getAPSchedule";
 const BASE_KEY = "AP_SCHEDULE";
@@ -414,15 +415,15 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
       {showSpinner && <LoadingSpinner />}
 
       <div className="global-tran-tab-div-ui">
-        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faUser} />
+        <div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faUser} /></span>
                 Payee & Account
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="branchName"
                   name="branchName"
@@ -468,13 +469,13 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
               </div>
             </section>
 
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faSliders} />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faSliders} /></span>
                 Filters
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="vendCode"
                   name="vendCode"
@@ -498,26 +499,16 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
               </div>
             </section>
 
-            <aside className="p-5 bg-gray-50">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faTableList} />
-                Schedule Summary
-              </h3>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Outstanding:</span>
-                  <span className="font-semibold text-blue-600">{totals.outstanding}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Current:</span>
-                  <span className="font-semibold text-blue-600">{totals.current}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Over Due:</span>
-                  <span className="font-semibold text-blue-600">{totals.overdue}</span>
-                </div>
-              </div>
+            <aside>
+              <APInquirySummaryCard
+                title="Schedule Summary"
+                icon={faTableList}
+                rows={[
+                  { label: "Outstanding", value: totals.outstanding },
+                  { label: "Current", value: totals.current, valueClass: "text-emerald-600" },
+                  { label: "Overdue", value: totals.overdue, strong: true, valueClass: "text-rose-600" },
+                ]}
+              />
             </aside>
           </div>
         </div>

@@ -21,6 +21,7 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import APInquirySummaryCard from "./APInquirySummaryCard.jsx";
 
 const ENDPOINT = "getAPInquiry";
 
@@ -448,15 +449,15 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
       {(showSpinner || exporting) && <LoadingSpinner />}
 
       <div id="summary" className="global-tran-tab-div-ui">
-        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faUser} />
+        <div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faUser} /></span>
                 Payee Details
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   type="lookup"
                   id="branchName"
@@ -490,16 +491,13 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
               </div>
             </section>
 
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon
-                  className="text-blue-600"
-                  icon={faCalendarAlt}
-                />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faCalendarAlt} /></span>
                 Date Range
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   type="lookup"
                   id="startingCutoffName"
@@ -534,38 +532,17 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
               </div>
             </section>
 
-            <aside className="p-5 bg-gray-50">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faChartLine} />
-                AP Balance Summary
-              </h3>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Beginning Balance:</span>
-                  <span className="font-semibold text-gray-800">
-                    {beginningBalance}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Total Debit:</span>
-                  <span className="font-semibold text-red-600">
-                    {totalDebit}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Total Credit:</span>
-                  <span className="font-semibold text-green-600">
-                    {totalCredit}
-                  </span>
-                </div>
-                <div className="border-t pt-3 flex items-center justify-between">
-                  <span className="text-gray-700">Ending Balance:</span>
-                  <span className="font-bold text-blue-600">
-                    {endingBalance}
-                  </span>
-                </div>
-              </div>
+            <aside>
+              <APInquirySummaryCard
+                title="AP Balance Summary"
+                icon={faChartLine}
+                rows={[
+                  { label: "Beginning Balance", value: beginningBalance },
+                  { label: "Total Debit", value: totalDebit, valueClass: "text-rose-600" },
+                  { label: "Total Credit", value: totalCredit, valueClass: "text-emerald-600" },
+                  { label: "Ending Balance", value: endingBalance, strong: true },
+                ]}
+              />
             </aside>
           </div>
         </div>
