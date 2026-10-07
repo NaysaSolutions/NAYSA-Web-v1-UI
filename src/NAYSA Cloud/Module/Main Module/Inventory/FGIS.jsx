@@ -173,6 +173,10 @@ useEffect(() => {
     refPoNo1: "",
     refPrNo2: "",
     woNo: "",
+    bomCode: "",
+    bomItemCode: "",
+    bomItemName: "",
+    bomUomCode: "",
     isOpenReferenceWO: false,
     remarks: "",
     billtermCode: "",
@@ -380,6 +384,8 @@ useEffect(() => {
   const isFormDisabled =
     isViewDocumentUrl ||
     ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const isProductionTranType = String(state.tranType || "").trim().toUpperCase() === "PROD";
+  const preferWipDrAccount = true;
   const isOpenDocumentStatus = (value) =>
     ["", "O", "OPEN"].includes(String(value ?? "").trim().toUpperCase());
 
@@ -495,6 +501,10 @@ useEffect(() => {
       refPoNo1: "",
       refPrNo2: "",
       woNo: "",
+      bomCode: "",
+      bomItemCode: "",
+      bomItemName: "",
+      bomUomCode: "",
       isOpenReferenceWO: false,
       remarks: "",
       documentNo: "",
@@ -579,6 +589,10 @@ useEffect(() => {
         updateState({
             tranType: nextTranType,
             woNo: "",
+            bomCode: "",
+            bomItemCode: "",
+            bomItemName: "",
+            bomUomCode: "",
             isOpenReferenceWO: false,
             showWOLookup: false,
 
@@ -1072,6 +1086,10 @@ useEffect(() => {
         refPoNo1: getFirstValue(data.refDocNo1, data.refNo1),
         refPrNo2: getFirstValue(data.refDocNo2, data.refNo2),
         woNo: getFirstValue(data.woNo, data.wo_no, data.WO_NO),
+        bomCode: getFirstValue(data.bomCode, data.bom_code, data.BOM_CODE),
+        bomItemCode: getFirstValue(data.bomItemCode, data.bom_item_code, data.itemCode, data.item_code, data.ITEM_CODE),
+        bomItemName: getFirstValue(data.bomItemName, data.bom_item_name, data.itemName, data.itemDesc, data.item_name, data.ITEM_NAME),
+        bomUomCode: getFirstValue(data.bomUomCode, data.bom_uom_code, data.uomCode, data.uom_code, data.UOM_CODE),
         isOpenReferenceWO: Boolean(getFirstValue(data.woNo, data.wo_no, data.WO_NO)),
         remarks: data.remarks || "",
         WHcode: retrievedWhCode || "",
@@ -1272,10 +1290,25 @@ useEffect(() => {
       item?.MSCATEG_CODE,
     );
 
-  const getDefaultDrAccountFromItem = (item) => ({
-    // Default DR Account comes from the category inventory account based on the selected item's category.
+  const getDefaultDrAccountFromItem = (item, preferWipAccount = preferWipDrAccount) => ({
+    // Production issue rows debit WIP. Regular issue rows keep the inventory-account default.
     // The field remains editable in Item Detail after defaulting.
     code: pickFirstValue(
+      ...(preferWipAccount
+        ? [
+            item?.wipAcct,
+            item?.wip_acct,
+            item?.WIP_ACCT,
+            item?.wipAcctCode,
+            item?.wipacctCode,
+            item?.wipacct_code,
+            item?.WIPACCT_CODE,
+            item?.wipAccount,
+            item?.wipAccountCode,
+            item?.WIP_ACCOUNT,
+            item?.WIP_ACCOUNT_CODE,
+          ]
+        : []),
       item?.drAcctCode,
       item?.DRACCT_CODE,
       item?.defaultDrAcctCode,
@@ -1308,6 +1341,17 @@ useEffect(() => {
       item?.ACCT_CODE,
     ),
     name: pickFirstValue(
+      ...(preferWipAccount
+        ? [
+            item?.wipAcctName,
+            item?.wipacctName,
+            item?.wip_acct_name,
+            item?.WIPACCT_NAME,
+            item?.WIP_ACCT_NAME,
+            item?.wipAccountName,
+            item?.WIP_ACCOUNT_NAME,
+          ]
+        : []),
       item?.drAcctName,
       item?.DRACCT_NAME,
       item?.defaultDrAcctName,
@@ -1336,7 +1380,8 @@ useEffect(() => {
     ),
   });
 
-  const resolveDefaultDrAccount = (item) => getDefaultDrAccountFromItem(item);
+  const resolveDefaultDrAccount = (item, options = {}) =>
+    getDefaultDrAccountFromItem(item, options.preferWipAccount ?? preferWipDrAccount);
 
   const fetchInventoryLookupRowForItem = async (item = {}) => {
     const itemCode = String(getFirstValue(item.itemCode, item.ITEM_CODE, item.item_code, item.rmCode, item.RM_CODE, item.msCode, item.MS_CODE, item.fgCode, item.FG_CODE)).trim();
@@ -1412,7 +1457,8 @@ useEffect(() => {
 
   const mergeBlankInventoryFields = (row = {}, lookupRow = {}) => {
     const categoryCode = getItemCategoryCode(row) || getItemCategoryCode(lookupRow);
-    const lookupAccount = getDefaultDrAccountFromItem(lookupRow);
+    const lookupAccount = getDefaultDrAccountFromItem(lookupRow, preferWipDrAccount);
+    const preferLookupAccount = preferWipDrAccount && !!lookupAccount.code;
 
     return {
       ...row,
@@ -1421,15 +1467,17 @@ useEffect(() => {
       invAcct: row.invAcct || lookupRow.invAcct || lookupRow.inv_acct || lookupRow.INV_ACCT || lookupRow.INVACCT_CODE || lookupRow.invAcctCode || lookupRow.invacctCode || "",
       invAcctCode: row.invAcctCode || row.invacctCode || lookupRow.invAcctCode || lookupRow.invacctCode || lookupRow.invacct_code || lookupRow.INVACCT_CODE || lookupRow.invAcct || lookupRow.inv_acct || "",
       invAcctName: row.invAcctName || row.invacctName || lookupRow.invAcctName || lookupRow.invacctName || lookupRow.invacct_name || lookupRow.INVACCT_NAME || "",
-      acctCode: row.acctCode || row.drAcctCode || lookupAccount.code || "",
-      drAcctCode: row.drAcctCode || row.acctCode || lookupAccount.code || "",
-      drAcctName: row.drAcctName || lookupAccount.name || "",
+      wipAcct: row.wipAcct || lookupRow.wipAcct || lookupRow.wip_acct || lookupRow.WIP_ACCT || lookupRow.wipAcctCode || lookupRow.wipacctCode || lookupRow.wipacct_code || lookupRow.WIPACCT_CODE || "",
+      wipAcctName: row.wipAcctName || lookupRow.wipAcctName || lookupRow.wip_acct_name || lookupRow.WIP_ACCT_NAME || lookupRow.wipacctName || lookupRow.WIPACCT_NAME || "",
+      acctCode: preferLookupAccount ? lookupAccount.code : row.acctCode || row.drAcctCode || lookupAccount.code || "",
+      drAcctCode: preferLookupAccount ? lookupAccount.code : row.drAcctCode || row.acctCode || lookupAccount.code || "",
+      drAcctName: preferLookupAccount ? lookupAccount.name : row.drAcctName || lookupAccount.name || "",
     };
   };
 
   const enrichInventoryDetailRow = async (row = {}) => {
     const hasCategory = !!getItemCategoryCode(row);
-    const hasInventoryAccount = !!getDefaultDrAccountFromItem(row).code;
+    const hasInventoryAccount = !!resolveDefaultDrAccount(row).code;
     let enrichedRow = row;
 
     if (!hasCategory || !hasInventoryAccount) {
@@ -1443,11 +1491,12 @@ useEffect(() => {
     }
 
     const defaultDrAccount = resolveDefaultDrAccount(enrichedRow);
+    const preferDefaultAccount = preferWipDrAccount && !!defaultDrAccount.code;
     return {
       ...enrichedRow,
-      acctCode: enrichedRow.acctCode || enrichedRow.drAcctCode || defaultDrAccount.code || "",
-      drAcctCode: enrichedRow.drAcctCode || enrichedRow.acctCode || defaultDrAccount.code || "",
-      drAcctName: enrichedRow.drAcctName || defaultDrAccount.name || "",
+      acctCode: preferDefaultAccount ? defaultDrAccount.code : enrichedRow.acctCode || enrichedRow.drAcctCode || defaultDrAccount.code || "",
+      drAcctCode: preferDefaultAccount ? defaultDrAccount.code : enrichedRow.drAcctCode || enrichedRow.acctCode || defaultDrAccount.code || "",
+      drAcctName: preferDefaultAccount ? defaultDrAccount.name : enrichedRow.drAcctName || defaultDrAccount.name || "",
     };
   };
 
@@ -2095,6 +2144,24 @@ useEffect(() => {
           const unitCostValue = parseFormattedNumber(row.unitCost || 0);
           const parsedItemAmount = parseFormattedNumber(row.itemAmount ?? row.amount ?? 0);
           const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValue).toFixed(2));
+          const sourceWOLineNo = row.sourceWOLineNo || "";
+          const woLineGroupId =
+            row.groupId ||
+            row.group_id ||
+            (sourceWOLineNo ? `WO_LINE:${sourceWOLineNo}` : "");
+          const wipDrAcctCode = getFirstValue(
+            row.wipAcct,
+            row.wip_acct,
+            row.WIP_ACCT,
+            row.wipAcctCode,
+            row.wipacctCode,
+            row.wipacct_code,
+            row.WIPACCT_CODE,
+            row.drAcctCode,
+            row.acctCode,
+            row.acct_code,
+          );
+          const detailAcctCode = wipDrAcctCode;
 
           return {
             lnNo: String(index + 1),
@@ -2124,14 +2191,20 @@ useEffect(() => {
             whouseCode: row.whouseCode || WHcode || "",
             locCode: row.locCode || locCode || "",
 
-            acctCode: row.acctCode || row.drAcctCode || "",
-            drAcctCode: row.drAcctCode || row.acctCode || "",
+            acctCode: detailAcctCode || "",
+            drAcctCode: wipDrAcctCode || "",
             rcCode: row.rcCode || rcCode || "",
             slTypeCode: row.slTypeCode || row.sltypeCode || "",
             sltypeCode: row.sltypeCode || row.slTypeCode || "",
             slCode: row.slCode || vendCode || "",
 
-            uniqueKey: row.uniqueKey || "",
+            groupId: woLineGroupId,
+            group_id: woLineGroupId,
+            sourceWOLineNo,
+            sourceWOIssueIdentity: row.sourceWOIssueIdentity || "",
+            sourceWOIssueItemCode: row.sourceWOIssueItemCode || row.itemCode || "",
+            sourceWOIssueQty: parseFormattedNumber(row.sourceWOIssueQty || row.quantity || 0) || 0,
+            uniqueKey: row.uniqueKey || row.sourceWOIssueIdentity || woLineGroupId || "",
             woIssueItems: row.woIssueItems || [],
             pickingAllocations: row.pickingAllocations || [],
             operation: row.operation || "S",
@@ -2562,7 +2635,8 @@ useEffect(() => {
     };
 
     const parsed = unwrap(response);
-    const header = parsed?.hd || parsed?.header || parsed;
+    const rawHeader = parsed?.hd || parsed?.header || parsed;
+    const header = Array.isArray(rawHeader) ? rawHeader[0] || {} : rawHeader || {};
     const details =
       parsed?.dt1 ||
       parsed?.detail ||
@@ -2573,28 +2647,86 @@ useEffect(() => {
       [];
 
     return {
-      header,
+      header: {
+        ...header,
+        branchCode: getFirstValue(header.branchCode, header.BRANCH_CODE),
+        woNo: getFirstValue(header.woNo, header.WO_NO),
+        woId: getFirstValue(header.woId, header.WO_ID),
+        invType: getFirstValue(header.invType, header.INV_TYPE),
+        itemCode: getFirstValue(header.itemCode, header.ITEM_CODE),
+        itemName: getFirstValue(header.itemName, header.ITEM_NAME),
+        uomCode: getFirstValue(header.uomCode, header.UOM_CODE),
+        bomCode: getFirstValue(header.bomCode, header.BOM_CODE),
+        bomDate: getFirstValue(header.bomDate, header.BOM_DATE),
+      },
       details: Array.isArray(details) ? details : [],
     };
   };
 
+  const getWOIssueItemCode = (row = {}) =>
+    getFirstValue(
+      row.itemCode,
+      row.item_code,
+      row.ITEM_CODE,
+      row.itemNo,
+      row.ITEM_NO,
+      row.fgCode,
+      row.FG_CODE,
+      row.rmCode,
+      row.RM_CODE,
+      row.msCode,
+      row.MS_CODE,
+    );
+
+  const getWOIssueItemName = (row = {}) =>
+    getFirstValue(
+      row.itemName,
+      row.itemDesc,
+      row.item_name,
+      row.ITEM_NAME,
+      row.ITEM_DESC,
+      row.fgName,
+      row.FG_NAME,
+      row.rmName,
+      row.RM_NAME,
+      row.msName,
+      row.MS_NAME,
+    );
+
   const normalizeWODetailRow = (row = {}, index = 0) => {
-    const quantityValue = getFirstValue(
+    const requiredQtyValue = getFirstValue(
+      row.requiredQty,
+      row.REQUIRED_QTY,
       row.quantity,
       row.QUANTITY,
       row.qty,
       row.QTY,
-      row.requiredQty,
-      row.REQUIRED_QTY,
       row.qtyNeeded,
       row.QTY_NEEDED,
+      0,
+    );
+    const issuedQtyValue = getFirstValue(row.issuedQty, row.ISSUED_QTY, row.qtyIssued, row.QTY_ISSUED, 0);
+    const explicitRemainingQty = getFirstValue(
       row.unservedQty,
       row.UNSERVED_QTY,
-      row.worQty,
-      row.WOR_QTY,
       row.remainingQty,
       row.REMAINING_QTY,
-    ) || 0;
+      row.worQty,
+      row.WOR_QTY,
+      null,
+    );
+    const requiredQtyNum = parseFormattedNumber(requiredQtyValue) || 0;
+    const issuedQtyNum = parseFormattedNumber(issuedQtyValue) || 0;
+    const computedRemainingQty = Math.max(requiredQtyNum - issuedQtyNum, 0);
+    const hasExplicitRemainingQty =
+      explicitRemainingQty !== null && explicitRemainingQty !== undefined && explicitRemainingQty !== "";
+    const explicitRemainingQtyNum = hasExplicitRemainingQty ? parseFormattedNumber(explicitRemainingQty) || 0 : null;
+    const quantityValue =
+      hasExplicitRemainingQty && explicitRemainingQtyNum > 0
+        ? explicitRemainingQtyNum
+        : hasExplicitRemainingQty && issuedQtyNum >= requiredQtyNum
+          ? explicitRemainingQtyNum
+          : computedRemainingQty;
     const unitCostValue = getFirstValue(row.unitCost, row.unit_cost, row.UNIT_COST, row.woUnitCost, row.WO_UNITCOST) || 0;
     const itemAmountValue =
       getFirstValue(row.itemAmount, row.item_amount, row.ITEM_AMOUNT, row.amount, row.AMOUNT) ||
@@ -2603,13 +2735,17 @@ useEffect(() => {
     return {
       ...row,
       lnNo: getFirstValue(row.lnNo, row.lineNo, row.line_no, index + 1),
-      itemCode: getFirstValue(row.itemCode, row.item_code, row.ITEM_CODE, row.itemNo, row.ITEM_NO),
-      itemName: getFirstValue(row.itemName, row.itemDesc, row.item_name, row.ITEM_NAME, row.ITEM_DESC),
+      itemCode: getWOIssueItemCode(row),
+      itemName: getWOIssueItemName(row),
       brandCode: getFirstValue(row.brandCode, row.brand_code, row.BRAND_CODE),
       brandName: getFirstValue(row.brandName, row.brand_name, row.BRAND_NAME),
       categCode: getItemCategoryCode(row),
       uomCode: getFirstValue(row.uomCode, row.uom_code, row.UOM_CODE),
       quantity: formatNumber(quantityValue, 6),
+      requiredQty: formatNumber(quantityValue, 6),
+      originalRequiredQty: formatNumber(requiredQtyValue, 6),
+      issuedQty: formatNumber(issuedQtyValue, 6),
+      unservedQty: formatNumber(quantityValue, 6),
       unitCost: formatNumber(unitCostValue, 6),
       amount: formatNumber(itemAmountValue, 2),
       itemAmount: formatNumber(itemAmountValue, 2),
@@ -2627,12 +2763,61 @@ useEffect(() => {
       whouseName: getFirstValue(row.whouseName, row.whName, row.whouse_name, row.WHName, state.WHname),
       locCode: getFirstValue(row.locCode, row.LocCode, row.loc_code, state.locCode),
       locName: getFirstValue(row.locName, row.LocName, row.loc_name, state.locName),
-      acctCode: getFirstValue(row.acctCode, row.acct_code, row.drAcctCode, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
-      drAcctCode: getFirstValue(row.drAcctCode, row.acctCode, row.acct_code, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
-      drAcctName: getFirstValue(row.drAcctName, row.acctName, row.acct_name, row.invAcctName, row.invacctName, row.invacct_name, row.INVACCT_NAME),
+      acctCode: getFirstValue(
+        row.wipAcct,
+        row.wip_acct,
+        row.WIP_ACCT,
+        row.wipAcctCode,
+        row.wipacctCode,
+        row.wipacct_code,
+        row.WIPACCT_CODE,
+        row.drAcctCode,
+        row.acctCode,
+        row.acct_code,
+        row.invAcctCode,
+        row.invacctCode,
+        row.invacct_code,
+        row.INVACCT_CODE,
+        row.invAcct,
+        row.inv_acct,
+      ),
+      drAcctCode: getFirstValue(
+        row.wipAcct,
+        row.wip_acct,
+        row.WIP_ACCT,
+        row.wipAcctCode,
+        row.wipacctCode,
+        row.wipacct_code,
+        row.WIPACCT_CODE,
+        row.drAcctCode,
+        row.acctCode,
+        row.acct_code,
+        row.invAcctCode,
+        row.invacctCode,
+        row.invacct_code,
+        row.INVACCT_CODE,
+        row.invAcct,
+        row.inv_acct,
+      ),
+      drAcctName: getFirstValue(
+        row.wipAcctName,
+        row.wip_acct_name,
+        row.WIP_ACCT_NAME,
+        row.wipacctName,
+        row.WIPACCT_NAME,
+        row.drAcctName,
+        row.acctName,
+        row.acct_name,
+        row.invAcctName,
+        row.invacctName,
+        row.invacct_name,
+        row.INVACCT_NAME,
+      ),
       invAcct: getFirstValue(row.invAcct, row.inv_acct, row.INV_ACCT, row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE),
       invAcctCode: getFirstValue(row.invAcctCode, row.invacctCode, row.invacct_code, row.INVACCT_CODE, row.invAcct, row.inv_acct),
       invAcctName: getFirstValue(row.invAcctName, row.invacctName, row.invacct_name, row.INVACCT_NAME),
+      wipAcct: getFirstValue(row.wipAcct, row.wip_acct, row.WIP_ACCT, row.wipAcctCode, row.wipacctCode, row.wipacct_code, row.WIPACCT_CODE),
+      wipAcctName: getFirstValue(row.wipAcctName, row.wip_acct_name, row.WIP_ACCT_NAME, row.wipacctName, row.WIPACCT_NAME),
       rcCode: getFirstValue(row.rcCode, row.rc_code, state.rcCode),
       slTypeCode: getFirstValue(row.slTypeCode, row.sltypeCode, row.sltype_code),
       sltypeCode: getFirstValue(row.sltypeCode, row.slTypeCode, row.sltype_code),
@@ -2642,6 +2827,22 @@ useEffect(() => {
       operation: row.operation || "S",
     };
   };
+
+  const normalizeFGWOLookupIssueRows = (rows = []) =>
+    (Array.isArray(rows) ? rows : [])
+      .map((row, index) => {
+        const originalLineNo = getFirstValue(row.lnNo, row.lineNo, row.line_no, row.LINE_NO, index + 1);
+        const normalizedRow = normalizeWODetailRow(row, index);
+
+        return {
+          ...normalizedRow,
+          groupId: normalizedRow.groupId || `WO_LINE:${originalLineNo}`,
+          sourceWOLineNo: originalLineNo,
+        };
+      })
+      .filter((row) => getWOIssueInventoryType(row) === "FG")
+      .filter((row) => (parseFormattedNumber(row.unservedQty ?? row.requiredQty ?? row.quantity ?? 0) || 0) > 0)
+      .map((row, index) => ({ ...row, lnNo: index + 1 }));
 
   const applyWOReference = async (header, detailRowsFromResponse = null) => {
     if (!header) return;
@@ -2667,14 +2868,15 @@ useEffect(() => {
 
     const normalizedRows = await Promise.all(
       normalizedRowsBase.map(async (row) => {
-        if (row.drAcctCode) return row;
+        if (!preferWipDrAccount && row.drAcctCode) return row;
 
         const defaultDrAccount = resolveDefaultDrAccount(row);
+        const preferDefaultAccount = preferWipDrAccount && !!defaultDrAccount.code;
         return {
           ...row,
-          drAcctCode: defaultDrAccount.code || "",
-          drAcctName: defaultDrAccount.name || "",
-          acctCode: defaultDrAccount.code || row.acctCode || "",
+          drAcctCode: preferDefaultAccount ? defaultDrAccount.code : row.drAcctCode || defaultDrAccount.code || "",
+          drAcctName: preferDefaultAccount ? defaultDrAccount.name : row.drAcctName || defaultDrAccount.name || "",
+          acctCode: preferDefaultAccount ? defaultDrAccount.code : row.acctCode || row.drAcctCode || defaultDrAccount.code || "",
         };
       })
     );
@@ -2686,6 +2888,10 @@ useEffect(() => {
     updateTotalsDisplay(totalQty);
     updateState({
       woNo: selectedWoNo,
+      bomCode: getFirstValue(header.bomCode, header.BOM_CODE),
+      bomItemCode: getFirstValue(header.bomItemCode, header.BOM_ITEM_CODE, header.itemCode, header.ITEM_CODE),
+      bomItemName: getFirstValue(header.bomItemName, header.BOM_ITEM_NAME, header.itemName, header.itemDesc, header.ITEM_NAME, header.ITEM_DESC),
+      bomUomCode: getFirstValue(header.bomUomCode, header.BOM_UOM_CODE, header.uomCode, header.UOM_CODE),
       isOpenReferenceWO: true,
       remarks: getFirstValue(header.remarks, header.particular, header.PARTICULAR) || state.remarks,
       detailRows: normalizedRows.map((row, index) => ({ ...row, lnNo: index + 1 })),
@@ -2709,14 +2915,15 @@ useEffect(() => {
 
   const resolveDetailRowAccount = async (row) => {
     const enrichedRow = await enrichInventoryDetailRow(row);
-    if (enrichedRow.drAcctCode) return enrichedRow;
+    if (!preferWipDrAccount && enrichedRow.drAcctCode) return enrichedRow;
 
     const defaultDrAccount = resolveDefaultDrAccount(enrichedRow);
+    const preferDefaultAccount = preferWipDrAccount && !!defaultDrAccount.code;
     return {
       ...enrichedRow,
-      drAcctCode: defaultDrAccount.code || "",
-      drAcctName: defaultDrAccount.name || "",
-      acctCode: defaultDrAccount.code || enrichedRow.acctCode || "",
+      drAcctCode: preferDefaultAccount ? defaultDrAccount.code : enrichedRow.drAcctCode || defaultDrAccount.code || "",
+      drAcctName: preferDefaultAccount ? defaultDrAccount.name : enrichedRow.drAcctName || defaultDrAccount.name || "",
+      acctCode: preferDefaultAccount ? defaultDrAccount.code : enrichedRow.acctCode || enrichedRow.drAcctCode || defaultDrAccount.code || "",
     };
   };
 
@@ -2769,6 +2976,189 @@ useEffect(() => {
     return baseRow;
   };
 
+  const getWOIssuePickedQty = (item = {}, allocations = []) => {
+    const pickedFromItem =
+      parseFormattedNumber(getFirstValue(item.qtyPicked, item.quantityPicked, item.qty_picked, item.QTY_PICKED, 0)) || 0;
+
+    if (pickedFromItem > 0) return pickedFromItem;
+
+    return (Array.isArray(allocations) ? allocations : []).reduce(
+      (sum, row) => sum + (parseFormattedNumber(getFirstValue(row.pickQty, row.qtyPicked, row.QTY_PICKED, 0)) || 0),
+      0,
+    );
+  };
+
+  const getWOIssueApplyIdentity = (item = {}, index = 0) => {
+    const groupId = getFirstValue(item.groupId, item.group_id, item.GROUP_ID);
+    if (groupId) return `woissue:group:${groupId}`;
+
+    const uniqueKey = getFirstValue(item.uniqueKey, item.unique_key, item.UNIQUE_KEY);
+    if (uniqueKey) return `woissue:key:${uniqueKey}`;
+
+    const sourceLineNo = getFirstValue(
+      item.sourceWOLineNo,
+      item.sourceLineNo,
+      item.woLineNo,
+      item.originalLineNo,
+      item.lnNo,
+      item.lineNo,
+      item.line_no,
+      index + 1,
+    );
+    return `woissue:line:${sourceLineNo}|item:${getWOIssueItemCode(item)}`;
+  };
+
+  const getWOIssueAllocationAmount = (allocations = []) =>
+    (Array.isArray(allocations) ? allocations : []).reduce((total, allocation) => {
+      const pickedQty =
+        parseFormattedNumber(
+          getFirstValue(
+            allocation.pickQty,
+            allocation.pickedQty,
+            allocation.quantityPicked,
+            allocation.qtyPicked,
+            allocation.qty,
+            0,
+          ),
+        ) || 0;
+      const unitCost =
+        parseFormattedNumber(
+          getFirstValue(
+            allocation.unitCost,
+            allocation.unit_cost,
+            allocation.UNIT_COST,
+            allocation.wac,
+            allocation.WAC,
+            allocation.cost,
+            allocation.itemCost,
+            allocation.unitPrice,
+            0,
+          ),
+        ) || 0;
+
+      return total + pickedQty * unitCost;
+    }, 0);
+
+  const buildWOReferenceIssueDetailRow = async (header = {}, item = {}, selectedIndex = 0, inventoryRows = []) => {
+    const allocations = Array.isArray(item.pickingAllocations) && item.pickingAllocations.length
+      ? item.pickingAllocations
+      : (Array.isArray(inventoryRows) ? inventoryRows : []).filter((row) =>
+          (parseFormattedNumber(getFirstValue(row.pickQty, row.qtyPicked, row.QTY_PICKED, 0)) || 0) > 0
+        );
+    const pickedQty = getWOIssuePickedQty(item, allocations);
+    const allocationAmount = getWOIssueAllocationAmount(allocations);
+    const itemUnitCostValue = getFirstValue(item.unitCost, item.unit_cost, item.UNIT_COST, item.woUnitCost, item.WO_UNITCOST, 0);
+    const unitCostValue =
+      pickedQty > 0 && allocationAmount > 0
+        ? allocationAmount / pickedQty
+        : parseFormattedNumber(itemUnitCostValue) || 0;
+    const firstAllocation = allocations[0] || {};
+    const normalizedItem = normalizeWODetailRow(
+      {
+        ...item,
+        itemCode: getWOIssueItemCode(item) || getWOIssueItemCode(firstAllocation),
+        itemName: getWOIssueItemName(item) || getWOIssueItemName(firstAllocation),
+        quantity: pickedQty,
+        qtyPicked: pickedQty,
+        quantityPicked: pickedQty,
+        qtyHand: getFirstValue(item.qtyHand, item.qtyOnHand, item.onHandQty, item.QTY_HAND, item.QTY_ON_HAND, pickedQty),
+        qtyOnHand: getFirstValue(item.qtyOnHand, item.qtyHand, item.onHandQty, item.QTY_ON_HAND, item.QTY_HAND, pickedQty),
+        unitCost: unitCostValue,
+        unit_cost: unitCostValue,
+        amount: allocationAmount || pickedQty * (parseFormattedNumber(unitCostValue) || 0),
+        itemAmount: allocationAmount || pickedQty * (parseFormattedNumber(unitCostValue) || 0),
+        lotNo: getFirstValue(firstAllocation.lotNo, firstAllocation.LOT_NO, item.lotNo, item.LOT_NO),
+        qstatCode: getFirstValue(firstAllocation.qualityStatus, firstAllocation.qstatCode, firstAllocation.qcStatus, item.qstatCode, item.itemStat),
+        itemStat: getFirstValue(firstAllocation.qualityStatus, firstAllocation.qstatCode, firstAllocation.qcStatus, item.itemStat, item.qstatCode),
+        bbDate: getFirstValue(firstAllocation.bestBeforeDate, firstAllocation.bbDate, firstAllocation.BB_DATE, item.bbDate, item.BB_DATE),
+        whouseCode: getFirstValue(firstAllocation.warehouseCode, firstAllocation.whouseCode, firstAllocation.whCode, item.whouseCode, item.whCode, state.WHcode),
+        whouseName: getFirstValue(firstAllocation.warehouseName, firstAllocation.whouseName, item.whouseName, state.WHname),
+        locCode: getFirstValue(firstAllocation.locationCode, firstAllocation.locCode, item.locCode, state.locCode),
+        locName: getFirstValue(firstAllocation.locationName, firstAllocation.locName, item.locName, state.locName),
+      },
+      selectedIndex,
+    );
+    const enrichedRow = await resolveDetailRowAccount({
+      ...normalizedItem,
+      woNo: getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO),
+      sourceWOLineNo: getFirstValue(item.sourceWOLineNo, item.sourceLineNo, item.woLineNo, item.lnNo, item.lineNo, selectedIndex + 1),
+      sourceWOIssueIdentity: getWOIssueApplyIdentity(item, selectedIndex),
+      sourceWOIssueItemCode: getWOIssueItemCode(item),
+      sourceWOIssueQty: pickedQty,
+      woIssueItems: [{ ...item, pickingAllocations: allocations }],
+      pickingAllocations: allocations,
+      operation: "S",
+    });
+
+    return enrichedRow;
+  };
+
+  const removeWOIssueItemFromLookup = (rows = [], item = {}, selectedIndex = null) => {
+    const selectedIdentity = getWOIssueApplyIdentity(item, selectedIndex ?? 0);
+
+    return (Array.isArray(rows) ? rows : [])
+      .filter((row, index) => {
+        if (selectedIndex !== null && selectedIndex !== undefined) {
+          return index !== selectedIndex;
+        }
+
+        return getWOIssueApplyIdentity(row, index) !== selectedIdentity;
+      })
+      .map((row, index) => ({ ...row, lnNo: index + 1 }));
+  };
+
+  const applyPickedWOIssueItem = async (header, item, selectedIndex = 0, inventoryRows = [], issueItems = []) => {
+    if (!header || !item) return;
+
+    const pickedQty = getWOIssuePickedQty(item, item.pickingAllocations || inventoryRows);
+    if (pickedQty <= 0) return;
+
+    const selectedWoNo =
+      getFirstValue(header.woNo, header.WO_NO, header.WoNo, header.WONo, header.wo_no, header.worNo, header.WOR_NO) ||
+      state.woNo;
+    const pickedRow = await buildWOReferenceIssueDetailRow(header, item, selectedIndex, inventoryRows);
+    const pickedIdentity = pickedRow.sourceWOIssueIdentity;
+    const currentRows = Array.isArray(state.detailRows) ? state.detailRows : [];
+    let didReplace = false;
+
+    const mergedRows = currentRows.map((row) => {
+      if (row.sourceWOIssueIdentity !== pickedIdentity) return row;
+      didReplace = true;
+      return {
+        ...row,
+        ...pickedRow,
+        lnNo: row.lnNo || pickedRow.lnNo,
+      };
+    });
+
+    if (!didReplace) {
+      mergedRows.push(pickedRow);
+    }
+
+    const numberedRows = mergedRows.map((row, index) => ({ ...row, lnNo: index + 1 }));
+    const totalQty = numberedRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.quantity ?? row.qtyNeeded ?? 0) || 0),
+      0,
+    );
+    const remainingIssueItems = removeWOIssueItemFromLookup(issueItems, item, selectedIndex);
+
+    updateTotalsDisplay(totalQty);
+    updateState({
+      woNo: selectedWoNo,
+      bomCode: getFirstValue(header.bomCode, header.BOM_CODE),
+      bomItemCode: getFirstValue(header.bomItemCode, header.BOM_ITEM_CODE, header.itemCode, header.ITEM_CODE),
+      bomItemName: getFirstValue(header.bomItemName, header.BOM_ITEM_NAME, header.itemName, header.itemDesc, header.ITEM_NAME, header.ITEM_DESC),
+      bomUomCode: getFirstValue(header.bomUomCode, header.BOM_UOM_CODE, header.uomCode, header.UOM_CODE),
+      isOpenReferenceWO: true,
+      remarks: getFirstValue(header.remarks, header.particular, header.PARTICULAR) || state.remarks,
+      detailRows: numberedRows,
+      detailRowsGL: [],
+    });
+    setWOLookupIssueItems(remainingIssueItems);
+    setWOLookupInventoryRows([]);
+    setShowTypeDropdown(false);
+  };
+
   const applyPickedWOReferenceItem = async (header, issueItems = []) => {
     if (!header) return;
 
@@ -2814,6 +3204,10 @@ useEffect(() => {
     updateTotalsDisplay(totalQty);
     updateState({
       woNo: selectedWoNo,
+      bomCode: getFirstValue(header.bomCode, header.BOM_CODE),
+      bomItemCode: getFirstValue(header.bomItemCode, header.BOM_ITEM_CODE, header.itemCode, header.ITEM_CODE),
+      bomItemName: getFirstValue(header.bomItemName, header.BOM_ITEM_NAME, header.itemName, header.itemDesc, header.ITEM_NAME, header.ITEM_DESC),
+      bomUomCode: getFirstValue(header.bomUomCode, header.BOM_UOM_CODE, header.uomCode, header.UOM_CODE),
       isOpenReferenceWO: true,
       remarks: getFirstValue(header.remarks, header.particular, header.PARTICULAR) || state.remarks,
       detailRows: numberedRows,
@@ -2922,7 +3316,7 @@ useEffect(() => {
 
     if (row?.dt1 || row?.details || row?.detailRows) {
       const rows = row?.dt1 || row?.details || row?.detailRows || [];
-      setWOLookupIssueItems(rows.map((detailRow, index) => normalizeWODetailRow(detailRow, index)));
+      setWOLookupIssueItems(normalizeFGWOLookupIssueRows(rows));
       setWOLookupInventoryRows([]);
       return;
     }
@@ -2935,7 +3329,7 @@ useEffect(() => {
         ? reference.details
         : reference?.header?.dt1 || reference?.header?.details || reference?.header?.detailRows || [];
 
-      setWOLookupIssueItems(rows.map((detailRow, index) => normalizeWODetailRow(detailRow, index)));
+      setWOLookupIssueItems(normalizeFGWOLookupIssueRows(rows));
       setWOLookupInventoryRows([]);
     } catch (error) {
       console.error("FGIS WO preview error:", error);
@@ -2947,9 +3341,50 @@ useEffect(() => {
     }
   };
 
+  const filterWOLookupRowsWithFGIssueItems = async (rows = []) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const filterResults = await Promise.all(
+      sourceRows.map(async (row) => {
+        try {
+          const inlineDetails = row?.dt1 || row?.details || row?.detailRows;
+          const details = inlineDetails
+            ? inlineDetails
+            : (await fetchWOReference(row))?.details || [];
+
+          return normalizeFGWOLookupIssueRows(details).length > 0;
+        } catch (error) {
+          console.warn("Unable to check WO issue items for FG inventory:", error);
+          return false;
+        }
+      })
+    );
+
+    return sourceRows.filter((_, index) => filterResults[index]);
+  };
+
   const handleSelectWOIssueItemPreview = async (item, index = 0) => {
     if (!item?.itemCode) {
       setWOLookupInventoryRows([]);
+      return;
+    }
+
+    if (getWOIssueInventoryType(item) !== "FG") {
+      setWOLookupInventoryRows([]);
+      setWOLookupIssueItems((prevRows) =>
+        prevRows.map((row, rowIndex) => {
+          const sameRow =
+            rowIndex === index ||
+            String(row.itemCode || "") === String(item.itemCode || "");
+
+          if (!sameRow) return row;
+
+          return {
+            ...row,
+            qtyHand: formatNumber(0, 6),
+            qtyOnHand: formatNumber(0, 6),
+          };
+        })
+      );
       return;
     }
 
@@ -2998,7 +3433,21 @@ useEffect(() => {
       return;
     }
 
-    if (["manual-pick", "auto-pick"].includes(action)) {
+    if (action === "auto-pick") {
+      if (!workOrder || !item) return;
+      const pickedIssueItems = Array.isArray(issueItems) ? issueItems : woLookupIssueItems;
+
+      await applyPickedWOIssueItem(
+        workOrder,
+        item,
+        selectedItemIndex,
+        inventory,
+        pickedIssueItems,
+      );
+      return;
+    }
+
+    if (action === "manual-pick") {
       const pickedIssueItems = Array.isArray(issueItems) ? issueItems : woLookupIssueItems;
 
       setWOLookupIssueItems(pickedIssueItems);
@@ -3619,32 +4068,50 @@ useEffect(() => {
                   onChange={(val) => updateState({ attention: val })}
                 />
 
-                <FieldRenderer
-                  id="woNo"
-                  label="Work Order No."
-                  type="text"
-                  value={woNo || ""}
-                  readOnly
-                  disabled
-                />
+                {state.tranType === "PROD" ? (
+                  <FieldRenderer
+                    id="tranType"
+                    label="Tran Type"
+                    type="select"
+                    required
+                    value={state.tranType || "REG"}
+                    disabled={isFormDisabled || state.isOpenReferenceWO}
+                    options={[
+                      { value: "REG", label: "Regular" },
+                      { value: "PROD", label: "Production" },
+                    ]}
+                    onChange={handleTranTypeChange}
+                  />
+                ) : (
+                  <FieldRenderer
+                    id="woNo"
+                    label="Work Order No."
+                    type="text"
+                    value={woNo || ""}
+                    readOnly
+                    disabled
+                  />
+                )}
               </div>
 
               {/* Column 2 */}
               <div className="global-tran-textbox-group-div-ui">
 
-    <FieldRenderer
-        id="tranType"
-        label="Tran Type"
-        type="select"
-        required
-        value={state.tranType || "REG"}
-        disabled={isFormDisabled || state.isOpenReferenceWO}
-        options={[
-            { value: "REG", label: "Regular" },
-            { value: "PROD", label: "Production" },
-        ]}
-        onChange={handleTranTypeChange}
-    />
+                {state.tranType !== "PROD" && (
+                  <FieldRenderer
+                    id="tranType"
+                    label="Tran Type"
+                    type="select"
+                    required
+                    value={state.tranType || "REG"}
+                    disabled={isFormDisabled || state.isOpenReferenceWO}
+                    options={[
+                      { value: "REG", label: "Regular" },
+                      { value: "PROD", label: "Production" },
+                    ]}
+                    onChange={handleTranTypeChange}
+                  />
+                )}
                 <FieldRenderer
                   id="rcName"
                   label="Responsibility Center"
@@ -3706,57 +4173,163 @@ useEffect(() => {
                   lookupDisabled={isFormDisabled}
                   onLookup={() => !isFormDisabled && updateState({ locationLookupOpen: true })}
                 />
+
+                {state.tranType === "PROD" && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FieldRenderer
+                      id="vendCode"
+                      label="Employee Code"
+                      type="lookup"
+                      value={vendCode || vendCOde || ""}
+                      readOnly
+                      disabled={isFormDisabled}
+                      lookupDisabled={isFormDisabled}
+                      onLookup={() =>
+                        !isFormDisabled &&
+                        updateState({
+                          rcLookupModalOpen: true,
+                          rcLookupContext: "payeeCode",
+                        })
+                      }
+                    />
+
+                    <FieldRenderer
+                      id="vendName"
+                      label="Employee Name"
+                      type="text"
+                      value={vendName || ""}
+                      disabled={isFormDisabled}
+                      onChange={(val) => updateState({ vendName: val })}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Column 3 */}
               <div className="global-tran-textbox-group-div-ui">
-                <FieldRenderer
-                  id="vendCode"
-                  label="Employee Code"
-                  type="lookup"
-                  value={vendCode || vendCOde || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFormDisabled}
-                  onLookup={() =>
-                    !isFormDisabled &&
-                    updateState({
-                      rcLookupModalOpen: true,
-                      rcLookupContext: "payeeCode",
-                    })
-                  }
-                />
+                {state.tranType === "PROD" ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FieldRenderer
+                        id="custCode"
+                        label="Customer Code"
+                        type="lookup"
+                        value={state.custCode || ""}
+                        readOnly
+                        disabled={isFormDisabled}
+                        lookupDisabled={isFormDisabled}
+                        onLookup={() => !isFormDisabled && updateState({ custModalOpen: true })}
+                      />
 
-                <FieldRenderer
-                  id="vendName"
-                  label="Employee Name"
-                  type="text"
-                  value={vendName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ vendName: val })}
-                />
+                      <FieldRenderer
+                        id="custName"
+                        label="Customer Name"
+                        type="text"
+                        value={state.custName || ""}
+                        disabled={isFormDisabled}
+                        onChange={(val) => updateState({ custName: val })}
+                      />
+                    </div>
 
-                <FieldRenderer
-                  id="custCode"
-                  label="Customer Code"
-                  type="lookup"
-                  value={state.custCode || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFormDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ custModalOpen: true })}
-                />
+                    <FieldRenderer
+                      id="woNo"
+                      label="Work Order No."
+                      type="text"
+                      value={woNo || ""}
+                      readOnly
+                      disabled
+                    />
 
-                <FieldRenderer
-                  id="custName"
-                  label="Customer Name"
-                  type="text"
-                  value={state.custName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ custName: val })}
-                />
+                    <FieldRenderer
+                      id="bomCode"
+                      label="BOM Code"
+                      type="text"
+                      value={state.bomCode || ""}
+                      readOnly
+                      disabled
+                    />
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FieldRenderer
+                        id="bomItemCode"
+                        label="BOM Item Code"
+                        type="text"
+                        value={state.bomItemCode || ""}
+                        readOnly
+                        disabled
+                      />
+
+                      <FieldRenderer
+                        id="bomUomCode"
+                        label="BOM UOM Code"
+                        type="text"
+                        value={state.bomUomCode || ""}
+                        readOnly
+                        disabled
+                      />
+                    </div>
+
+                    <FieldRenderer
+                      id="bomItemName"
+                      label="BOM Item Name"
+                      type="text"
+                      value={state.bomItemName || ""}
+                      readOnly
+                      disabled
+                    />
+                  </>
+                ) : (
+                  <>
+                    <FieldRenderer
+                      id="vendCode"
+                      label="Employee Code"
+                      type="lookup"
+                      value={vendCode || vendCOde || ""}
+                      readOnly
+                      disabled={isFormDisabled}
+                      lookupDisabled={isFormDisabled}
+                      onLookup={() =>
+                        !isFormDisabled &&
+                        updateState({
+                          rcLookupModalOpen: true,
+                          rcLookupContext: "payeeCode",
+                        })
+                      }
+                    />
+
+                    <FieldRenderer
+                      id="vendName"
+                      label="Employee Name"
+                      type="text"
+                      value={vendName || ""}
+                      disabled={isFormDisabled}
+                      onChange={(val) => updateState({ vendName: val })}
+                    />
+
+                    <FieldRenderer
+                      id="custCode"
+                      label="Customer Code"
+                      type="lookup"
+                      value={state.custCode || ""}
+                      readOnly
+                      disabled={isFormDisabled}
+                      lookupDisabled={isFormDisabled}
+                      onLookup={() => !isFormDisabled && updateState({ custModalOpen: true })}
+                    />
+
+                    <FieldRenderer
+                      id="custName"
+                      label="Customer Name"
+                      type="text"
+                      value={state.custName || ""}
+                      disabled={isFormDisabled}
+                      onChange={(val) => updateState({ custName: val })}
+                    />
+                  </>
+                )}
               </div>
 
+              {state.tranType !== "PROD" && (
               <div className="col-span-full">
                 <div className="relative p-2">
                   <textarea
@@ -3773,6 +4346,7 @@ useEffect(() => {
                   </label>
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>
@@ -4181,6 +4755,7 @@ useEffect(() => {
           issueItems={woLookupIssueItems}
           inventoryRows={woLookupInventoryRows}
           loading={woLookupLoading}
+          filterWorkOrders={filterWOLookupRowsWithFGIssueItems}
           onSelectWorkOrder={handleSelectWOLookupPreview}
           onSelectIssueItem={handleSelectWOIssueItemPreview}
           onApply={handleApplyWOLookup}

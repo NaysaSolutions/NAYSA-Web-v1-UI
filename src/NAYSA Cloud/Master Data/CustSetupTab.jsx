@@ -380,7 +380,9 @@ const CustSetupTab = forwardRef(
     // --- Lookup open states (individual, matching PayeeSetupTab pattern) ---
     const [isCustLookupOpen, setIsCustLookupOpen] = useState(false);
     const [isBranchLookupOpen, setIsBranchLookupOpen] = useState(false);
-    const [isATCLookupOpen, setIsATCLookupOpen] = useState(false);
+    const [isATCGoodsLookupOpen, setIsATCGoodsLookupOpen] = useState(false);
+    const [isATCServicesLookupOpen, setIsATCServicesLookupOpen] = useState(false);
+    const [isATCGovernmentLookupOpen, setIsATCGovernmentLookupOpen] = useState(false);
     const [isVATLookupOpen, setIsVATLookupOpen] = useState(false);
     const [isBillTermLookupOpen, setIsBillTermLookupOpen] = useState(false);
     const [isCurrLookupOpen, setIsCurrLookupOpen] = useState(false);
@@ -457,11 +459,10 @@ const CustSetupTab = forwardRef(
             <div className="grid grid-cols-3 gap-3">
               <div
                 ref={customerCodeOverrideRef}
-                className={`w-full ${
-                  !canTypeCustomerCode
+                className={`w-full ${!canTypeCustomerCode
                     ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
                     : ""
-                }`}
+                  }`}
               >
                 <FieldRenderer
                   key={`customer-code-${canTypeCustomerCode ? "manual" : "readonly"}`}
@@ -507,44 +508,44 @@ const CustSetupTab = forwardRef(
             </div>
 
             {/* Row 3: Registered Name | Business Name */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-  <FieldRenderer
-    label="Registered Name"
-    required
-    type="text"
-    value={form?.custName || ""}
-    onChange={(v) => {
-      const registeredName = getValue(v);
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <FieldRenderer
+                label="Registered Name"
+                required
+                type="text"
+                value={form?.custName || ""}
+                onChange={(v) => {
+                  const registeredName = getValue(v);
 
-      onChangeForm({
-        custName: registeredName,
-        businessName: registeredName,
-      });
-    }}
-    onBlur={async () => {
-      if (!isEditing || !form?.custName) return;
-      await onNameBlur?.(form?.custName);
-    }}
-    readOnly={isReadOnly || isIndividual}
-    disabled={isDisabled || isIndividual}
-    maxLength={getLen("cust_name", 150)}
-  />
+                  onChangeForm({
+                    custName: registeredName,
+                    businessName: registeredName,
+                  });
+                }}
+                onBlur={async () => {
+                  if (!isEditing || !form?.custName) return;
+                  await onNameBlur?.(form?.custName);
+                }}
+                readOnly={isReadOnly || isIndividual}
+                disabled={isDisabled || isIndividual}
+                maxLength={getLen("cust_name", 150)}
+              />
 
-  <FieldRenderer
-    label="Business Name"
-    required={!isIndividual}
-    type="text"
-    value={form?.businessName || ""}
-    onChange={(v) => {
-      onChangeForm({
-        businessName: getValue(v),
-      });
-    }}
-    readOnly={isReadOnly}
-    disabled={isDisabled}
-    maxLength={getLen("business_name", 150)}
-  />
-</div>
+              <FieldRenderer
+                label="Business Name"
+                required={!isIndividual}
+                type="text"
+                value={form?.businessName || ""}
+                onChange={(v) => {
+                  onChangeForm({
+                    businessName: getValue(v),
+                  });
+                }}
+                readOnly={isReadOnly}
+                disabled={isDisabled}
+                maxLength={getLen("business_name", 150)}
+              />
+            </div>
 
             {/* Row 4: First Name | Middle Name | Last Name */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -580,7 +581,7 @@ const CustSetupTab = forwardRef(
             </div>
           </Card>
 
-         
+
 
           {/* ── MIDDLE CARD: Collapsible Sidebar ── */}
           <Card className="border border-blue-500/30 rounded-lg overflow-hidden !focus-within:ring-0 !focus-within:shadow-none !focus-within:-translate-y-0">
@@ -750,71 +751,125 @@ const CustSetupTab = forwardRef(
                   </>
                 )}
 
-                {/* ── ACCOUNTING ── */}
                 {activeTab === "accounting" && (
                   <>
                     <SectionHeader title="ACCOUNTING INFORMATION" />
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <FieldRenderer
-                        label="TIN"
-                        required={taxClass === "WC"}
-                        type="text"
-                        value={form?.custTin || ""}
-                        onChange={(v) => onChangeForm({ custTin: getValue(v) })}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                        maxLength={getLen("cust_tin", 50)}
-                      />
-                      <FieldRenderer
-                        label="Default ATC"
-                        required={taxClass === "WC"}
-                        type="lookup"
-                        value={form?.atcCode || ""}
-                        onLookup={isDisabled ? undefined : () => setIsATCLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                      <FieldRenderer
-                        label="Default VAT"
-                        required={taxClass === "WC"}
-                        type="lookup"
-                        value={form?.vatCode || ""}
-                        onLookup={isDisabled ? undefined : () => setIsVATLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                    {/* TAX INFORMATION */}
+                    <div className="space-y-3">
+                      <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                        Tax Information
+                      </div>
+
+                      {/* TIN + VAT */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <FieldRenderer
+                          label="TIN"
+                          required={taxClass === "WC"}
+                          type="text"
+                          value={form?.custTin || ""}
+                          onChange={(v) =>
+                            onChangeForm({ custTin: getValue(v) })
+                          }
+                          readOnly={isReadOnly}
+                          disabled={isDisabled}
+                          maxLength={getLen("cust_tin", 50)}
+                        />
+
+                        <FieldRenderer
+                          label="Default VAT"
+                          required={taxClass === "WC"}
+                          type="lookup"
+                          value={form?.vatCode || ""}
+                          onLookup={
+                            isDisabled
+                              ? undefined
+                              : () => setIsVATLookupOpen(true)
+                          }
+                          readOnly={isReadOnly}
+                          disabled={isDisabled}
+                        />
+                      </div>
+
+                      {/* ATC GROUP */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <FieldRenderer
+                          label="ATC (Goods)"
+                          required={taxClass === "WC"}
+                          type="lookup"
+                          value={form?.atcCode || ""}
+                          onLookup={
+                            isDisabled
+                              ? undefined
+                              : () => setIsATCGoodsLookupOpen(true)
+                          }
+                          readOnly={isReadOnly}
+                          disabled={isDisabled}
+                        />
+
+                        <FieldRenderer
+                          label="ATC (Services)"
+                          type="lookup"
+                          value={form?.atcCodeSV || ""}
+                          onLookup={
+                            isDisabled
+                              ? undefined
+                              : () => setIsATCServicesLookupOpen(true)
+                          }
+                          readOnly={isReadOnly}
+                          disabled={isDisabled}
+                        />
+
+                        <FieldRenderer
+                          label="ATC (Government)"
+                          type="lookup"
+                          value={form?.atcCodeGV || ""}
+                          onLookup={
+                            isDisabled
+                              ? undefined
+                              : () => setIsATCGovernmentLookupOpen(true)
+                          }
+                          readOnly={isReadOnly}
+                          disabled={isDisabled}
+                        />
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <FieldRenderer
-                        label="Billing Terms"
-                        required
-                        type="lookup"
-                        value={form?.billtermCode || ""}
-                        onLookup={isDisabled ? undefined : () => setIsBillTermLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                        maxLength={getLen("billterm_code", 20)}
-                        labelClassName="!text-[12px]"
-                      />
-                      {/* <FieldRenderer
-                        label="Business Style"
-                        type="select"
-                        value={form?.businessStyle || ""}
-                        options={[]}
-                        onChange={(v) => onChangeForm({ businessStyle: getValue(v) })}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      /> */}
-                      <FieldRenderer
-                        label="Currency"
-                        type="lookup"
-                        value={form?.currCode || ""}
-                        onLookup={isDisabled ? undefined : () => setIsCurrLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                    {/* BILLING DEFAULTS */}
+                    <div className="space-y-3 pt-3 border-t border-slate-200">
+                      <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                        Billing Defaults
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <FieldRenderer
+                          label="Billing Terms"
+                          required
+                          type="lookup"
+                          value={form?.billtermCode || ""}
+                          onLookup={
+                            isDisabled
+                              ? undefined
+                              : () => setIsBillTermLookupOpen(true)
+                          }
+                          readOnly={isReadOnly}
+                          disabled={isDisabled}
+                          maxLength={getLen("billterm_code", 20)}
+                        />
+
+                        <FieldRenderer
+                          label="Currency"
+                          type="lookup"
+                          value={form?.currCode || ""}
+                          onLookup={
+                            isDisabled
+                              ? undefined
+                              : () => setIsCurrLookupOpen(true)
+                          }
+                          readOnly={isReadOnly}
+                          disabled={isDisabled}
+                        />
+                      </div>
                     </div>
                   </>
                 )}
@@ -1081,7 +1136,7 @@ const CustSetupTab = forwardRef(
             </div>{/* end flex row */}
           </Card>
 
-           <RegistrationInfo
+          <RegistrationInfo
             layout="straight"
             disabled
             data={{
@@ -1155,13 +1210,37 @@ const CustSetupTab = forwardRef(
         />
 
         <SearchATCRef
-          isOpen={isATCLookupOpen}
+          isOpen={isATCGoodsLookupOpen}
           onClose={(selected) => {
-            setIsATCLookupOpen(false);
+            setIsATCGoodsLookupOpen(false);
             if (!selected) return;
             onChangeForm({
               atcCode: getValue(selected?.atcCode) || getValue(selected?.atc_code),
               atcName: getValue(selected?.atcName) || getValue(selected?.atc_name),
+            });
+          }}
+        />
+
+        <SearchATCRef
+          isOpen={isATCServicesLookupOpen}
+          onClose={(selected) => {
+            setIsATCServicesLookupOpen(false);
+            if (!selected) return;
+            onChangeForm({
+              atcCodeSV: getValue(selected?.atcCode) || getValue(selected?.atc_code),
+              atcNameSV: getValue(selected?.atcName) || getValue(selected?.atc_name),
+            });
+          }}
+        />
+
+        <SearchATCRef
+          isOpen={isATCGovernmentLookupOpen}
+          onClose={(selected) => {
+            setIsATCGovernmentLookupOpen(false);
+            if (!selected) return;
+            onChangeForm({
+              atcCodeGV: getValue(selected?.atcCode) || getValue(selected?.atc_code),
+              atcNameGV: getValue(selected?.atcName) || getValue(selected?.atc_name),
             });
           }}
         />
