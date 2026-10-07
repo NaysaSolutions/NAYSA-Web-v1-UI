@@ -3,6 +3,7 @@ import ARINQActionBar from "./ARINQActionBar";
 import ARInquiryTab from "./ARInquiryTab";
 import ARAdvancesTab from "./ARAdvancesTab";
 import ARAgingSummaryTab from "./ARAgingSummaryTab";
+import ARScheduleTab from "./ARScheduleTab";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {faFileLines,faDatabase} from "@fortawesome/free-solid-svg-icons";
 
@@ -11,6 +12,7 @@ const TABS = [
   { key: "inquiry",  label: "AR Query",       component: ARInquiryTab },
   { key: "advances", label: "AR Advances",      component: ARAdvancesTab },
   { key: "aging",    label: "AR Aging Summary", component: ARAgingSummaryTab },
+  { key: "schedule", label: "AR Schedule",       component: ARScheduleTab },
 ];
 
 export default function ARINQ() {
@@ -35,6 +37,7 @@ export default function ARINQ() {
     if (typeof window === "undefined") return;
     delete window.__NAYSA_ARADV_CACHE__;
     delete window.__NAYSA_ARAGE_CACHE__;
+    delete window.__NAYSA_ARSCH_CACHE__;
     if (window.__NAYSA_ARINQ_CACHE__) {
       delete window.__NAYSA_ARINQ_CACHE__.AR_INQUIRY;
     }

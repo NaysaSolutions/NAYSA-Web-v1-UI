@@ -642,6 +642,7 @@ const ARAgingSummaryTab = forwardRef(function ARAgingSummaryTab({ registerAction
               onRowAction={handleViewTop}
               className="mt-2"
               docType="AR Aging Summary"
+              totalExemptions={["rate", "percent", "ratio", "id", "code", "row_no", "ageindays", "daysoverdue"]}
               initialState={initialStateTop}
               onStateChange={(tbl) => {
                 tableStateTopRef.current = tbl;
@@ -672,6 +673,7 @@ const ARAgingSummaryTab = forwardRef(function ARAgingSummaryTab({ registerAction
               onRowAction={handleViewRow}
               className="mt-2"
               docType="AR Advances Detailed"
+              totalExemptions={["rate", "percent", "ratio", "id", "code", "row_no", "ageindays", "daysoverdue"]}
               initialState={initialStateBottom}
               onStateChange={(tbl) => {
                 tableStateBottomRef.current = tbl;

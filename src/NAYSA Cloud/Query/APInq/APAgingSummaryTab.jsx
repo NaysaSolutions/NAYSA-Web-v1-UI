@@ -699,6 +699,7 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
             onRowAction={handleViewTop}
             className="mt-2"
             docType="AP Aging Summary"
+            totalExemptions={["ageindays", "duedays", "daysoverdue"]}
             initialState={initialStateTop}
             onStateChange={(tbl) => {
               tableStateTopRef.current = tbl;
@@ -730,6 +731,7 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
             onRowAction={handleViewRow}
             className="mt-2"
             docType="AP Aging Detailed"
+            totalExemptions={["ageindays", "duedays", "daysoverdue"]}
             initialState={initialStateBottom}
             onStateChange={(tbl) => {
               tableStateBottomRef.current = tbl;
