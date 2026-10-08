@@ -653,13 +653,13 @@ const FAMast_SetupTab = ({
                       disabled={isDisabled}
                       maxLength={getLen("gcutoff_code", 6)}
                     />
-                    {/* <FieldRenderer
+                   <FieldRenderer
                       label="D-Cutoff Code"
                       type="text"
                       value={form.dcutoffCode || ""}
                       readOnly
                       disabled
-                    /> */}
+                    />
                   </div>
                 </>
               )}
@@ -667,6 +667,19 @@ const FAMast_SetupTab = ({
               {/* ══ Depreciation ══ */}
               {activeTab === "depreciation" && (
                 <>
+                  <SectionHeader title="DEPRECIATION SETUP" />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <FieldRenderer
+                      label="Depreciation Start Cutoff"
+                      type="text"
+                      value={form.depStartCutoff || ""}
+                      onChange={(v) => onChangeForm({ depStartCutoff: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                      maxLength={getLen("dep_startcutoff", 6)}
+                    />
+                  </div>
+
                   <SectionHeader title="ACCUMULATED DEPRECIATION" />
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <FieldRenderer label="Accum Depr" type="number" value={form.accumDepr ?? ""} readOnly disabled />
