@@ -391,6 +391,7 @@ const SO = () => {
   ).toUpperCase();
 
   // Derived UI flags
+  const isOverallDiscountMode = salesDiscountMode === "OVERALL";
   const isDiscountEditable = salesDiscountMode === "MANUAL";
   const isSellPriceOpenEditable = priceDiscountMode === "E" || salesDiscountMode === "MANUAL";
   const SO_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
@@ -400,15 +401,17 @@ const SO = () => {
     Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
     8
   );
-  const showTotalDiscountColumn = discountLevel > 1;
-  const visibleDiscountRateFields = Array.from(
+  const allDiscountRateFields = Array.from(
     { length: discountLevel },
     (_, index) => `discRate${index + 1}`
   );
-  const visibleDiscountAmountFields = Array.from(
+  const allDiscountAmountFields = Array.from(
     { length: discountLevel },
     (_, index) => `discAmount${index + 1}`
   );
+  const showTotalDiscountColumn = !isOverallDiscountMode && discountLevel > 1;
+  const visibleDiscountRateFields = isOverallDiscountMode ? [] : allDiscountRateFields;
+  const visibleDiscountAmountFields = isOverallDiscountMode ? [] : allDiscountAmountFields;
 
   const detailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -464,7 +467,7 @@ const SO = () => {
   });
   useEffect(() => {
     setSoDetailColumnOrder(detailColumnDefs.map((column) => column.key));
-  }, [setSoDetailColumnOrder, discountLevel]);
+  }, [setSoDetailColumnOrder, discountLevel, isOverallDiscountMode]);
   const sortedDetailRows = getSortedSoDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => {
@@ -1595,8 +1598,8 @@ const handleActivityOption = async (action) => {
     parseFormattedNumber(formatNumber(value, decimals)) || 0;
 
   const calculateRowAmountsFromRates = (row) => {
-    const discountRateFields = visibleDiscountRateFields;
-    const discountAmountFields = visibleDiscountAmountFields;
+    const discountRateFields = allDiscountRateFields;
+    const discountAmountFields = allDiscountAmountFields;
     const quantity = parseFormattedNumber(row.soQuantity || 0) || 0;
     const sellingPrice = parseFormattedNumber(row.sellingPrice || 0) || 0;
     const grossAmount = toFormattedAmountNumber(quantity * sellingPrice);
@@ -1634,7 +1637,7 @@ const handleActivityOption = async (action) => {
         ...baseRow,
         sellingPrice: formatNumber(0, sellingPriceDecimals),
         ...Object.fromEntries(
-          visibleDiscountRateFields.map((field) => [field, formatNumber(0)])
+          allDiscountRateFields.map((field) => [field, formatNumber(0)])
         ),
       });
     }
@@ -1653,7 +1656,7 @@ const handleActivityOption = async (action) => {
       ),
     };
 
-    visibleDiscountRateFields.forEach((field, index) => {
+    allDiscountRateFields.forEach((field, index) => {
       updatedRow[field] = formatNumber(
         getDiscountRateValue(index + 1) ?? baseRow[field] ?? 0
       );
@@ -2011,11 +2014,12 @@ const handleSaveAndPrint = async (documentID) => {
           !isShipTo &&
           String(nextBillToCustCode).trim() !== "" &&
           String(nextBillToCustCode).trim() !== String(billToCustCode || "").trim();
+        const hasExistingBillToCustomer = String(billToCustCode || "").trim() !== "";
         const hasRowsToReprice = (detailRowsRef.current || []).some(
           (row) => String(row?.pmType || "").trim().toUpperCase() !== "*MANUAL"
         );
 
-        if (isBillToCustomerChanged) {
+        if (isBillToCustomerChanged && hasExistingBillToCustomer) {
           const result = await useSwalProceedConfirm(
             "Change Bill To Customer?",
             hasRowsToReprice

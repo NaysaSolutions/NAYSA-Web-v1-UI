@@ -5,7 +5,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner,faSearch } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner, faSearch, faPen, faCheck } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -91,6 +91,39 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
+
+const showDiscountError = useSwalErrorAlert;
+const showDiscountConfirm = useSwalProceedConfirm;
+
+// Allocate whole cents so the last item receives any rounding difference.
+const allocateDiscountCents = (grossAmounts, discountAmount) => {
+  const capacities = grossAmounts.map((amount) =>
+    Math.max(0, Math.round(Number(amount || 0) * 100))
+  );
+  const grossCents = capacities.reduce((sum, cents) => sum + cents, 0);
+  const discountCents = Math.round(Number(discountAmount || 0) * 100);
+
+  if (!Number.isFinite(discountCents) || discountCents < 0 || discountCents > grossCents) {
+    throw new RangeError("Discount Amount must be between zero and Gross Amount.");
+  }
+  if (!capacities.length) return [];
+
+  let remainingDiscount = discountCents;
+  let remainingGross = grossCents;
+  return capacities.map((gross, index) => {
+    const laterGross = remainingGross - gross;
+    const proportional = grossCents ? Math.round((discountCents * gross) / grossCents) : 0;
+    const minimum = Math.max(0, remainingDiscount - laterGross);
+    const maximum = Math.min(gross, remainingDiscount);
+    const cents = index === capacities.length - 1
+      ? remainingDiscount
+      : Math.min(maximum, Math.max(minimum, proportional));
+    remainingDiscount -= cents;
+    remainingGross = laterGross;
+    return cents / 100;
+  });
+};
+
 const SI = () => {
 
   // View Document Const
@@ -99,6 +132,7 @@ const SI = () => {
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
   const addTypeDropdownRef = useRef(null);
+  const headerDiscountInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopATCRow,getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
@@ -120,6 +154,8 @@ const SI = () => {
   const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
   const [itemPickingStockRows, setItemPickingStockRows] = useState([]);
   const [itemPickingExistingAllocations, setItemPickingExistingAllocations] = useState([]);
+  const [isHeaderDiscountEditing, setIsHeaderDiscountEditing] = useState(false);
+  const [headerDiscountDraft, setHeaderDiscountDraft] = useState("");
   const docType = docTypes.SI;
   const hsDoc = getAllTopHSDocRow(docType) || {};
   const pdfLink = docTypePDFGuide[docType];
@@ -438,23 +474,28 @@ const SI = () => {
   ).toUpperCase();
 
   // Derived UI flags
+  const isOverallDiscountMode = salesDiscountMode === "OVERALL";
   const isSellingPriceAndDiscountEditable = salesDiscountMode === "MANUAL";
   const SI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
+  const canEditHeaderDiscount =
+    isOverallDiscountMode &&
+    !isFormDisabled &&
+    !state.isSaveDisabled &&
+    isOpenStatus &&
+    (parseFormattedNumber(totals.totalGrossAmount) || 0) > 0;
 
   // Discount configuration
   const discountLevel = Math.min(
     Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
     8
   );
-  const showTotalDiscountColumn = discountLevel > 1;
-  const visibleDiscountRateFields = Array.from(
-    { length: discountLevel },
-    (_, index) => `discRate${index + 1}`
-  );
-  const visibleDiscountAmountFields = Array.from(
-    { length: discountLevel },
-    (_, index) => `discAmount${index + 1}`
-  );
+  const showTotalDiscountColumn = !isOverallDiscountMode && discountLevel > 1;
+  const visibleDiscountRateFields = isOverallDiscountMode
+    ? []
+    : Array.from({ length: discountLevel }, (_, index) => `discRate${index + 1}`);
+  const visibleDiscountAmountFields = isOverallDiscountMode
+    ? ["discAmount1"]
+    : Array.from({ length: discountLevel }, (_, index) => `discAmount${index + 1}`);
 
   const detailColumnDefs = [
     { key: "drId", label: "DR ID", width: 120 },
@@ -479,7 +520,11 @@ const SI = () => {
     })),
     ...visibleDiscountAmountFields.map((field, index) => ({
       key: field,
-      label: discountLevel === 1 ? "Disc Amount" : `Disc Amount ${index + 1}`,
+      label: isOverallDiscountMode
+        ? "Discount Amount"
+        : discountLevel === 1
+          ? "Disc Amount"
+          : `Disc Amount ${index + 1}`,
       width: 120,
     })),
     ...(showTotalDiscountColumn
@@ -531,7 +576,7 @@ const SI = () => {
   });
   useEffect(() => {
     setSoDetailColumnOrder(detailColumnDefs.map((column) => column.key));
-  }, [setSoDetailColumnOrder, discountLevel]);
+  }, [setSoDetailColumnOrder, discountLevel, isOverallDiscountMode]);
 
   useEffect(() => {
     const hiddenColumnKeys = ["drId", "soId", "groupId", "vatRate"];
@@ -556,7 +601,7 @@ const SI = () => {
 
 
     setSoDetailHiddenColumnKeys(hiddenColumnKeys);
-  }, [setSoDetailHiddenColumnKeys, isPosted, canViewCostAmount, isDirectSiType, isPickingSiType, normalizedSiTranType]);
+  }, [setSoDetailHiddenColumnKeys, isPosted, canViewCostAmount, isDirectSiType, isPickingSiType, normalizedSiTranType, isOverallDiscountMode]);
 
 
   const sortedDetailRows = getSortedSoDetailRows(
@@ -1092,6 +1137,8 @@ useEffect(() => {
 
   const handleReset = () => {
       clearSoDetailSorting();
+      setIsHeaderDiscountEditing(false);
+      setHeaderDiscountDraft("");
       const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
       const defaultSiType =
         filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
@@ -4060,6 +4107,90 @@ const recalculateSODetailRow = (row = {}, changedField = "") => {
   };
 };
 
+const applyHeaderDiscount = async () => {
+  if (!canEditHeaderDiscount) return;
+
+  const enteredAmount = isHeaderDiscountEditing
+    ? headerDiscountDraft
+    : totals.totalDiscountAmount;
+  const discountAmount = parseFormattedNumber(enteredAmount);
+  const grossAmount = parseFormattedNumber(totals.totalGrossAmount) || 0;
+
+  if (!Number.isFinite(discountAmount) || discountAmount < 0) {
+    showDiscountError("Invalid Discount Amount", "Discount Amount cannot be negative.");
+    return;
+  }
+  if (Math.round(discountAmount * 100) > Math.round(grossAmount * 100)) {
+    showDiscountError("Invalid Discount Amount", "Discount Amount cannot exceed Gross Amount.");
+    return;
+  }
+
+  const sourceRows = detailRowsRef.current || detailRows || [];
+  const detailIndexes = sourceRows.flatMap((row, index) =>
+    String(row?.itemCode || "").trim() ? [index] : []
+  );
+
+  if (!detailIndexes.length) {
+    showDiscountError("Discount Amount", "Add SI items before applying a discount.");
+    return;
+  }
+
+  const confirmation = await showDiscountConfirm(
+    "Apply SI Discount?",
+    `Distribute the discount of ${formatNumber(discountAmount)} to the SI items?`,
+    "Yes, apply",
+    "No"
+  );
+  if (!confirmation?.isConfirmed) {
+    setHeaderDiscountDraft(totals.totalDiscountAmount);
+    setIsHeaderDiscountEditing(false);
+    return;
+  }
+  if (!canEditHeaderDiscount) return;
+
+  let detailDiscounts;
+  try {
+    detailDiscounts = allocateDiscountCents(
+      detailIndexes.map((index) =>
+        parseFormattedNumber(sourceRows[index].grossAmount) || 0
+      ),
+      discountAmount
+    );
+  } catch (error) {
+    showDiscountError("Invalid Discount Amount", error.message);
+    return;
+  }
+
+  const discountByIndex = new Map();
+  detailIndexes.forEach((index, position) => {
+    discountByIndex.set(index, detailDiscounts[position]);
+  });
+
+  const clearedDiscountFields = Array.from({ length: 8 }, (_, index) => index + 1)
+    .reduce((fields, discountNo) => ({
+      ...fields,
+      [`discRate${discountNo}`]: formatNumber(0),
+      [`discAmount${discountNo}`]: formatNumber(0),
+    }), {});
+
+  const recalculatedRows = sourceRows.map((row, index) => {
+    if (!discountByIndex.has(index)) return row;
+
+    return recalculateSODetailRow({
+      ...row,
+      ...clearedDiscountFields,
+      discAmount1: formatNumber(discountByIndex.get(index)),
+    }, "discAmount1");
+  });
+  const updatedRows = distributeVatAcrossDetailRows(recalculatedRows);
+
+  detailRowsRef.current = updatedRows;
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows);
+  setHeaderDiscountDraft(formatNumber(discountAmount));
+  setIsHeaderDiscountEditing(false);
+};
+
 const handleSODetailRowChange = (index, field, value) => {
   const discountRateFields = [
     "discRate1",
@@ -4901,14 +5032,84 @@ return (
               disabled
             />
 
-            <FieldRenderer
-              id="totalDiscountAmount"
-              label="Discount Amount"
-              type="amount"
-              value={totals.totalDiscountAmount || ""}
-              disabled
-              readOnly
-            />
+            {isOverallDiscountMode ? (
+              <div className="relative w-full [&_input]:!pl-[4.5rem]">
+                <FieldRenderer
+                  id="totalDiscountAmount"
+                  label="Discount Amount"
+                  type="amount"
+                  value={isHeaderDiscountEditing ? headerDiscountDraft : totals.totalDiscountAmount || ""}
+                  inputRef={headerDiscountInputRef}
+                  disabled={!isHeaderDiscountEditing || !canEditHeaderDiscount}
+                  hideClearButton
+                  onChange={(value) => {
+                    if (String(value).includes("-")) {
+                      showDiscountError("Invalid Discount Amount", "Discount Amount cannot be negative.");
+                      return;
+                    }
+
+                    const sanitized = String(value).replace(/,/g, "").replace(/[^\d.]/g, "");
+                    if (!/^\d*\.?\d{0,2}$/.test(sanitized)) return;
+                    if (Number(sanitized || 0) > (parseFormattedNumber(totals.totalGrossAmount) || 0)) {
+                      showDiscountError("Invalid Discount Amount", "Discount Amount cannot exceed Gross Amount.");
+                      return;
+                    }
+
+                    setHeaderDiscountDraft(sanitized);
+                  }}
+                  onBlur={() => {
+                    if (isHeaderDiscountEditing) {
+                      setHeaderDiscountDraft(
+                        formatNumber(parseFormattedNumber(headerDiscountDraft) || 0)
+                      );
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      applyHeaderDiscount();
+                    }
+                  }}
+                />
+                <div className="absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5">
+                  <button
+                    type="button"
+                    aria-label="Edit SI discount"
+                    title="Edit discount"
+                    disabled={!canEditHeaderDiscount}
+                    className="flex h-7 w-8 flex-col items-center justify-center rounded text-blue-600 hover:bg-blue-100 disabled:opacity-40"
+                    onClick={() => {
+                      setHeaderDiscountDraft(totals.totalDiscountAmount);
+                      setIsHeaderDiscountEditing(true);
+                      requestAnimationFrame(() => headerDiscountInputRef.current?.focus());
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faPen} className="text-[10px]" />
+                    <span className="text-[8px] leading-none">Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Apply SI discount to items"
+                    title="Apply discount to items"
+                    disabled={!canEditHeaderDiscount}
+                    className="flex h-7 w-8 flex-col items-center justify-center rounded text-green-600 hover:bg-green-100 disabled:opacity-40"
+                    onClick={applyHeaderDiscount}
+                  >
+                    <FontAwesomeIcon icon={faCheck} className="text-[10px]" />
+                    <span className="text-[8px] leading-none">Apply</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <FieldRenderer
+                id="totalDiscountAmount"
+                label="Discount Amount"
+                type="amount"
+                value={totals.totalDiscountAmount || ""}
+                disabled
+                readOnly
+              />
+            )}
 
             <FieldRenderer
               id="totalNetAmount"

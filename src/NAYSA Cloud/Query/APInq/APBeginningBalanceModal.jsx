@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { Download, Upload, X, CheckCircle2, Maximize2, Minimize2, Minus, FileSpreadsheet } from "lucide-react";
+import { Download, Upload, X, CheckCircle2, Maximize2, Minimize2, Minus, FileSpreadsheet, RotateCcw } from "lucide-react";
 import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import {
@@ -238,6 +238,14 @@ export default function APBeginningBalanceModal({ isOpen, onClose, balanceType, 
     }
   };
 
+  const resetUpload = () => {
+    if (busy) return;
+    setRows([]);
+    setFileName("");
+    setValidated(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const validate = async () => {
     try {
       const result = await callImport(isAR ? "validateARBeginningBalance" : "validateAPBeginningBalance");
@@ -307,13 +315,14 @@ export default function APBeginningBalanceModal({ isOpen, onClose, balanceType, 
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-5 py-3">
-          <button onClick={downloadTemplate} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Download size={15} /> Download Template</button>
-          <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Upload size={15} /> Upload Excel</button>
+          <button type="button" onClick={downloadTemplate} className="inline-flex w-40 shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Download size={15} /> Download Template</button>
+          <button type="button" onClick={() => fileRef.current?.click()} className="inline-flex w-40 shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Upload size={15} /> Upload Excel</button>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => readFile(event.target.files?.[0])} />
-          <span className="ml-2 text-xs text-slate-500">{fileName || "No file selected"}</span>
-          <div className="ml-auto flex gap-2">
-            <button disabled={!rows.length || busy} onClick={validate} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><CheckCircle2 size={15} /> Validate</button>
-            <button disabled={!validated || busy} onClick={finalize} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Finalize</button>
+          <span className="ml-2 min-w-0 flex-1 truncate text-xs text-slate-500">{fileName || "No file selected"}</span>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <button type="button" disabled={(!rows.length && !fileName) || busy} onClick={resetUpload} className="inline-flex w-28 shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><RotateCcw size={15} /> Reset</button>
+            <button type="button" disabled={!rows.length || busy} onClick={validate} className="inline-flex w-28 shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><CheckCircle2 size={15} /> Validate</button>
+            <button type="button" disabled={!validated || busy} onClick={finalize} className="inline-flex w-28 shrink-0 items-center justify-center rounded-lg border border-blue-200 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">Finalize</button>
           </div>
         </div>
         <div className="relative min-h-0 flex-1 overflow-hidden p-4">
