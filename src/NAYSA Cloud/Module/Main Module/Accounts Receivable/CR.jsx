@@ -1195,7 +1195,7 @@ const handleActivityOption = async (action) => {
         lnNo: "",
         w2307: "",
         siNo: "00000000",
-        siDate: documentDate,
+        siDate: selectedCRType === "CR12" ? normalizeLookupDate(documentDate) : documentDate,
         siAmount:"0.00",
         appliedAmount: "0.00",
         unappliedAmount: "0.00",
@@ -2769,7 +2769,6 @@ const renderCrGlCell = (columnKey, row, index) => {
                     <FieldRenderer
                       id="chainCode"
                       label="Chain Code"
-                      required
                       type="lookup"
                       value={chainCode || ""}
                       disabled={handleFieldBehavior("disableOnSaved")}
@@ -2781,7 +2780,6 @@ const renderCrGlCell = (columnKey, row, index) => {
                     <FieldRenderer
                       id="chainName"
                       label="Chain Name"
-                      required
                       type="text"
                       value={chainName || ""}
                       disabled

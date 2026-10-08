@@ -23,6 +23,7 @@ import {
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
+import APInquirySummaryCard from "./APInquirySummaryCard.jsx";
 
 import {
   useGetCurrentDayV2,
@@ -570,15 +571,15 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
       {showSpinner && <LoadingSpinner />}
 
       <div className="global-tran-tab-div-ui">
-        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faUser} />
+        <div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faUser} /></span>
                 Payee & Account
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="branchName"
                   name="branchName"
@@ -624,13 +625,13 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
               </div>
             </section>
 
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faSliders} />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faSliders} /></span>
                 Filters
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="vendCode"
                   name="vendCode"
@@ -654,26 +655,16 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
               </div>
             </section>
 
-            <aside className="p-5 bg-gray-50">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faTableList} />
-                Filter Summary
-              </h3>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Amount Due:</span>
-                  <span className="font-semibold text-blue-600">{sums.outstanding}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Current:</span>
-                  <span className="font-semibold text-blue-600">{sums.current}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Over Due:</span>
-                  <span className="font-semibold text-blue-600">{sums.amountDue}</span>
-                </div>
-              </div>
+            <aside>
+              <APInquirySummaryCard
+                title="Aging Summary"
+                icon={faTableList}
+                rows={[
+                  { label: "Amount Due", value: sums.outstanding },
+                  { label: "Current", value: sums.current, valueClass: "text-emerald-600" },
+                  { label: "Overdue", value: sums.amountDue, strong: true, valueClass: "text-rose-600" },
+                ]}
+              />
             </aside>
           </div>
         </div>
@@ -699,6 +690,7 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
             onRowAction={handleViewTop}
             className="mt-2"
             docType="AP Aging Summary"
+            totalExemptions={["ageindays", "duedays", "daysoverdue"]}
             initialState={initialStateTop}
             onStateChange={(tbl) => {
               tableStateTopRef.current = tbl;
@@ -730,6 +722,7 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
             onRowAction={handleViewRow}
             className="mt-2"
             docType="AP Aging Detailed"
+            totalExemptions={["ageindays", "duedays", "daysoverdue"]}
             initialState={initialStateBottom}
             onStateChange={(tbl) => {
               tableStateBottomRef.current = tbl;

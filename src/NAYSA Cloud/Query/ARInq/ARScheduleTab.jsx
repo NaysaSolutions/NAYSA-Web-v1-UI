@@ -9,7 +9,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
-import PayeeMastLookupModal from "@/NAYSA Cloud/Lookup/SearchVendMast";
+import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast";
 import COAMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 import {
   formatNumber,
@@ -20,15 +20,14 @@ import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTabl
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 import { useGetCurrentDayV2 } from "@/NAYSA Cloud/Global/dates";
-import APInquirySummaryCard from "./APInquirySummaryCard.jsx";
 
-const ENDPOINT = "getAPSchedule";
-const BASE_KEY = "AP_SCHEDULE";
+const ENDPOINT = "getARSchedule";
+const BASE_KEY = "AR_SCHEDULE";
 
 function getGlobalCache() {
   if (typeof window !== "undefined") {
-    if (!window.__NAYSA_APSCH_CACHE__) window.__NAYSA_APSCH_CACHE__ = {};
-    return window.__NAYSA_APSCH_CACHE__;
+    if (!window.__NAYSA_ARSCH_CACHE__) window.__NAYSA_ARSCH_CACHE__ = {};
+    return window.__NAYSA_ARSCH_CACHE__;
   }
   return {};
 }
@@ -41,9 +40,9 @@ const toNumber = (value) => {
 };
 
 /**
- * AP Schedule has its own stored-procedure processing.
- * AP Schedule uses its own getAPSchedule HTTP endpoint and AP_Schedule
- * stored-procedure mode. AP Aging dt1/dt2 are never consumed here.
+ * AR Schedule has its own stored-procedure processing.
+ * AR Schedule uses its own getARSchedule HTTP endpoint and AP_Schedule
+ * stored-procedure mode. AR Aging dt1/dt2 are never consumed here.
  */
 const extractScheduleRows = (response) => {
   const rawResult = response?.data?.[0]?.result;
@@ -52,25 +51,25 @@ const extractScheduleRows = (response) => {
   const parsed = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
   const resultRow = Array.isArray(parsed) ? parsed[0] : parsed;
 
-  if (!resultRow || !Array.isArray(resultRow.apSchedule)) {
-    throw new Error("Invalid AP Schedule response. Expected apSchedule array from getAPSchedule.");
+  if (!resultRow || !Array.isArray(resultRow.arSchedule)) {
+    throw new Error("Invalid AR Schedule response. Expected arSchedule array from getARSchedule.");
   }
 
-  return resultRow.apSchedule;
+  return resultRow.arSchedule;
 };
 
 const normalizeScheduleRow = (row) => ({
   ...row,
-  payeeGroup: [row?.vendCode, row?.vendName].filter(Boolean).join(" - ") || "(No Payee)",
+  customerGroup: [row?.custCode, row?.custName].filter(Boolean).join(" - ") || "(No Customer)",
 });
 
 const SCHEDULE_COLUMNS = [
-  { key: "payeeGroup", label: "Payee", hidden: false },
+  { key: "customerGroup", label: "Customer", hidden: false },
   { key: "branchCode", label: "Branch" },
-  { key: "vendCode", label: "Payee Code" },
-  { key: "vendName", label: "Payee Name" },
-  { key: "acctCode", label: "AP Account" },
-  { key: "acctName", label: "AP Account Name" },
+  { key: "custCode", label: "Customer Code" },
+  { key: "custName", label: "Customer Name" },
+  { key: "acctCode", label: "AR Account" },
+  { key: "acctName", label: "AR Account Name" },
   { key: "docCode", label: "Doc Type" },
   { key: "docNo", label: "Document No." },
   { key: "docDate", label: "Document Date", renderType: "date" },
@@ -123,7 +122,7 @@ function useRequestCoalescer() {
   return { requestOnce, resultCache };
 }
 
-const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref) {
+const ARScheduleTab = forwardRef(function ARScheduleTab({ registerActions }, ref) {
   const { currentUserRow } = useAuth();
   const hydratedRef = useRef(false);
   const tableRef = useRef(null);
@@ -136,14 +135,14 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
   const [state, setState] = useState({
     branchCode: currentUserRow.branchCode,
     branchName: currentUserRow.branchName,
-    vendCode: "",
-    vendName: "",
+    custCode: "",
+    custName: "",
     refDate: useGetCurrentDayV2(),
     acctCode: "",
     acctName: "",
     scheduleData: [],
     showBranchModal: false,
-    showPayeeModal: false,
+    showCustomerModal: false,
     showAccountModal: false,
     isLoading: false,
     showSpinner: false,
@@ -154,14 +153,14 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
   const {
     branchCode,
     branchName,
-    vendCode,
-    vendName,
+    custCode,
+    custName,
     refDate,
     acctCode,
     acctName,
     scheduleData,
     showBranchModal,
-    showPayeeModal,
+    showCustomerModal,
     showAccountModal,
     isLoading,
     showSpinner,
@@ -179,8 +178,8 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
   const handleReset = useCallback(async () => {
     resultCache.current.clear();
     updateState({
-      vendCode: "",
-      vendName: "",
+      custCode: "",
+      custName: "",
       acctCode: "",
       acctName: "",
       refDate: useGetCurrentDayV2(),
@@ -193,13 +192,13 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
 
     try {
       const response = await requestOnce(
-        `rows:${ENDPOINT}:${branchCode}:${vendCode}:${refDate}:${acctCode}`,
+        `rows:${ENDPOINT}:${branchCode}:${custCode}:${refDate}:${acctCode}`,
         () =>
           fetchData(ENDPOINT, {
             json_data: {
               json_data: {
                 branchCode,
-                vendCode,
+                custCode,
                 refDate,
                 acctCode,
               },
@@ -214,17 +213,17 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
 
       if (safeRows.length === 0) {
         updateState({ scheduleData: [] });
-        useSwalErrorAlert("AP Schedule", "No records found.");
+        useSwalErrorAlert("AR Schedule", "No records found.");
         return;
       }
 
       updateState({ scheduleData: safeRows });
     } catch (err) {
-      console.error("Error fetching AP Schedule:", err);
+      console.error("Error fetching AR Schedule:", err);
     } finally {
       updateState({ isLoading: false });
     }
-  }, [branchCode, vendCode, refDate, acctCode, requestOnce]);
+  }, [branchCode, custCode, refDate, acctCode, requestOnce]);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,8 +246,8 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
             ...prev,
             branchCode: snap.branchCode ?? prev.branchCode,
             branchName: snap.branchName ?? prev.branchName,
-            vendCode: snap.vendCode ?? prev.vendCode,
-            vendName: snap.vendName ?? prev.vendName,
+            custCode: snap.custCode ?? prev.custCode,
+            custName: snap.custName ?? prev.custName,
             refDate: snap.refDate ?? prev.refDate,
             acctCode: snap.acctCode ?? prev.acctCode,
             acctName: snap.acctName ?? prev.acctName,
@@ -277,8 +276,8 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
       ...prev,
       branchCode,
       branchName,
-      vendCode,
-      vendName,
+      custCode,
+      custName,
       refDate,
       acctCode,
       acctName,
@@ -289,8 +288,8 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
   }, [
     branchCode,
     branchName,
-    vendCode,
-    vendName,
+    custCode,
+    custName,
     refDate,
     acctCode,
     acctName,
@@ -391,7 +390,7 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
     const cached = getGlobalCache()[BASE_KEY]?.table || {};
     return {
       ...cached,
-      groupBy: Array.isArray(cached.groupBy) && cached.groupBy.length ? cached.groupBy : ["payeeGroup"],
+      groupBy: Array.isArray(cached.groupBy) && cached.groupBy.length ? cached.groupBy : ["customerGroup"],
       autoExpandGroups: cached.autoExpandGroups ?? true,
     };
   }, []);
@@ -399,7 +398,7 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
   const scheduleColumns = useMemo(() => {
     if (!scheduleData.length) return SCHEDULE_COLUMNS;
     const always = new Set([
-      "payeeGroup", "vendCode", "vendName", "docNo",
+      "customerGroup", "custCode", "custName", "docNo",
       "outstandingBalance", "status"
     ]);
     return SCHEDULE_COLUMNS.filter((col) =>
@@ -419,8 +418,8 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faUser} /></span>
-                Payee & Account
+                <FontAwesomeIcon className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600" icon={faUser} />
+                Customer & Account
               </h3>
 
               <div className="space-y-2">
@@ -459,7 +458,7 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
                 <FieldRenderer
                   id="acctName"
                   name="acctName"
-                  label="AP Account"
+                  label="AR Account"
                   type="lookup"
                   value={acctName || ""}
                   readOnly
@@ -471,44 +470,54 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faSliders} /></span>
+                <FontAwesomeIcon className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600" icon={faSliders} />
                 Filters
               </h3>
 
               <div className="space-y-2">
                 <FieldRenderer
-                  id="vendCode"
-                  name="vendCode"
-                  label="Payee Code"
+                  id="custCode"
+                  name="custCode"
+                  label="Customer Code"
                   type="lookup"
-                  value={vendCode || ""}
+                  value={custCode || ""}
                   disabled={isLoading}
-                  onChange={(val) => updateState({ vendCode: val })}
-                  onLookup={() => updateState({ showPayeeModal: true })}
+                  onChange={(val) => updateState({ custCode: val })}
+                  onLookup={() => updateState({ showCustomerModal: true })}
                 />
 
                 <FieldRenderer
-                  id="vendName"
-                  name="vendName"
-                  label="Payee Name"
+                  id="custName"
+                  name="custName"
+                  label="Customer Name"
                   type="text"
-                  value={vendName || ""}
+                  value={custName || ""}
                   disabled
                   readOnly
                 />
               </div>
             </section>
 
-            <aside>
-              <APInquirySummaryCard
-                title="Schedule Summary"
-                icon={faTableList}
-                rows={[
-                  { label: "Outstanding", value: totals.outstanding },
-                  { label: "Current", value: totals.current, valueClass: "text-emerald-600" },
-                  { label: "Overdue", value: totals.overdue, strong: true, valueClass: "text-rose-600" },
-                ]}
-              />
+            <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <FontAwesomeIcon className="h-3 w-3 rounded-lg bg-blue-50 p-1.5 text-blue-600" icon={faTableList} />
+                Schedule Summary
+              </h3>
+
+              <div className="space-y-2 text-[12px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Outstanding:</span>
+                  <span className="font-semibold text-blue-600">{totals.outstanding}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Current:</span>
+                  <span className="font-semibold text-blue-600">{totals.current}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Over Due:</span>
+                  <span className="font-semibold text-blue-600">{totals.overdue}</span>
+                </div>
+              </div>
             </aside>
           </div>
         </div>
@@ -518,7 +527,7 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
         <div className="global-tran-tab-nav-ui">
           <div className="flex flex-row sm:flex-row">
             <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-              AP Schedule
+              AR Schedule
             </button>
           </div>
         </div>
@@ -534,7 +543,7 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
             rightActionLabel="View"
             onRowAction={handleViewRow}
             className="mt-2"
-            docType="AP Schedule"
+            docType="AR Schedule"
             totalExemptions={["rate", "percent", "ratio", "id", "code", "row_no", "ageindays", "daysoverdue"]}
             initialState={initialState}
             onStateChange={(tbl) => {
@@ -568,7 +577,7 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
       {showAccountModal && (
         <COAMastLookupModal
           isOpen={showAccountModal}
-          customParam="APGL"
+          customParam="ARGL"
           onClose={(selectedAccount) => {
             if (selectedAccount) {
               updateState({
@@ -582,18 +591,18 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
         />
       )}
 
-      {showPayeeModal && (
-        <PayeeMastLookupModal
-          isOpen={showPayeeModal}
-          onClose={(selectedPayee) => {
-            if (selectedPayee) {
+      {showCustomerModal && (
+        <CustomerMastLookupModal
+          isOpen={showCustomerModal}
+          onClose={(selectedCustomer) => {
+            if (selectedCustomer) {
               updateState({
-                vendCode: selectedPayee.vendCode,
-                vendName: selectedPayee.vendName,
+                custCode: selectedCustomer.custCode,
+                custName: selectedCustomer.custName,
                 scheduleData: [],
                           });
             }
-            updateState({ showPayeeModal: false });
+            updateState({ showCustomerModal: false });
           }}
         />
       )}
@@ -601,4 +610,4 @@ const APScheduleTab = forwardRef(function APScheduleTab({ registerActions }, ref
   );
 });
 
-export default APScheduleTab;
+export default ARScheduleTab;

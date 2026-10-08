@@ -375,19 +375,19 @@ useEffect(() => {
 
   const displayStatus = status || "OPEN";
   const statusMap = {
-    OPEN: "global-tran-stat-text-open-ui",
-    FINALIZED: "global-tran-stat-text-finalized-ui",
-    CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-finalized-ui",
+    Open: "global-tran-stat-text-open-ui",
+    Finalized: "global-tran-stat-text-finalized-ui",
+    Cancelled: "global-tran-stat-text-closed-ui",
+    Closed: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const isFormDisabled =
     isViewDocumentUrl ||
-    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+    ["Finalized", "Cancelled", "Closed"].includes(displayStatus);
   const isProductionTranType = String(state.tranType || "").trim().toUpperCase() === "PROD";
   const preferWipDrAccount = true;
   const isOpenDocumentStatus = (value) =>
-    ["", "O", "OPEN"].includes(String(value ?? "").trim().toUpperCase());
+    ["", "O", "Open"].includes(String(value ?? "").trim().toUpperCase());
 
   const updateTotalsDisplay = (qtyNeeded) => {
     setTotals({
@@ -1085,6 +1085,7 @@ useEffect(() => {
         reqRcName: retrievedReqRcName || retrievedReqRcCode || "",
         refPoNo1: getFirstValue(data.refDocNo1, data.refNo1),
         refPrNo2: getFirstValue(data.refDocNo2, data.refNo2),
+        tranType: getFirstValue(data.tranType, data.tran_type, data.TRANTYPE, data.TRAN_TYPE, "REG"),
         woNo: getFirstValue(data.woNo, data.wo_no, data.WO_NO),
         bomCode: getFirstValue(data.bomCode, data.bom_code, data.BOM_CODE),
         bomItemCode: getFirstValue(data.bomItemCode, data.bom_item_code, data.itemCode, data.item_code, data.ITEM_CODE),
@@ -2087,7 +2088,6 @@ useEffect(() => {
         documentID,
         header,
 
-        tranType,
 
         cutoffCode,
         rcCode,
@@ -2100,9 +2100,15 @@ useEffect(() => {
         locName,
 
         attention,
-        woNo,
         vendCode,
         vendName,
+
+        woNo,
+        tranType,
+        bomCode,
+        bomItemCode,
+        bomItemName,
+        bomUomCode,
 
         remarks,
         noReprints,
@@ -2116,14 +2122,19 @@ useEffect(() => {
         fgisNo: documentID ? documentNo || "" : "",
         fgisId: documentID || "",
         fgisDate: header?.rr_date || new Date().toISOString().split("T")[0],
-        tranType: tranType || "REG",
         cutoffCode: cutoffCode || "",
 
         refNo: attention || "",
-        woNo: woNo || "",
         rcCode: rcCode || "",
         reqRcCode: reqRcCode || "",
         reqRcName: reqRcName || "",
+
+        woNo: woNo || "",
+        tranType: tranType || "REG",
+        bomCode: bomCode || "",
+        bomItemCode: bomItemCode || "",
+        bomItemName: bomItemName || "",
+        bomUomCode: bomUomCode || "",
 
         whouseCode: WHcode || "",
         whouseName: WHname || "",
@@ -3960,14 +3971,15 @@ useEffect(() => {
           }
           isResetDisabled={isResetDisabled}
           isAttachDisabled={!documentID}
-          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCancelDisabled={
-            !documentID ||
-            displayStatus === "CANCELLED" ||
-            displayStatus === "FINALIZED" ||
-            displayStatus === "CLOSED"
-          }
+          isPrintDisabled={!documentID || displayStatus === "Cancelled"}
+          isCopyDisabled={!documentID || displayStatus === "Cancelled"}
+          isCancelDisabled={!documentID || isFormDisabled}
+          // isCancelDisabled={
+          //   !documentID ||
+          //   displayStatus === "Cancelled" ||
+          //   displayStatus === "Finalized" ||
+          //   displayStatus === "Closed"
+          // }
           isViewDocument={isViewDocument}
         />
       </div>
@@ -4646,10 +4658,10 @@ useEffect(() => {
           endDate={null}
           status={(() => {
             const s = (state.status || "").toUpperCase();
-            if (s === "FINALIZED") return "F";
-            if (s === "CANCELLED") return "X";
-            if (s === "CLOSED") return "C";
-            if (s === "OPEN") return "";
+            if (s === "Finalized") return "F";
+            if (s === "Cancelled") return "X";
+            if (s === "Closed") return "C";
+            if (s === "Open") return "";
             return "All";
           })()}
           onRowDoubleClick={handleHistoryRowPick}

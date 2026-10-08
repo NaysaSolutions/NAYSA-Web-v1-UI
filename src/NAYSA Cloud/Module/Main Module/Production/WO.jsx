@@ -134,12 +134,12 @@ const WO_DETAIL_COLUMNS = [
   { key: "itemCode", label: "Item Code", width: 130 },
   { key: "itemName", label: "Item Description", width: 280 },
   { key: "uomCode", label: "UOM", width: 90 },
-  { key: "qtyNeeded", label: "BOM Qty Needed", width: 140 },
+  { key: "decimal6Needed", label: "BOM Qty Needed", width: 140 },
   { key: "scrapQty", label: "Scrap Qty", width: 140 },
   { key: "requiredQty", label: "Required Qty", width: 130 },
   { key: "issuedQty", label: "Issued Qty", width: 140 },
   { key: "unservedQty", label: "Unserved Qty", width: 130 },
-  { key: "qtyHand", label: "Qty on Hand", width: 130 },
+  { key: "decimal6Hand", label: "Qty on Hand", width: 130 },
   { key: "issuedAmt", label: "Issued Amt", width: 130 },
   { key: "requiredAmt", label: "Required Amt", width: 130 },
   { key: "issuedWac", label: "Issued Ave. Cost", width: 150 },
@@ -151,13 +151,13 @@ const n = (value) => {
   return Number.isFinite(num) ? num : 0;
 };
 
-const money = (value, digits = 2) => formatNumber(n(value), digits);
+const decimal2 = (value, digits = 2) => formatNumber(n(value), digits);
 
-const qty = (value, digits = 6) => formatNumber(n(value), digits);
+const decimal6 = (value, digits = 6) => formatNumber(n(value), digits);
 
 const FormattedNumberField = ({ value, decimals, onChange, ...props }) => {
   const [focused, setFocused] = useState(false);
-  const formatter = decimals === 6 ? qty : money;
+  const formatter = decimals === 6 ? decimal6 : decimal2;
 
   return (
     <FieldRenderer
@@ -299,7 +299,7 @@ function normalizeHd(hd = {}) {
 }
 
 function normalizeRow(row = {}, index = 0) {
-  const qtyNeeded = n(row.qtyNeeded ?? row.QTY_NEEDED);
+  const decimal6Needed = n(row.decimal6Needed ?? row.QTY_NEEDED);
   const scrapQty = n(row.scrapQty ?? row.SCRAP_QTY ?? row.scrapRate ?? row.SCRAP_RATE);
   const requiredQty = n(row.requiredQty ?? row.REQUIRED_QTY);
   const issuedQty = n(row.issuedQty ?? row.ISSUED_QTY);
@@ -313,12 +313,12 @@ function normalizeRow(row = {}, index = 0) {
     itemCode: row.itemCode || row.ITEM_CODE || "",
     itemName: row.itemName || row.ITEM_NAME || "",
     uomCode: row.uomCode || row.UOM_CODE || "",
-    qtyNeeded,
+    decimal6Needed,
     scrapQty,
     requiredQty,
     issuedQty,
     unservedQty: n(row.unservedQty ?? row.UNSERVED_QTY),
-    qtyHand: n(row.qtyHand ?? row.QTY_HAND),
+    decimal6Hand: n(row.decimal6Hand ?? row.QTY_HAND),
     issuedAmt,
     requiredAmt,
     issuedWac,
@@ -332,7 +332,7 @@ function normalizeRow(row = {}, index = 0) {
 
 function recalcRows(rows, batchQty) {
   return rows.map((row, index) => {
-    const requiredQty = (n(row.qtyNeeded) + n(row.scrapQty)) * n(batchQty);
+    const requiredQty = (n(row.decimal6Needed) + n(row.scrapQty)) * n(batchQty);
     const issuedQty = n(row.issuedQty);
     const requiredAmt = requiredQty * n(row.issuedWac);
     const issuedAmt = issuedQty * n(row.issuedWac);
@@ -892,7 +892,7 @@ export default function WO() {
   const renderDetailCell = (column, row) => {
     const style = getDetailCellStyle(column.key, column.width);
     const baseClass = "global-tran-td-ui";
-    const numberCell = (value, formatter = qty, extraClass = "") => (
+    const numberCell = (value, formatter = decimal6, extraClass = "") => (
       <td key={column.key} className={`${baseClass} text-right ${extraClass}`} style={style}>
         {formatter(value)}
       </td>
@@ -910,15 +910,15 @@ export default function WO() {
         return <td key={column.key} className={baseClass} style={style}>{row[column.key]}</td>;
       case "scrapQty":
       case "issuedQty":
-        return numberCell(row[column.key], qty);
+        return numberCell(row[column.key], decimal6);
       case "issuedWac":
-        return numberCell(row.issuedWac, money);
+        return numberCell(row.issuedWac, decimal6);
       case "issuedAmt":
       case "requiredAmt":
       case "varianceAmt":
-        return numberCell(row[column.key], money);
+        return numberCell(row[column.key], decimal2);
       case "unservedQty":
-        return numberCell(row.unservedQty, qty, n(row.unservedQty) > 0 ? "font-bold text-red-600" : "");
+        return numberCell(row.unservedQty, decimal6, n(row.unservedQty) > 0 ? "font-bold text-red-600" : "");
       default:
         return numberCell(row[column.key]);
     }
@@ -1141,25 +1141,25 @@ export default function WO() {
               <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer id="bomCode" label="BOM Code" type="text" value={hd.bomCode || ""} disabled readOnly />
                 <FieldRenderer id="bomDate" label="BOM Date" type="text" value={hd.bomDate || ""} disabled readOnly />
-                <FieldRenderer id="bomQty" label="BOM Qty" type="amount" value={qty(hd.bomQty)} disabled readOnly />
+                <FieldRenderer id="bomQty" label="BOM Qty" type="amount" value={decimal6(hd.bomQty)} disabled readOnly />
               </div>
 
               <div className="global-tran-textbox-group-div-ui">
                 <FormattedNumberField id="batchQty" label="Batch Qty" value={hd.batchQty} decimals={6} disabled={isFormDisabled} onChange={(val) => updateHd("batchQty", val)} />
-                <FieldRenderer id="woQty" label="Qty to Produce" type="amount" value={qty(hd.woQty)} disabled readOnly />
-                <FieldRenderer id="worQty" label="WO Receipt Qty" type="amount" value={qty(hd.worQty)} disabled readOnly />
+                <FieldRenderer id="woQty" label="Qty to Produce" type="amount" value={decimal6(hd.woQty)} disabled readOnly />
+                <FieldRenderer id="worQty" label="Receipt Qty" type="amount" value={decimal6(hd.worQty)} disabled readOnly />
               </div>
 
               <div className="global-tran-textbox-group-div-ui">
-                <FieldRenderer id="totalMatcost" label="Direct Material Cost" type="amount" value={money(hd.totalMatcost)} disabled readOnly />
-                <FieldRenderer id="stdLabor" label="STD Labor Cost" type="amount" value={money(hd.stdLabor)} disabled readOnly />
-                <FieldRenderer id="stdOverhead" label="STD Overhead Cost" type="amount" value={money(hd.stdOverhead)} disabled readOnly />
+                <FieldRenderer id="totalMatcost" label="Direct Material Cost" type="amount" value={decimal6(hd.totalMatcost)} disabled readOnly />
+                <FieldRenderer id="stdLabor" label="STD Labor Cost" type="amount" value={decimal6(hd.stdLabor)} disabled readOnly />
+                <FieldRenderer id="stdOverhead" label="STD Overhead Cost" type="amount" value={decimal6(hd.stdOverhead)} disabled readOnly />
               </div>
 
               <div className="global-tran-textbox-group-div-ui">
-                <FieldRenderer id="woAmt" label="WO Amount" type="amount" value={money(hd.woAmt)} disabled readOnly />
-                <FieldRenderer id="woUnitcost" label="WO Unit Cost" type="amount" value={money(hd.woUnitcost)} disabled readOnly />
-                <FieldRenderer id="worAmt" label="WOR Receipt Amount" type="amount" value={money(hd.worAmt)} disabled readOnly />
+                <FieldRenderer id="woAmt" label="WO Amount" type="amount" value={decimal2(hd.woAmt)} disabled readOnly />
+                <FieldRenderer id="woUnitcost" label="WO Unit Cost" type="amount" value={decimal6(hd.woUnitcost)} disabled readOnly />
+                <FieldRenderer id="worAmt" label="Receipt Amount" type="amount" value={decimal2(hd.worAmt)} disabled readOnly />
               </div>
             </div>
           )}
@@ -1216,8 +1216,8 @@ export default function WO() {
               </div>
 
               <div className="global-tran-textbox-group-div-ui">
-                <FieldRenderer id="varQty" label="Over/Under Run Qty" type="amount" value={qty(overUnderQty)} disabled readOnly />
-                <FieldRenderer id="overUnderAmt" label="Over/Under Amount" type="amount" value={money(overUnderAmt)} disabled readOnly />
+                <FieldRenderer id="varQty" label="Over/Under Run Qty" type="amount" value={decimal6(overUnderQty)} disabled readOnly />
+                <FieldRenderer id="overUnderAmt" label="Over/Under Amount" type="amount" value={decimal2(overUnderAmt)} disabled readOnly />
               </div>
             </div>
           )}
@@ -1268,15 +1268,15 @@ export default function WO() {
             <div className="global-tran-tab-footer-total-main-div-ui">
               <div className="global-tran-tab-footer-total-div-ui">
                 <label className="global-tran-tab-footer-total-label-ui">Required Amt:</label>
-                <label className="global-tran-tab-footer-total-value-ui">{money(totals.requiredAmt)}</label>
+                <label className="global-tran-tab-footer-total-value-ui">{decimal2(totals.requiredAmt)}</label>
               </div>
               <div className="global-tran-tab-footer-total-div-ui">
                 <label className="global-tran-tab-footer-total-label-ui">Issued Amt:</label>
-                <label className="global-tran-tab-footer-total-value-ui">{money(totals.issuedAmt)}</label>
+                <label className="global-tran-tab-footer-total-value-ui">{decimal2(totals.issuedAmt)}</label>
               </div>
               <div className="global-tran-tab-footer-total-div-ui">
                 <label className="global-tran-tab-footer-total-label-ui">Variance Amt:</label>
-                <label className="global-tran-tab-footer-total-value-ui">{money(totals.varianceAmt)}</label>
+                <label className="global-tran-tab-footer-total-value-ui">{decimal2(totals.varianceAmt)}</label>
               </div>
             </div>
           </div>

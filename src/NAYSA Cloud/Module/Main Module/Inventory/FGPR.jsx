@@ -333,9 +333,9 @@ const fallbackDetailColumns = [
     { key: "itemCode", label: "Item No", classNames: "text-left", renderType: "text", width: 130 },
     { key: "itemName", label: "Item Description", classNames: "text-left", renderType: "text", width: 220 },
     { key: "uomCode", label: "UOM", classNames: "text-left", renderType: "text", width: 90 },
-    { key: "quantity", label: "WOR Quantity", classNames: "text-right", renderType: "number", renderFormat: "2", width: 130 },
+    { key: "quantity", label: "WOR Quantity", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
     { key: "unitCost", label: "Unit Cost", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
-    { key: "itemAmount", label: "Amount", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
+    { key: "itemAmount", label: "Amount", classNames: "text-right", renderType: "number", renderFormat: "2", width: 130 },
     { key: "lotNo", label: "Lot No", classNames: "text-left", renderType: "text", width: 130 },
     { key: "bbDate", label: "BB Date", classNames: "text-left", renderType: "date", renderFormat: "MM/DD/YYYY", width: 130 },
     { key: "qstatCode", label: "QC Status", classNames: "text-left", renderType: "text", width: 120 },
@@ -513,7 +513,7 @@ const FGPR = () => {
         return {
             quantity: formatNumber(
                 detailRows.reduce((sum, row) => sum + amountRaw(row.quantity), 0),
-                2,
+                6,
             ),
             amount: formatNumber(
                 detailRows.reduce((sum, row) => sum + amountRaw(row.itemAmount ?? row.amount), 0),
@@ -688,10 +688,10 @@ const FGPR = () => {
             itemName: getValue(row, "itemName", "item_name", "ITEM_NAME", "itemDesc", "item_desc", "ITEM_DESC"),
             categCode: getValue(row, "categCode", "categ_code", "CATEG_CODE"),
             uomCode: getValue(row, "uomCode", "uom_code", "UOM_CODE"),
-            quantity: amountValue(quantity, 2),
+            quantity: amountValue(quantity, 6),
             unitCost: amountValue(unitCost, 6),
-            itemAmount: amountValue(itemAmount, 6),
-            amount: amountValue(itemAmount, 6),
+            itemAmount: amountValue(itemAmount, 2),
+            amount: amountValue(itemAmount, 2),
             lotNo: getValue(row, "lotNo", "lot_no", "LOT_NO"),
             bbDate: toDateInput(getValue(row, "bbDate", "bb_date", "BB_DATE")),
             qstatCode: getValue(row, "qstatCode", "qstat_code", "QSTAT_CODE", "qsCode", "qs_code", "QS_CODE"),
@@ -1203,7 +1203,7 @@ const FGPR = () => {
 
         if (["quantity", "unitCost"].includes(field)) {
             const amount = amountRaw(row.quantity) * amountRaw(row.unitCost);
-            row.itemAmount = amountValue(amount, 6);
+            row.itemAmount = amountValue(amount, 2);
             row.amount = row.itemAmount;
             row.totMatlCost = row.totMatlCost || row.itemAmount;
         }
@@ -1852,11 +1852,11 @@ const FGPR = () => {
             itemCode: () => lookupCell(row.itemCode, () => openDetailLookup("detailItem", "itemLookupOpen")),
             itemName: () => textInput(row.itemName, (v) => updateDetailRow(index, "itemName", v)),
             uomCode: () => textInput(row.uomCode, (v) => updateDetailRow(index, "uomCode", v)),
-            quantity: () => numberInput(row.quantity, (v) => updateDetailRow(index, "quantity", v), 2),
+            quantity: () => numberInput(row.quantity, (v) => updateDetailRow(index, "quantity", v), 6),
             unitCost: () => numberInput(row.unitCost, (v) => updateDetailRow(index, "unitCost", v), 6),
-            itemAmount: () => readOnlyNumberInput(row.itemAmount ?? row.amount, 6),
-            amount: () => readOnlyNumberInput(row.itemAmount ?? row.amount, 6),
-            totalAmount: () => readOnlyNumberInput(row.itemAmount ?? row.amount ?? row.totalAmount, 6),
+            itemAmount: () => readOnlyNumberInput(row.itemAmount ?? row.amount, 2),
+            amount: () => readOnlyNumberInput(row.itemAmount ?? row.amount, 2),
+            totalAmount: () => readOnlyNumberInput(row.itemAmount ?? row.amount ?? row.totalAmount, 2),
             categCode: () => textInput(row.categCode, (v) => updateDetailRow(index, "categCode", v), { readOnly: true }),
             lotNo: () => textInput(row.lotNo, (v) => updateDetailRow(index, "lotNo", v)),
             bbDate: () => (

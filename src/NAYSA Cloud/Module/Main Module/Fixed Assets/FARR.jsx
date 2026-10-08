@@ -1523,17 +1523,29 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
     return expiry >= start;
   };
 
+  const getWarrantyMonths = (startDate, expiryDate) => {
+    const start = parseDisplayDate(startDate);
+    const expiry = parseDisplayDate(expiryDate);
+    if (!start || !expiry || expiry < start) return "";
+
+    return String(
+      (expiry.getFullYear() - start.getFullYear()) * 12 +
+      (expiry.getMonth() - start.getMonth()),
+    );
+  };
+
   const handleWarrantyExpiryChange = (updates) => {
     if (!canEditSupplementDetails) return;
     const nextExpiryDate = updates.warrantyExpiryDate || "";
     if (!isWarrantyExpiryValid(state.warrantyStartDate, nextExpiryDate)) {
-      updateState({ warrantyExpiryDate: "" });
-      updateDetailRow(selectedRowIndex, { warrantyExpiry: "" });
+      updateState({ warrantyExpiryDate: "", warrantyMonths: "" });
+      updateDetailRow(selectedRowIndex, { warrantyExpiry: "", warrantyMonths: "" });
       useSwalErrorAlert("Invalid Warranty Expiry", "Warranty Expiry must not be earlier than Warranty Start Date.");
       return;
     }
-    updateState({ warrantyExpiryDate: nextExpiryDate });
-    updateDetailRow(selectedRowIndex, { warrantyExpiry: nextExpiryDate });
+    const warrantyMonths = getWarrantyMonths(state.warrantyStartDate, nextExpiryDate);
+    updateState({ warrantyExpiryDate: nextExpiryDate, warrantyMonths });
+    updateDetailRow(selectedRowIndex, { warrantyExpiry: nextExpiryDate, warrantyMonths });
   };
 
   const handleWarrantyStartDateChange = (updates) => {

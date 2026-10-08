@@ -1998,18 +1998,26 @@ const FARS = () => {
     updateState({ showCancelModal: true });
   };
 
-  const handleCloseCancel = async (cancelReason) => {
-    updateState({ showCancelModal: false });
-    if (!cancelReason) return;
-    const success = await useHandleCancel(
+  const handleCloseCancel = async (confirmation) => {
+    if (!confirmation) {
+      updateState({ showCancelModal: false });
+      return;
+    }
+
+    const result = await useHandleCancel(
       docType,
       state.documentID,
-      state.farsNo,
-      state.branchCode,
       state.userCode || currentUserRow?.userCode || "",
-      cancelReason
+      confirmation.password,
+      confirmation.reason,
+      updateState
     );
-    if (success) await fetchTranData(state.farsNo, state.branchCode);
+
+    if (result?.success) {
+      await fetchTranData(state.farsNo, state.branchCode);
+    }
+
+    updateState({ showCancelModal: false });
   };
 
   const handleAttach = () => {

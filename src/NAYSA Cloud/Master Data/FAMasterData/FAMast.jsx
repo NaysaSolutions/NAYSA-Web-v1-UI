@@ -100,6 +100,7 @@ const emptyForm = {
     eul:                "0",        // eul  (estimated useful life in years)
     rul:                "0",        // rul  (remaining useful life)
     dcutoffCode:        "",         // dcutoff_code
+    depStartCutoff:     "",         // dep_startcutoff
 
     acqCost:            "0.00",     // acq_cost
     acqCostFx1:         "0.00",     // acq_cost_fx1
@@ -710,6 +711,7 @@ const FAMast = () => {
                     eul:                form.eul                 || null,
                     rul:                form.rul                 || null,
                     dcutoffCode:        form.dcutoffCode         || null,
+                    depStartCutoff:     form.depStartCutoff      || null,
                     acqCost:            form.acqCost             || null,
                     acqCostFx1:         form.acqCostFx1          || null,
                     acqCostFx2:         form.acqCostFx2          || null,

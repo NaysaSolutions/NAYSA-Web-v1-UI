@@ -27,6 +27,7 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import APInquirySummaryCard from "./APInquirySummaryCard.jsx";
 
 const ENDPOINT_DETAIL = "getAPAdvances";
 const ENDPOINT_SUMMARY = "getAPAdvances";
@@ -752,15 +753,15 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
       {(showSpinner || isRefunding) && <LoadingSpinner />}
 
       <div className="global-tran-tab-div-ui">
-        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faUser} />
+        <div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faUser} /></span>
                 Payee Details
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="branchName"
                   name="branchName"
@@ -795,13 +796,13 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
               </div>
             </section>
 
-            <section className="p-5">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faSliders} />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-blue-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-[11px]"><FontAwesomeIcon icon={faSliders} /></span>
                 Filters
               </h3>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <FieldRenderer
                   id="advStatus"
                   name="advStatus"
@@ -819,33 +820,17 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
               </div>
             </section>
 
-            <aside className="p-5 bg-gray-50">
-              <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
-                <FontAwesomeIcon className="text-blue-600" icon={faTableList} />
-                Filter Summary
-              </h3>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Status:</span>
-                  <span className="font-semibold text-gray-800">{status}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Advances Amount:</span>
-                  <span className="font-semibold text-blue-600">{totals.adv}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Applied Amount:</span>
-                  <span className="font-semibold text-blue-600">{totals.appl}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Balance:</span>
-                  <span className="font-semibold text-blue-600">{totals.bal}</span>
-                </div>
-              </div>
+            <aside>
+              <APInquirySummaryCard
+                title="Advances Summary"
+                icon={faTableList}
+                badge={status}
+                rows={[
+                  { label: "Total Advances", value: totals.adv },
+                  { label: "Total Applied", value: totals.appl, valueClass: "text-emerald-600" },
+                  { label: "Outstanding Balance", value: totals.bal, strong: true },
+                ]}
+              />
             </aside>
           </div>
         </div>
