@@ -2167,7 +2167,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       label="Ref Doc No1."
                       type="text"
                       value={refDocNo1 || ""}
-                      disabled={isFormDisabled}
+                      // disabled={isFormDisabled}
                       onChange={(val) => updateState({ refDocNo1: val })}
                       maxLength={useGetFieldLength(tblFieldArray, "refdoc_no1")}
                     />
@@ -2177,7 +2177,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       label="Ref Doc No2."
                       type="text"
                       value={refDocNo2 || ""}
-                      disabled={isFormDisabled}
+                      // disabled={isFormDisabled}
                       onChange={(val) => updateState({ refDocNo2: val })}
                       maxLength={useGetFieldLength(tblFieldArray, "refdoc_no2")}
                     />
