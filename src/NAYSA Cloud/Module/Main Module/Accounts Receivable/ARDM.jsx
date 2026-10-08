@@ -4,7 +4,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faFileInvoiceDollar } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -127,6 +127,7 @@ const ARDM = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const openReferencesDropdownRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation(); 
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
@@ -142,6 +143,7 @@ const ARDM = () => {
 
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const [showOpenReferencesDropdown, setShowOpenReferencesDropdown] = useState(false);
   const { user } = useAuth();
   const { resetFlag } = useReset();
   
@@ -151,6 +153,16 @@ const ARDM = () => {
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
+
+  useEffect(() => {
+    if (!showOpenReferencesDropdown) return;
+    const handleClickOutside = (event) => {
+      if (openReferencesDropdownRef.current?.contains(event.target)) return;
+      setShowOpenReferencesDropdown(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showOpenReferencesDropdown]);
  
 
 
@@ -1802,14 +1814,71 @@ const handleOpenARBalance = async () => {
 
 
 
+const getReferenceCustomerCode = (row) =>
+  String(row?.custCode ?? row?.cust_code ?? row?.customerCode ?? "").trim();
+
+const validateOpenARCustomers = (rows) => {
+  const customerCodes = new Set(
+    rows.map((row) => getReferenceCustomerCode(row).toUpperCase()).filter(Boolean)
+  );
+
+  if (rows.length > 0 && customerCodes.size === 0) {
+    useSwalErrorAlert("Missing Customer", "The selected invoice has no customer code.");
+    return false;
+  }
+
+  if (customerCodes.size > 1) {
+    useSwalErrorAlert("Different Customers", "Select invoices for one customer only.");
+    return false;
+  }
+
+  if (
+    rows.length > 0 &&
+    detailRows.length > 0 &&
+    custCode &&
+    !customerCodes.has(String(custCode).trim().toUpperCase())
+  ) {
+    useSwalErrorAlert(
+      "Different Customer",
+      "Clear the existing Invoice Details before selecting another customer."
+    );
+    return false;
+  }
+
+  return true;
+};
+
 const handleCloseARBalance = async (payload) => {
 
 
   if (payload && payload !== null) {
     updateState({ isLoading: true });
 
+      const selectedRecords = Array.isArray(payload?.records) ? payload.records : [];
+      if (selectedRecords.length > 0 && !validateOpenARCustomers(selectedRecords)) {
+        updateState({ isLoading: false });
+        return;
+      }
+
       const result = await useSelectedOpenARBalance(payload,selectedARDMType);
-      if (result) {
+      if (Array.isArray(result) && result.length > 0) {
+        if (!validateOpenARCustomers(result)) {
+          updateState({ isLoading: false });
+          return;
+        }
+
+        const selectedCustomer = result.find((entry) => getReferenceCustomerCode(entry)) || {};
+        const nextCustCode = getReferenceCustomerCode(selectedCustomer) || custCode;
+        const nextCustName = selectedCustomer.custName || selectedCustomer.customerName || custName;
+        const nextCurrCode = selectedCustomer.currCode || currCode;
+
+        // Apply the customer header first, then load its currency, before adding invoice details.
+        updateState({
+          custCode: nextCustCode,
+          custName: nextCustName,
+        });
+        if (nextCurrCode) await handleSelectCurrency(nextCurrCode);
+
         const newRows = result.map((entry, idx) => {
         const netDisc = parseFormattedNumber(entry.netDiscAmt);
         const vatRate = parseFormattedNumber(entry.vatCalcRate);
@@ -1835,7 +1904,7 @@ const handleCloseARBalance = async (payload) => {
           arAcct: entry.arAcct,
           drAcct:entry.drAcct,
           rcCode: entry.rcCode,
-          currCode: entry.currCode,
+          currCode: entry.currCode || nextCurrCode,
           currRate: formatNumber(entry.currRate, 6),
           refBranchcode: branchCode,
           refDocCode: entry.refDocCode,
@@ -2117,7 +2186,7 @@ const renderArdmGlColumn = (columnKey, row, index) => {
           {/* Form Layout with Tabs */}
           <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
             {/* Tab Navigation */}
-            <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
+            <div className={`global-tran-header-tab-div-ui items-center justify-between gap-3 ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
               <button
                 className={`global-tran-tab-padding-ui ${
                   activeTab === "basic"
@@ -2128,7 +2197,37 @@ const renderArdmGlColumn = (columnKey, row, index) => {
               >
                 Basic Information
               </button>
-              {/* Provision for Other Tabs */}
+              {!isFormDisabled && (
+                <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
+                  <button
+                    type="button"
+                    className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-900 dark:hover:bg-blue-800"
+                    disabled={isFormDisabled}
+                    onClick={() => setShowOpenReferencesDropdown((current) => !current)}
+                    aria-expanded={showOpenReferencesDropdown}
+                    aria-label="Open References"
+                  >
+                    <FontAwesomeIcon icon={faFileImport} />
+                    Open References
+                    <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+                  </button>
+                  {showOpenReferencesDropdown && (
+                    <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700"
+                        onClick={() => {
+                          setShowOpenReferencesDropdown(false);
+                          handleOpenARBalance();
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faFileInvoiceDollar} className="w-4 text-blue-600 dark:text-blue-300" />
+                        Open AR Balance
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             
@@ -2604,6 +2703,7 @@ const renderArdmGlColumn = (columnKey, row, index) => {
         btnCaption="Get Selected Invoice"
         title="Open AR Balance"
         endpoint={globalLookupHeader}
+        selectionValidator={validateOpenARCustomers}
         onClose={handleCloseARBalance}
         onCancel={() => updateState({ showARBalanceModal: false })}
       />

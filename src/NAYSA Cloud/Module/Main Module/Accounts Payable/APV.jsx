@@ -12,7 +12,7 @@ import { useSwalSuccessAlert, useSwalErrorAlert, useSwalProceedConfirm } from "@
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines, faChevronDown, faFolderOpen, faBox, faBriefcase, faCoins, faReceipt, faShip, faMoneyCheckDollar } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines, faChevronDown, faFileImport, faBox, faBriefcase, faCoins, faReceipt, faShip, faMoneyCheckDollar } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -4877,7 +4877,7 @@ const APV = () => {
             >
               Basic Information
             </button>
-            {!isViewDocument && (
+            {!isFormDisabled && (
             <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
               <button
                 type="button"
@@ -4886,7 +4886,7 @@ const APV = () => {
                 aria-expanded={showOpenReferencesDropdown}
                 aria-label="Open References"
               >
-                <FontAwesomeIcon icon={faFolderOpen} />
+                <FontAwesomeIcon icon={faFileImport} />
                 Open References
                 <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
               </button>

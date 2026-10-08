@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFolderOpen, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -3110,7 +3110,7 @@ const renderCvGlCell = (columnKey, row, index) => {
         >
             Basic Information
         </button>
-        {!isViewDocument && (
+        {!isFormDisabled && (
         <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
           <button
             type="button"
@@ -3119,7 +3119,7 @@ const renderCvGlCell = (columnKey, row, index) => {
             aria-expanded={showOpenReferencesDropdown}
             aria-label="Open References"
           >
-            <FontAwesomeIcon icon={faFolderOpen} />
+            <FontAwesomeIcon icon={faFileImport} />
             Open References
             <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
           </button>

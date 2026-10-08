@@ -4,7 +4,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faFileInvoiceDollar, faReceipt } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -117,6 +117,7 @@ const CR = () => {
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
   const pendingAddAfterCustomerRef = useRef(false);
+  const openReferencesDropdownRef = useRef(null);
   const selectedHSColConfig = useSelectedHSColConfig;
   const swalValidateRequiredFields = useSwalvalidateRequiredFields;
   const swalErrorAlert = useSwalErrorAlert;
@@ -129,6 +130,7 @@ const CR = () => {
 
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const [showOpenReferencesDropdown, setShowOpenReferencesDropdown] = useState(false);
   const { resetFlag } = useReset();
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
   const docType = docTypes.CR;
@@ -136,6 +138,16 @@ const CR = () => {
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
+
+  useEffect(() => {
+    if (!showOpenReferencesDropdown) return;
+    const handleClickOutside = (event) => {
+      if (openReferencesDropdownRef.current?.contains(event.target)) return;
+      setShowOpenReferencesDropdown(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showOpenReferencesDropdown]);
 
 
   const [state, setState] = useState({
@@ -2138,12 +2150,59 @@ const handleOpenPRCLookup = async () => {
   }
 };
 
+const getReferenceCustomerCode = (row) =>
+  String(row?.custCode ?? row?.cust_code ?? row?.customerCode ?? "").trim();
+
+const validateOpenARCustomers = (rows) => {
+  const customerCodes = new Set(
+    rows.map((row) => getReferenceCustomerCode(row).toUpperCase()).filter(Boolean)
+  );
+
+  if (rows.length > 0 && customerCodes.size === 0) {
+    useSwalErrorAlert("Missing Customer", "The selected reference has no customer code.");
+    return false;
+  }
+
+  if (customerCodes.size > 1) {
+    useSwalErrorAlert("Different Customers", "Select references for one customer only.");
+    return false;
+  }
+
+  const existingCustomerCodes = new Set(
+    detailRows
+      .map((row) => getReferenceCustomerCode(row).toUpperCase())
+      .filter(Boolean)
+  );
+  if (detailRows.length > 0 && custCode) {
+    existingCustomerCodes.add(String(custCode).trim().toUpperCase());
+  }
+
+  if (
+    rows.length > 0 &&
+    detailRows.length > 0 &&
+    existingCustomerCodes.size > 0 &&
+    [...customerCodes].some((code) => !existingCustomerCodes.has(code))
+  ) {
+    useSwalErrorAlert(
+      "Different Customer",
+      "Clear the existing Invoice Details before selecting another customer."
+    );
+    return false;
+  }
+
+  return true;
+};
+
 const handleClosePRCLookup = async (payload) => {
   const selectedDetails = Array.isArray(payload?.details) ? payload.details : [];
   const selectedSummaries = Array.isArray(payload?.summary) ? payload.summary : [];
 
   if (selectedDetails.length === 0) {
     swalErrorAlert("Open Provisional Receipt", "Please select at least one invoice detail.");
+    return;
+  }
+
+  if (!validateOpenARCustomers([...selectedSummaries, ...selectedDetails])) {
     return;
   }
 
@@ -2161,6 +2220,25 @@ const handleClosePRCLookup = async (payload) => {
   }
 
   const firstSummary = selectedSummaries[0] || {};
+  const selectedCustomer =
+    selectedSummaries.find((row) => getReferenceCustomerCode(row)) ||
+    selectedDetails.find((row) => getReferenceCustomerCode(row)) ||
+    {};
+  const nextCustCode = getReferenceCustomerCode(selectedCustomer) || custCode;
+  const nextCustName = selectedCustomer.custName || selectedCustomer.customerName || custName;
+  const nextCurrCode = firstSummary.currCode || selectedCustomer.currCode || currCode;
+
+  // Update customer information before applying any selected invoice details.
+  updateState({
+    chainCode: firstSummary.chainCode || chainCode,
+    chainName: firstSummary.chainName || chainName,
+    custCode: nextCustCode,
+    custName: nextCustName,
+  });
+  const nextCurrRate = nextCurrCode
+    ? await handleSelectCurrency(nextCurrCode)
+    : formatNumber(currRate || 1, 6);
+
   const prcNumbers = [
     ...new Set(selectedSummaries.map((row) => row?.prcNo).filter(Boolean)),
   ].join(",");
@@ -2175,34 +2253,37 @@ const handleClosePRCLookup = async (payload) => {
     unappliedAmount: formatNumber(entry.unappliedAmount || 0, 2),
     balance: formatNumber(entry.balance || 0, 2),
     arAcct: entry.arAcct || "",
-    currCode: entry.currCode || firstSummary.currCode || currCode,
-    currRate: formatNumber(entry.currRate || firstSummary.currRate || currRate || 1, 6),
+    currCode: entry.currCode || nextCurrCode,
+    currRate: formatNumber(entry.currRate || firstSummary.currRate || nextCurrRate || 1, 6),
     bank: entry.bank || "",
     checkNo: entry.checkNo || "",
     checkDate: normalizeLookupDate(entry.checkDate),
     checkAmount: formatNumber(entry.checkAmount || entry.appliedAmount || 0, 2),
-    custCode: entry.custCode || firstSummary.custCode || custCode,
-    custName: entry.custName || firstSummary.custName || custName,
+    custCode: entry.custCode || nextCustCode,
+    custName: entry.custName || nextCustName,
     refBranchcode: entry.refBranchCode || entry.refBranchcode || firstSummary.branchCode || branchCode,
     refDocCode: entry.refDocCode || "PRC",
     groupId: entry.groupId || "",
   }));
 
-  const updatedRows = [...detailRows, ...newRows];
+  const existingRows = detailRows.map((row) => ({
+    ...row,
+    custCode: row.custCode || nextCustCode,
+    custName: row.custName || nextCustName,
+    currCode: row.currCode || nextCurrCode,
+    currRate: row.currRate || nextCurrRate,
+  }));
+  const updatedRows = [...existingRows, ...newRows];
   const shouldUseMultipleChecks = hasSameInvoiceWithDifferentChecks(selectedDetails);
   updateState({
     prcNo: prcNumbers || firstSummary.prcNo || "",
     selectedCheckType: shouldUseMultipleChecks ? "CR22" : selectedCheckType,
-    chainCode: firstSummary.chainCode || chainCode,
-    chainName: firstSummary.chainName || chainName,
-    custCode: firstSummary.custCode || custCode,
-    custName: firstSummary.custName || custName,
     depBankCode: firstSummary.depBankCode || depBankCode,
     depAcctName: firstSummary.depAcctName || depAcctName,
     depAcctNo: firstSummary.depAcctNo || depAcctNo,
-    currCode: firstSummary.currCode || currCode,
+    currCode: nextCurrCode,
     currName: firstSummary.currName || currName,
-    currRate: formatNumber(firstSummary.currRate || currRate || 1, 6),
+    currRate: formatNumber(firstSummary.currRate || nextCurrRate || 1, 6),
     detailRows: updatedRows,
     detailRowsGL: [],
     showOpenPRCModal: false,
@@ -2262,10 +2343,37 @@ const handleCloseARBalance = async (payload) => {
 
        updateState({ isLoading: true });
 
+      const selectedRecords = Array.isArray(payload?.records) ? payload.records : [];
+      if (selectedRecords.length > 0 && !validateOpenARCustomers(selectedRecords)) {
+        updateState({ isLoading: false });
+        return;
+      }
+
       const result = await useSelectedOpenARBalance(payload);
-      if (result) {
+      if (Array.isArray(result) && result.length > 0) {
+      if (!validateOpenARCustomers(result)) {
+        updateState({ isLoading: false });
+        return;
+      }
+
+      const selectedCustomer = result.find((entry) => getReferenceCustomerCode(entry)) || {};
+      const nextCustCode = getReferenceCustomerCode(selectedCustomer) || custCode;
+      const nextCustName = selectedCustomer.custName || selectedCustomer.customerName || custName;
+      const nextCurrCode = selectedCustomer.currCode || currCode;
+
+      // Update customer information and currency before applying invoice details.
+      updateState({
+        custCode: nextCustCode,
+        custName: nextCustName,
+        chainCode: "",
+        chainName: "",
+      });
+      const nextCurrRate = nextCurrCode
+        ? await handleSelectCurrency(nextCurrCode)
+        : formatNumber(currRate || 1, 6);
+
       const newRows = result.map((entry, idx) => ({
-        lnNo: idx + 1,
+        lnNo: detailRows.length + idx + 1,
         w2307: "",
         siNo: entry.siNo,
         siDate: entry.siDate,
@@ -2274,14 +2382,14 @@ const handleCloseARBalance = async (payload) => {
         unappliedAmount: "0.00",
         balance: "0.00",
         arAcct: entry.arAcct,
-        currCode: entry.currCode,
-        currRate: formatNumber(entry.currRate,6) ,
+        currCode: entry.currCode || nextCurrCode,
+        currRate: formatNumber(entry.currRate || nextCurrRate || 1,6) ,
         bank:bank,
         checkNo:checkNo,
         checkDate:checkDate,
         checkAmount: formatNumber(entry.balance,2),
-        custCode: entry.custCode,
-        custName: entry.custName,
+        custCode: entry.custCode || nextCustCode,
+        custName: entry.custName || nextCustName,
         refBranchcode: branchCode,
         refDocCode: entry.refDocCode,
         groupId: entry.groupId,
@@ -2289,7 +2397,14 @@ const handleCloseARBalance = async (payload) => {
       }));
 
 
-      const updatedRows = [...detailRows, ...newRows];
+      const existingRows = detailRows.map((row) => ({
+        ...row,
+        custCode: row.custCode || nextCustCode,
+        custName: row.custName || nextCustName,
+        currCode: row.currCode || nextCurrCode,
+        currRate: row.currRate || nextCurrRate,
+      }));
+      const updatedRows = [...existingRows, ...newRows];
       updateState({ detailRows: updatedRows});
       updateTotals(updatedRows);
     }
@@ -2672,7 +2787,7 @@ const renderCrGlCell = (columnKey, row, index) => {
       {/* Form Layout with Tabs */}
       <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
         {/* Tab Navigation */}
-        <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
+        <div className={`global-tran-header-tab-div-ui items-center justify-between gap-3 ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
           <button
             className={`global-tran-tab-padding-ui ${
               activeTab === "basic"
@@ -2683,7 +2798,48 @@ const renderCrGlCell = (columnKey, row, index) => {
           >
             Basic Information
           </button>
-          {/* Provision for Other Tabs */}
+          {!isFormDisabled && (
+            <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
+              <button
+                type="button"
+                className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-900 dark:hover:bg-blue-800"
+                disabled={isFormDisabled}
+                onClick={() => setShowOpenReferencesDropdown((current) => !current)}
+                aria-expanded={showOpenReferencesDropdown}
+                aria-label="Open References"
+              >
+                <FontAwesomeIcon icon={faFileImport} />
+                Open References
+                <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+              </button>
+              {showOpenReferencesDropdown && (
+                <div className="absolute right-0 top-full z-[60] mt-1 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700"
+                    onClick={() => {
+                      setShowOpenReferencesDropdown(false);
+                      handleOpenARBalance();
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faFileInvoiceDollar} className="w-4 text-blue-600 dark:text-blue-300" />
+                    Open AR Balance
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700"
+                    onClick={() => {
+                      setShowOpenReferencesDropdown(false);
+                      handleOpenPRCLookup();
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faReceipt} className="w-4 text-blue-600 dark:text-blue-300" />
+                    Open Provisional Receipt
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
 
@@ -3357,6 +3513,7 @@ const renderCrGlCell = (columnKey, row, index) => {
         btnCaption="Get Selected Invoice"
         title="Open AR Balance"
         endpoint={globalLookupHeader}
+        selectionValidator={validateOpenARCustomers}
         onClose={handleCloseARBalance}
         onCancel={() => updateState({ showARBalanceModal: false })}
       />
@@ -3369,6 +3526,8 @@ const renderCrGlCell = (columnKey, row, index) => {
         title="Open Provisional Receipt"
         summarySelectionMode="multiple"
         detailSelectionMode="multiple"
+        selectionValidator={validateOpenARCustomers}
+        detailSelectionValidator={validateOpenARCustomers}
         summaryColumns={openPRCCR_Col_Summary}
         detailColumns={openPRCCR_Col_Detail}
         summaryData={openPRCCR_Data_Summary}

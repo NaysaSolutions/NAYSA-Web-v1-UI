@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faSpinner, faFolderOpen, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faTrashAlt, faSpinner, faFileImport, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -1287,10 +1287,10 @@ const APCM = () => {
             <button className={`global-tran-tab-padding-ui ${activeTab === 'basic' ? 'global-tran-tab-text_active-ui' : 'global-tran-tab-text_inactive-ui'}`}>
               Basic Information
             </button>
-            {!isViewDocument && (
+            {!isFormDisabled && (
             <div ref={openReferencesDropdownRef} className="relative ml-auto mb-1">
               <button type="button" className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800" onClick={() => setShowOpenReferencesDropdown((current) => !current)} aria-expanded={showOpenReferencesDropdown} aria-label="Open References">
-                <FontAwesomeIcon icon={faFolderOpen} />Open References<FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+                <FontAwesomeIcon icon={faFileImport} />Open References<FontAwesomeIcon icon={faChevronDown} className="text-xs" />
               </button>
               {showOpenReferencesDropdown && (
                 <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">

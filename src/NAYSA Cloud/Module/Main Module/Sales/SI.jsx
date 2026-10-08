@@ -5,7 +5,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner, faSearch, faPen, faCheck } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner, faSearch, faPen, faCheck, faFileImport, faChevronDown } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -4694,7 +4694,7 @@ return (
       {/* Form Layout with Tabs */}
       <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
         {/* Tab Navigation */}
-        <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
+        <div className={`global-tran-header-tab-div-ui items-center justify-between gap-3 ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
           <button
             className={`global-tran-tab-padding-ui ${
               activeTab === "basic"
@@ -4705,7 +4705,37 @@ return (
           >
             Basic Information
           </button>
-          {/* Provision for Other Tabs */}
+          {!isFormDisabled && (
+            <div ref={addTypeDropdownRef} className="relative ml-auto mb-1">
+              <button
+                type="button"
+                className="flex w-48 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-900 dark:hover:bg-blue-800"
+                disabled={isFormDisabled || isOpenDRDisabledBySiType}
+                onClick={() => setShowAddTypeDropdown((current) => !current)}
+                aria-expanded={showAddTypeDropdown}
+                aria-label="Open References"
+              >
+                <FontAwesomeIcon icon={faFileImport} />
+                Open References
+                <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+              </button>
+              {showAddTypeDropdown && (
+                <div className="absolute right-0 top-full z-[60] mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 dark:text-slate-100 dark:hover:bg-slate-700"
+                    onClick={() => {
+                      setShowAddTypeDropdown(false);
+                      handleOpenDRLookup();
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faClipboardCheck} className="w-4 text-blue-600 dark:text-blue-300" />
+                    Open DR
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* SI Header Form Section - Main Grid Container */}
@@ -5262,65 +5292,7 @@ return (
 
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
-      <div ref={addTypeDropdownRef} className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
-        {showAddTypeDropdown && (
-          <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
-            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
-              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                Add SI Detail
-              </div>
-            </div>
-
-            <div className="p-2">
-              <button
-                type="button"
-                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isAddItemDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"}`}
-                disabled={isAddItemDisabledBySiType}
-                onClick={() => {
-                  if (isAddItemDisabledBySiType) return;
-                  setShowAddTypeDropdown(false);
-                  handleOpenAddItemModal();
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                    <FontAwesomeIcon icon={faPlus} />
-                  </span>
-                  <div className="flex flex-col items-start">
-                    <span>Add Item</span>
-                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                      Select item from item master
-                    </span>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className={`mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isOpenDRDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-blue-700 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"}`}
-                disabled={isOpenDRDisabledBySiType}
-                onClick={() => {
-                  if (isOpenDRDisabledBySiType) return;
-                  setShowAddTypeDropdown(false);
-                  handleOpenDRLookup();
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                    <FontAwesomeIcon icon={faClipboardCheck} />
-                  </span>
-                  <div className="flex flex-col items-start">
-                    <span>Open DR</span>
-                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                      Lookup open DR items
-                    </span>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
+      <div className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
         <button
           onClick={handleAddRowClick}
           className="global-tran-tab-footer-button-add-ui"
