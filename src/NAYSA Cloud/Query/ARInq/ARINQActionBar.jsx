@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
     faSave, faUndo, faPrint, faFileExport, faMagnifyingGlass,
-    faRedo, faFilePdf, faInfoCircle, faSpinner, faTriangleExclamation
+    faRedo, faFilePdf, faInfoCircle, faSpinner, faTriangleExclamation, faDatabase
 } from "@fortawesome/free-solid-svg-icons";
 
 /**
@@ -24,12 +24,14 @@ export default function ARINQActionBar({ activeTab, onAction, help = {}, busy = 
         inquiry: [
             { id: "find", label: "Find", icon: faMagnifyingGlass, color: "bg-blue-600" },
             { id: "reset", label: "Reset", icon: faUndo, color: "bg-blue-600" },
+            { id: "beginningBalance", label: "Beginning Balance", icon: faDatabase, color: "bg-blue-600" },
             // { id: "print", label: "Print", icon: faPrint, color: "bg-blue-600" },
             // { id: "export", label: "Export", icon: faFileExport, color: "bg-blue-600" },
         ],
         advances: [
             { id: "find", label: "Find", icon: faMagnifyingGlass, color: "bg-blue-600" },
             { id: "reset", label: "Reset", icon: faUndo, color: "bg-blue-600" },
+            { id: "beginningBalance", label: "Beginning Balance", icon: faDatabase, color: "bg-blue-600" },
             // { id: "print", label: "Print", icon: faPrint, color: "bg-blue-600" },
             // { id: "export", label: "Export", icon: faFileExport, color: "bg-blue-600" },
         ],

@@ -89,6 +89,7 @@ const SearchGlobalReportTable = forwardRef(
       autoFit = false,
       pagination = false,
       autoFillGrid = false,
+      alwaysShowHorizontalScroll = false,
     },
     ref,
   ) => {
@@ -1775,7 +1776,9 @@ const SearchGlobalReportTable = forwardRef(
               ref={scrollRef}
               className={`relative isolate flex-1 h-0 custom-scrollbar ${
                 !hasRows
-                  ? "overflow-hidden"
+                  ? alwaysShowHorizontalScroll
+                    ? "overflow-x-scroll overflow-y-hidden"
+                    : "overflow-hidden"
                   : autoFillGridState
                     ? "overflow-x-auto overflow-y-auto"
                     : "overflow-auto"

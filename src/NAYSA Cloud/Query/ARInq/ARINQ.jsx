@@ -96,6 +96,7 @@ export default function ARINQ() {
       onExport:         prev.onExport         ?? (() => {}),
       onExportSummary:  prev.onExportSummary  ?? (() => {}),
       onExportDetailed: prev.onExportDetailed ?? (() => {}),
+      onBeginningBalance: prev.onBeginningBalance ?? (() => {}),
     }));
   }, [activeTab]);
 
@@ -115,6 +116,8 @@ export default function ARINQ() {
         return actions.onExport?.();
       case "exportSummary":
         return actions.onExportSummary?.();
+      case "beginningBalance":
+        return actions.onBeginningBalance?.();
       default:
         return;
     }

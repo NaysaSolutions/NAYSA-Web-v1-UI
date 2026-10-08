@@ -23,6 +23,7 @@ import { formatNumber, parseFormattedNumber, useSwalProceedConfirm, useSwalSucce
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import APBeginningBalanceModal from "../APInq/APBeginningBalanceModal.jsx";
 
 /** Different endpoints */
 const ENDPOINT_DETAIL = "getARAdvances"; // bottom table (detail/application)
@@ -101,6 +102,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
   const { user,companyInfo, currentUserRow, refsLoaded, refsLoading } = useAuth();
   const baseKey = "AR_ADVANCES";
   const hydratedRef = useRef(false);
+  const [showBeginningBalance, setShowBeginningBalance] = useState(false);
   const [refund, setRefund] = useState(null);
   const [refundAmount, setRefundAmount] = useState("");
   const [refundDate, setRefundDate] = useState("");
@@ -543,6 +545,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
     registerActions?.({
       onFind: fetchRecord,
       onReset: handleReset,
+      onBeginningBalance: () => setShowBeginningBalance(true),
       onPrint: () => window.print(),
       onExport: handleExport,
       onViewDoc: undefined,
@@ -874,6 +877,16 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
          
         </div>
       </div>
+
+      <APBeginningBalanceModal
+        isOpen={showBeginningBalance}
+        onClose={() => setShowBeginningBalance(false)}
+        ledgerType="AR"
+        balanceType="ADVANCES"
+        branchCode={branchCode}
+        userCode={user?.userCode || user?.USER_CODE || currentUserRow?.userCode || ""}
+        onFinalized={handleReset}
+      />
 
       {/* === Modals === */}
       {showBranchModal && (

@@ -22,6 +22,7 @@ import {
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import APInquirySummaryCard from "./APInquirySummaryCard.jsx";
+import APBeginningBalanceModal from "./APBeginningBalanceModal.jsx";
 
 const ENDPOINT = "getAPInquiry";
 
@@ -38,6 +39,7 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
   const { user, companyInfo, currentUserRow } = useAuth();
   const baseKey = "AP_INQUIRY";
   const hydratedRef = useRef(false);
+  const [showBeginningBalance, setShowBeginningBalance] = useState(false);
 
   const [state, setState] = useState({
     branchCode: currentUserRow.branchCode,
@@ -431,6 +433,7 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
     registerActions?.({
       onFind: fetchRecord,
       onReset: handleReset,
+      onBeginningBalance: () => setShowBeginningBalance(true),
       onPrint: () => window.print(),
       onExport: handleExport,
       onViewDoc: undefined,
@@ -578,6 +581,15 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
           />
         </div>
       </div>
+
+      <APBeginningBalanceModal
+        isOpen={showBeginningBalance}
+        onClose={() => setShowBeginningBalance(false)}
+        balanceType="AP"
+        branchCode={branchCode}
+        userCode={user?.userCode || currentUserRow?.userCode || ""}
+        onFinalized={handleReset}
+      />
 
       {showBranchModal && (
         <BranchLookupModal

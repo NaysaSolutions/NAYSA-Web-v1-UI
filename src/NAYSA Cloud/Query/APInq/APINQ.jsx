@@ -90,6 +90,7 @@ export default function APINQ() {
     setActions((prev) => ({
       onFind:           prev.onFind           ?? (() => {}),
       onReset:          prev.onReset          ?? (() => {}),
+      onBeginningBalance: prev.onBeginningBalance ?? (() => {}),
       onPrint:          prev.onPrint          ?? (() => window.print()),
       onViewDoc:        prev.onViewDoc        ?? (() => window.open("/public/NAYSA AP Inquiry.pdf", "_blank")),
       onOpenBal:        prev.onOpenBal        ?? (() => {}),
@@ -107,6 +108,8 @@ export default function APINQ() {
         return actions.onFind?.();
       case "reset":
         return actions.onReset?.();
+      case "beginningBalance":
+        return actions.onBeginningBalance?.();
       case "print":
         return actions.onPrint?.();
       case "viewDoc":

@@ -18,6 +18,7 @@ import { formatNumber, parseFormattedNumber } from "@/NAYSA Cloud/Global/behavio
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import APBeginningBalanceModal from "../APInq/APBeginningBalanceModal.jsx";
 
 const ENDPOINT = "getARInquiry";
 
@@ -34,6 +35,7 @@ const ARInquiryTab = forwardRef(function ARInquiryTab({ registerActions }, ref) 
   const { user,companyInfo, currentUserRow, refsLoaded, refsLoading } = useAuth();
   const baseKey = "AR_INQUIRY";
   const hydratedRef = useRef(false);
+  const [showBeginningBalance, setShowBeginningBalance] = useState(false);
 
   const [state, setState] = useState({
     branchCode: currentUserRow.branchCode,
@@ -404,6 +406,7 @@ const fetchRecord = useCallback(async () => {
     registerActions?.({
       onFind: fetchRecord,
       onReset: handleReset,
+      onBeginningBalance: () => setShowBeginningBalance(true),
       onPrint: () => window.print(),
       onExport: handleExport,
       onViewDoc: undefined,
@@ -574,6 +577,16 @@ const fetchRecord = useCallback(async () => {
         </div>
 
       </div>
+
+      <APBeginningBalanceModal
+        isOpen={showBeginningBalance}
+        onClose={() => setShowBeginningBalance(false)}
+        ledgerType="AR"
+        balanceType="AR"
+        branchCode={branchCode}
+        userCode={user?.userCode || user?.USER_CODE || currentUserRow?.userCode || ""}
+        onFinalized={handleReset}
+      />
 
       {/* === Modals (unchanged) === */}
       {showBranchModal && (
