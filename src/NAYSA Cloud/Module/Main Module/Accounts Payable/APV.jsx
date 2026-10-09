@@ -38,7 +38,7 @@ import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx
 // Configuration
 import { apiClient, fetchData, fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-import { getAccessibleMenuModules, hasAccessibleMenuModule } from "@/NAYSA Cloud/Global/menuAccess.js";
+import { getAccessibleMenuComponents, getAccessibleMenuModules, hasAccessibleMenuComponent, hasAccessibleMenuModule } from "@/NAYSA Cloud/Global/menuAccess.js";
 
 // Global
 import { docTypeNames, docTypes, docTypeVideoGuide, docTypePDFGuide } from "@/NAYSA Cloud/Global/doctype";
@@ -223,7 +223,7 @@ const APV = () => {
   const defaultAdvancesAccountRef = useRef(null);
   const openReferencesDropdownRef = useRef(null);
     const location = useLocation();
-  const { companyInfo, currentUserRow, refsLoaded, getAllTopVatAmount, getAllTopATCAmount } = useAuth();
+  const { companyInfo, currentUserRow, currentMenu, refsLoaded, getAllTopVatAmount, getAllTopATCAmount } = useAuth();
   const assignedUserBranch = getAssignedUserBranch(currentUserRow);
   const [isViewDocument, setIsViewDocument] = useState(false);
   useEffect(() => {
@@ -386,8 +386,10 @@ const APV = () => {
     document.addEventListener("pointerdown", handleClickOutside);
     return () => document.removeEventListener("pointerdown", handleClickOutside);
   }, [showOpenReferencesDropdown]);
-  const accessibleMenuModules = getAccessibleMenuModules();
+  const accessibleMenuModules = getAccessibleMenuModules(currentMenu);
+  const accessibleMenuComponents = getAccessibleMenuComponents(currentMenu);
   const canOpenImportationInquiry = hasAccessibleMenuModule(accessibleMenuModules, "IMP");
+  const canOpenRFPInquiry = hasAccessibleMenuComponent(accessibleMenuComponents, "RFP");
 
   const validateReferencePayees = (selectedRows, matchHeader = true) => {
     const payeeCodes = new Set(
@@ -4895,7 +4897,7 @@ const APV = () => {
                   {[
                     ["RR", "Open Purchases (RR)", faBox],
                     ["JO", "Open Purchases (JO)", faBriefcase],
-                    ["RFP", "Open Request for Payment", faMoneyCheckDollar],
+                    ...(canOpenRFPInquiry ? [["RFP", "Open Request for Payment", faMoneyCheckDollar]] : []),
                     ["PO", "Open Advances", faCoins],
                     ["PCV", "Open Replenishment", faReceipt],
                     ...(canOpenImportationInquiry ? [["LC", "Open Importation", faShip]] : []),
@@ -5944,26 +5946,30 @@ const APV = () => {
                                 </div>
                               </button>
 
-                              <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
+                              {canOpenRFPInquiry && (
+                                <>
+                                  <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
 
-                              <button
-                                type="button"
-                                className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-violet-700 transition-all duration-150 hover:bg-violet-50 hover:text-violet-900 dark:text-violet-300 dark:hover:bg-slate-700"
-                                onClick={() => {
-                                  setShowInvoiceAddDropdown(false);
-                                  handleOpenReferenceRFP();
-                                }}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-slate-700 dark:text-violet-300">
-                                    <FontAwesomeIcon icon={faMoneyCheckDollar} />
-                                  </span>
-                                  <div className="flex flex-col items-start">
-                                    <span>Open RFP</span>
-                                    <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Select an open Request for Payment</span>
-                                  </div>
-                                </div>
-                              </button>
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-violet-700 transition-all duration-150 hover:bg-violet-50 hover:text-violet-900 dark:text-violet-300 dark:hover:bg-slate-700"
+                                    onClick={() => {
+                                      setShowInvoiceAddDropdown(false);
+                                      handleOpenReferenceRFP();
+                                    }}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-slate-700 dark:text-violet-300">
+                                        <FontAwesomeIcon icon={faMoneyCheckDollar} />
+                                      </span>
+                                      <div className="flex flex-col items-start">
+                                        <span>Open RFP</span>
+                                        <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Select an open Request for Payment</span>
+                                      </div>
+                                    </div>
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
