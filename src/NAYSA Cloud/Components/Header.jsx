@@ -47,6 +47,7 @@ const Header = ({
   isViewDocument = false,
   showPost = false,
   showCloseTransaction = false,
+  showCancelAction = true,
   showUpload = false,
   showNotify = false,
   isPrintDisabled = false,
@@ -603,7 +604,7 @@ const Header = ({
                 <span className={desktopLabelClass}>Close</span>
               </button>
             )}
-           <button
+           {showCancelAction && <button
               onClick={handleCancel}
               disabled={isCancelDisabled}
               className={getRedButtonClass(isCancelDisabled)}
@@ -611,7 +612,7 @@ const Header = ({
               <FontAwesomeIcon icon={faTimesCircle} />{" "}
               <span className={mobileLabelClass}>Cancel</span>
               <span className={desktopLabelClass}>Cancel</span>
-            </button>
+            </button>}
           </div>
         )}
       </div>

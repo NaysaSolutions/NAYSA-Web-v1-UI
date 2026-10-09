@@ -3628,6 +3628,7 @@ import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
+import CloseRRModal from "../../../Lookup/SearchCloseRRRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
@@ -3752,6 +3753,7 @@ const DR = () => {
     documentDate:useGetCurrentDayV2(),
     documentNo: "",
     documentStatus:"O",
+    siStatus:"O",
     originalDocStatus: "O",
     status: "OPEN",
     noReprints:"0",
@@ -3813,6 +3815,7 @@ const DR = () => {
     showLocModal:false,
     custModalOpen:false,
     showCancelModal:false,
+    showCloseDRModal:false,
     showAttachModal:false,
     showSignatoryModal:false,
     showAllTranDocNo:false,
@@ -3834,6 +3837,7 @@ const DR = () => {
   documentDocLen,
   documentID,
   documentStatus,
+  siStatus,
   originalDocStatus,
   documentNo,
   documentDate,
@@ -3918,6 +3922,7 @@ const DR = () => {
   branchModalOpen,
   custModalOpen,
   showCancelModal,
+  showCloseDRModal,
   showAttachModal,
   showSignatoryModal,
   showAllTranDocNo,
@@ -3977,11 +3982,18 @@ const DR = () => {
 
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const normalizedDisplayStatus = String(displayStatus || "").toUpperCase();
-  const isPosted = ["FINALIZED", "POSTED"].includes(normalizedDisplayStatus);
-  const isCancelled = normalizedDisplayStatus === "CANCELLED";
-  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "POSTED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);
-  const isHeaderDrStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
-  const canUsePickingControls = !isViewDocumentUrl && !isPosted && !isCancelled;
+  const normalizedPickingStatus = String(documentStatus || drStatus || "O").trim().toUpperCase();
+  const normalizedTransactionStatus = String(siStatus || "O").trim().toUpperCase();
+  const isPickingFinalized = ["F", "FINALIZED", "POSTED"].includes(normalizedPickingStatus);
+  const isTransactionClosed = normalizedTransactionStatus === "C" || normalizedDisplayStatus === "CLOSED";
+  const isCancelled = normalizedDisplayStatus === "CANCELLED" || normalizedPickingStatus === "X" || normalizedTransactionStatus === "X";
+  const pickingStatusLabel = isCancelled ? "CANCELLED" : isPickingFinalized ? "FINALIZED" : "OPEN";
+  const transactionStatusLabel = isCancelled ? "CANCELLED" : isTransactionClosed ? "CLOSED" : "OPEN";
+  const canCloseDR =
+    !!String(documentID || "").trim() && !isTransactionClosed && !isCancelled;
+  const isFormDisabled = isViewDocumentUrl || isCancelled || isTransactionClosed || isPickingFinalized;
+  const isHeaderDrStatusEditable = false;
+  const canUsePickingControls = !isViewDocumentUrl && !isCancelled && !isPickingFinalized;
   const filteredHeaderDrStatusOptions = drStatusOptions || [];
   const selectedDrTranTypeOption = (drTranTypeOptions || []).find(
     (option) => option.DROPDOWN_CODE === (drTranType || "DR01")
@@ -4057,13 +4069,13 @@ const DR = () => {
   });
   useEffect(() => {
     setSoDetailColumnOrder(detailColumnDefs.map((column) => column.key));
-    const shouldShowItemAmount = isPosted && canViewCostAmount;
+    const shouldShowItemAmount = isPickingFinalized && canViewCostAmount;
     setSoDetailHiddenColumnKeys([
       "groupId",
       "soId",
       ...(shouldShowItemAmount ? [] : ["itemAmount"]),
     ]);
-  }, [setSoDetailColumnOrder, setSoDetailHiddenColumnKeys, isPosted, canViewCostAmount]);
+  }, [setSoDetailColumnOrder, setSoDetailHiddenColumnKeys, isPickingFinalized, canViewCostAmount]);
   const sortedDetailRows = getSortedSoDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => {
@@ -4221,7 +4233,6 @@ useEffect(() => {
         { DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" },
         { DROPDOWN_CODE: "F", DROPDOWN_NAME: "Finalized" },
         { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" },
-        { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" },
       ],
       drStatus: mapHeaderDrStatus(state.drStatus),
     });
@@ -4264,6 +4275,7 @@ useEffect(() => {
       openSODR_Col_Summary: [],
       openSODR_Col_Detail: [],
       documentStatus: "O",
+      siStatus: "O",
       originalDocStatus: "O",
       drTranType: defaultDrType,
       drStatus: "O",
@@ -4371,7 +4383,12 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 
     updateState({
       documentStatus: data.drStatus,
-      status: data.docStatus,
+      siStatus: data.siStatus || "O",
+      status: String(data.drCancelled || "").toUpperCase() === "Y"
+        ? "CANCELLED"
+        : String(data.siStatus || "O").toUpperCase() === "C"
+          ? "CLOSED"
+          : "OPEN",
       noReprints:data.noReprints,
       documentID: data.drId,
       documentNo: data.drNo,
@@ -5680,6 +5697,58 @@ const handleCancel = async () => {
   }
 };
 
+const handleCloseTransaction = () => {
+  if (!canCloseDR) return;
+  updateState({ showCloseDRModal: true });
+};
+
+const handleConfirmCloseTransaction = async (confirmation) => {
+  if (!confirmation) {
+    updateState({ showCloseDRModal: false });
+    return;
+  }
+
+  if (!canCloseDR) return;
+
+  updateState({ isLoading: true, showSpinner: true });
+
+  try {
+    const response = await postRequest("closeDR", {
+      userCode: currentUserRow?.userCode || userCode || "",
+      userPassword: confirmation.password,
+      json_data: {
+        documentID,
+        branchCode,
+        drNo: documentNo,
+        userCode: currentUserRow?.userCode || userCode || "",
+      },
+    });
+    const resultRow = Array.isArray(response?.data) ? response.data[0] : response?.data || response;
+    const errorCount = Number(resultRow?.errorCount || resultRow?.ErrorCount || 0);
+    const errorMsg = resultRow?.errorMsg || resultRow?.ErrorMsg || response?.message || response?.details || "";
+
+    if (errorCount > 0 || response?.status === "error" || response?.success === false) {
+      useSwalErrorAlert("Close Delivery Receipt", errorMsg || "Unable to close the Delivery Receipt.");
+      return;
+    }
+
+    await fetchTranData(documentNo, branchCode);
+    useSwalSuccessAlert("Closed", "Delivery Receipt closed successfully.");
+  } catch (error) {
+    const validationCode = error?.response?.data?.error || "";
+    useSwalErrorAlert(
+      validationCode === "INVALID_CREDENTIALS" ? "Incorrect Password" : "Close Delivery Receipt",
+      validationCode === "INVALID_CREDENTIALS"
+        ? "The password you entered is incorrect. Please try again."
+        : validationCode === "MISSING_CREDENTIALS"
+          ? "Please enter your password."
+          : getApiErrorMessage(error),
+    );
+  } finally {
+    updateState({ isLoading: false, showSpinner: false, showCloseDRModal: false });
+  }
+};
+
 const handleHeaderDrStatusChange = async (value) => {
   if (value === "X") {
     await handleCancel();
@@ -5736,6 +5805,7 @@ const handleCopy = async () => {
       documentNo: "",
       documentID: "",
       documentStatus: "O",
+      siStatus: "O",
       originalDocStatus: "O",
       status: "OPEN",
       drStatus: "O",
@@ -6502,12 +6572,15 @@ return (
         onReset={handleReset}
         onSave={() => handleActivityOption("Upsert")}
         onCancel={handleCancel}
+        onCloseTransaction={handleCloseTransaction}
         onCopy={handleCopy}
         onAttach={handleAttach}
  
         activeTopTab={topTab}
         showActions={topTab === "details"}
         showBIRForm={false}
+        showCloseTransaction={canCloseDR}
+        showCancelAction={true}
         isViewDocument={isViewDocument}
         onDetails={() => setTopTab("details")}
         onHistory={() => setTopTab("history")}
@@ -6521,6 +6594,7 @@ return (
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
         isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"} 
+        isCloseTransactionDisabled={!canCloseDR}
       />
       </div>
 
@@ -6538,7 +6612,13 @@ return (
         <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-            <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
+            <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{transactionStatusLabel}</h1>
+          </div>
+          <div>
+            <p className="global-tran-headerstat-text-ui">Picking Status</p>
+            <h1 className={`global-tran-stat-text-ui uppercase ${isPickingFinalized ? "global-tran-stat-text-finalized-ui" : isCancelled ? "global-tran-stat-text-closed-ui" : "global-tran-stat-text-open-ui"}`}>
+              {pickingStatusLabel}
+            </h1>
           </div>
         </div>
       </div>
@@ -6824,7 +6904,7 @@ return (
  
             <FieldRenderer
               id="drStatus"
-              label="DR Status"
+              label="Picking Status"
               type="select"
               value={drStatus || ""}
               disabled={!isHeaderDrStatusEditable}
@@ -7310,6 +7390,16 @@ return (
       <CancelTranModal
         isOpen={showCancelModal}
         onClose={handleCloseCancel}
+      />
+    )}
+
+    {showCloseDRModal && (
+      <CloseRRModal
+        isOpen={showCloseDRModal}
+        onClose={handleConfirmCloseTransaction}
+        title="Close DR"
+        documentLabel="Delivery Receipt"
+        warning="This will close the Delivery Receipt transaction and prevent further editing or invoicing. Picking remains available while its status is Open."
       />
     )}
 
