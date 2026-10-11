@@ -1,7 +1,6 @@
 // RoleAccessTab.jsx — Simplified role-based access (permission_type stored in rolemenu_ref)
 import React, {
   useState,
-  useRef,
   forwardRef,
   useImperativeHandle,
   useMemo,
@@ -12,10 +11,15 @@ import {
   faList,
   faArrowLeft,
   faShieldAlt,
-  faSquare,
-  faCheckSquare,
   faLockOpen,
   faEye,
+  faChevronDown,
+  faChevronRight,
+  faSearch,
+  faFolder,
+  faBan,
+  faExpand,
+  faCompress,
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -156,6 +160,9 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
   const [loadingMenus, setLoadingMenus] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mobileStep, setMobileStep] = useState("roles");
+  const [menuSearch, setMenuSearch] = useState("");
+  const [selectedModule, setSelectedModule] = useState("");
+  const [expandedModules, setExpandedModules] = useState({});
   const [tableFilter, setTableFilter] = useState(null); // null | "FULL" | "READ"
 
   // ─── Derived data ──────────────────────────────────────────────────────────
@@ -218,9 +225,60 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
     [normalizedMenus]
   );
 
-  const allMenusSelected =
-    allMenuCodes.length > 0 &&
-    allMenuCodes.every((menuCode) => permissionMap[menuCode]?.access);
+  const noAccessCount = normalizedMenus.length - selectedMenuCount;
+
+  const groupedMenus = useMemo(() => {
+    const query = menuSearch.trim().toLowerCase();
+    const groups = new Map();
+    normalizedMenus.forEach((menu) => {
+      const permission = permissionMap[menu.menuCode] || DEFAULT_PERMISSIONS;
+      const state = !permission.access ? "NONE" : permission.fullAccess ? "FULL" : "READ";
+      if (tableFilter && tableFilter !== state) return;
+      if (query && ![menu.moduleName, menu.subMenu, menu.menuCode, menu.menuName]
+        .some((value) => String(value || "").toLowerCase().includes(query))) return;
+      const moduleName = String(menu.moduleName || "Other Modules").trim() || "Other Modules";
+      if (!groups.has(moduleName)) groups.set(moduleName, []);
+      groups.get(moduleName).push(menu);
+    });
+    return [...groups.entries()].map(([name, rows]) => ({ name, rows }));
+  }, [normalizedMenus, permissionMap, tableFilter, menuSearch]);
+
+  const isModuleExpanded = (name) => expandedModules[name] !== false;
+  const setAllModulesExpanded = (expanded) => {
+    setExpandedModules(Object.fromEntries(groupedMenus.map((group) => [group.name, expanded])));
+  };
+
+  const cycleModulePermissions = useCallback((rows) => {
+    const codes = rows.map((row) => row.menuCode).filter(Boolean);
+    if (!codes.length) return;
+    const states = codes.map((code) => permissionMap[code] || DEFAULT_PERMISSIONS);
+    const allNone = states.every((p) => !p.access);
+    const allRead = states.every((p) => p.access && p.readOnly);
+    const preset = allNone ? "READ" : allRead ? "FULL" : "NONE";
+    setPermissionMap((previous) => {
+      const next = { ...previous };
+      codes.forEach((code) => {
+        next[code] = preset === "FULL"
+          ? { access: true, fullAccess: true, readOnly: false }
+          : preset === "READ"
+          ? { access: true, fullAccess: false, readOnly: true }
+          : { ...DEFAULT_PERMISSIONS };
+      });
+      return next;
+    });
+  }, [permissionMap]);
+
+  // Reflect all menu permissions, including mixed combinations.
+  const bulkPermissionState = useMemo(() => {
+    if (allMenuCodes.length === 0) return "none";
+    const permissions = allMenuCodes.map(
+      (code) => permissionMap[code] || DEFAULT_PERMISSIONS
+    );
+    if (permissions.every((p) => p.access && p.fullAccess)) return "full";
+    if (permissions.every((p) => p.access && p.readOnly)) return "read";
+    if (permissions.every((p) => !p.access)) return "none";
+    return "mixed";
+  }, [allMenuCodes, permissionMap]);
 
   const getPermission = useCallback(
     (menuCode) => permissionMap[menuCode] || DEFAULT_PERMISSIONS,
@@ -234,6 +292,9 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
     setMenus([]);
     setPermissionMap({});
     setTableFilter(null);
+    setMenuSearch("");
+    setSelectedModule("");
+    setExpandedModules({});
 
     try {
       const rc = String(roleCode ?? "").trim();
@@ -245,11 +306,12 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
         return;
       }
 
+      // /getRoleMenu must return only menus currently present in HS_MENU.
+      // Do not call the administrator-only /heartstrong/modules API here.
       const { data } = await apiClient.get("/getRoleMenu", {
         params: { ROLE_CODE: rc },
       });
 
-      // getRoleMenu returns menu list with selectedMenu + permissionType per row
       const rawMenus = Array.isArray(data?.data?.menus)
         ? data.data.menus
         : normalizeRows(data);
@@ -321,32 +383,32 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
     }));
   }, []);
 
-  const toggleSelectAllMenus = useCallback(() => {
-    setPermissionMap((previous) => {
-      const next = { ...previous };
-      if (allMenusSelected) {
-        allMenuCodes.forEach((menuCode) => { next[menuCode] = { ...DEFAULT_PERMISSIONS }; });
-      } else {
-        allMenuCodes.forEach((menuCode) => {
-          next[menuCode] = { access: true, fullAccess: true, readOnly: false };
-        });
-      }
-      return next;
-    });
-  }, [allMenuCodes, allMenusSelected]);
+  // Bulk permissions: None → Read Only → Full Access → None.
+  // For mixed permissions, first click sets all to No Access.
+  const cycleAllPermissions = useCallback(() => {
+    if (allMenuCodes.length === 0) return;
+    const nextPreset =
+      bulkPermissionState === "none"
+        ? "READ"
+        : bulkPermissionState === "read"
+        ? "FULL"
+        : "NONE";
 
-  const applyBulkPreset = useCallback((preset) => {
     setPermissionMap((previous) => {
       const next = { ...previous };
       allMenuCodes.forEach((menuCode) => {
         next[menuCode] =
-          preset === "FULL"
+          nextPreset === "FULL"
             ? { access: true, fullAccess: true, readOnly: false }
-            : { access: true, fullAccess: false, readOnly: true };
+            : nextPreset === "READ"
+            ? { access: true, fullAccess: false, readOnly: true }
+            : { ...DEFAULT_PERMISSIONS };
       });
       return next;
     });
-  }, [allMenuCodes]);
+    // Make all rows visible after a bulk action, regardless of previous filter.
+    setTableFilter(null);
+  }, [allMenuCodes, bulkPermissionState]);
 
   // ─── Save ──────────────────────────────────────────────────────────────────
   const handleSaveAccess = useCallback(async () => {
@@ -429,6 +491,9 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
     setShowMenus(false);
     setMobileStep("roles");
     setTableFilter(null);
+    setMenuSearch("");
+    setSelectedModule("");
+    setExpandedModules({});
   }, []);
 
   // ─── Exposed ref methods ───────────────────────────────────────────────────
@@ -535,6 +600,23 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
     [getPermission, applyPermissionPreset]
   );
 
+  const moduleOptions = useMemo(() =>
+    [...new Set(normalizedMenus.map((m) => String(m.moduleName || "Other Modules").trim() || "Other Modules"))]
+      .sort((a, b) => a.localeCompare(b)), [normalizedMenus]);
+
+  const moduleRows = useMemo(() => normalizedMenus.filter((menu) =>
+    (String(menu.moduleName || "Other Modules").trim() || "Other Modules") === selectedModule
+  ), [normalizedMenus, selectedModule]);
+
+  const matrixRows = useMemo(() => {
+    const query = menuSearch.trim().toLowerCase();
+    return filteredMenus.filter((menu) =>
+      (!selectedModule || (String(menu.moduleName || "Other Modules").trim() || "Other Modules") === selectedModule) &&
+      (!query || [menu.moduleName, menu.subMenu, menu.menuCode, menu.menuName]
+        .some((value) => String(value || "").toLowerCase().includes(query)))
+    );
+  }, [filteredMenus, menuSearch, selectedModule]);
+
   const roleTableData = useMemo(
     () => activeRoles.map((row, index) => ({ ...row, __idx: index })),
     [activeRoles]
@@ -604,102 +686,68 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
         >
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 h-full flex flex-col">
             <div className="flex flex-col gap-3 mb-3">
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-800">
-                    Role Access Matrix
-                  </h2>
-                  <p className="text-xs text-gray-500">
-                    Toggle per-menu access. Everyone with access gets Full or Read Only — no granular per-user overrides.
-                  </p>
+                  <h2 className="text-lg font-bold text-slate-800">Role Access Matrix</h2>
+                  <p className="text-xs text-slate-500">Click a permission to cycle No Access → Read Only → Full Access.</p>
                 </div>
-
                 {showMenus && (
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={toggleSelectAllMenus}
-                      className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-medium hover:bg-blue-100 transition-colors"
-                    >
-                      <FontAwesomeIcon icon={allMenusSelected ? faSquare : faCheckSquare} className="shrink-0" />
-                      <span className="truncate">{allMenusSelected ? "Unselect All" : "Select All"}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyBulkPreset("FULL")}
-                      className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-[11px] font-medium hover:bg-green-100 transition-colors"
-                    >
-                      <FontAwesomeIcon icon={faLockOpen} className="shrink-0" />
-                      <span className="truncate">All Full</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyBulkPreset("READ")}
-                      className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-[11px] font-medium hover:bg-amber-100 transition-colors"
-                    >
-                      <FontAwesomeIcon icon={faEye} className="shrink-0" />
-                      <span className="truncate">All Read</span>
-                    </button>
-                  </div>
+                  <button type="button" onClick={cycleAllPermissions}
+                    disabled={saving || loadingMenus || !allMenuCodes.length}
+                    title="Set permission for all menus (Mixed → No Access → Read Only → Full Access)"
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+                    <FontAwesomeIcon icon={bulkPermissionState === "full" ? faLockOpen : faEye} />
+                    All: {bulkPermissionState === "full" ? "Full Access" : bulkPermissionState === "read" ? "Read Only" : bulkPermissionState === "none" ? "No Access" : "Mixed"}
+                  </button>
                 )}
               </div>
-
               {showMenus && (
                 <>
-                  {/* Summary stats */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div
-                      onClick={() => setTableFilter(null)}
-                      className={`rounded-xl border p-2 transition-all ${
-                        tableFilter === null
-                          ? "border-gray-400 bg-gray-100 ring-2 ring-gray-300"
-                          : "border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-gray-100 cursor-pointer"
-                      }`}
-                    >
-                      <p className="text-[9px] uppercase tracking-wide text-gray-500 font-semibold leading-tight">Total Menus</p>
-                      <p className="text-base font-bold text-gray-800">{normalizedMenus.length}</p>
-                    </div>
-                    <div
-                      onClick={() => setTableFilter(tableFilter === "FULL" ? null : "FULL")}
-                      className={`rounded-xl border p-2 transition-all cursor-pointer ${
-                        tableFilter === "FULL"
-                          ? "border-blue-400 bg-blue-100 ring-2 ring-blue-300"
-                          : "border-blue-100 bg-blue-50 hover:border-blue-300 hover:bg-blue-100"
-                      }`}
-                    >
-                      <p className="text-[9px] uppercase tracking-wide text-blue-600 font-semibold leading-tight">Full Access</p>
-                      <p className="text-base font-bold text-blue-700">{fullAccessCount}</p>
-                    </div>
-                    <div
-                      onClick={() => setTableFilter(tableFilter === "READ" ? null : "READ")}
-                      className={`rounded-xl border p-2 transition-all cursor-pointer ${
-                        tableFilter === "READ"
-                          ? "border-amber-400 bg-amber-100 ring-2 ring-amber-300"
-                          : "border-amber-100 bg-amber-50 hover:border-amber-300 hover:bg-amber-100"
-                      }`}
-                    >
-                      <p className="text-[9px] uppercase tracking-wide text-amber-600 font-semibold leading-tight">Read Only</p>
-                      <p className="text-base font-bold text-amber-700">{readOnlyCount}</p>
-                    </div>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                    {[
+                      { key: null, label: "Total Menus", count: normalizedMenus.length, color: "slate", base: "border-slate-200 bg-slate-50 text-slate-700" },
+                      { key: "FULL", label: "Full Access", count: fullAccessCount, color: "blue", base: "border-blue-200 bg-blue-50 text-blue-700" },
+                      { key: "READ", label: "Read Only", count: readOnlyCount, color: "amber", base: "border-amber-200 bg-amber-50 text-amber-700" },
+                      { key: "NONE", label: "No Access", count: noAccessCount, color: "rose", base: "border-rose-200 bg-rose-50 text-rose-700" },
+                    ].map((stat) => (
+                      <button key={stat.label} type="button" onClick={() => setTableFilter(stat.key)}
+                        className={`rounded-xl border p-3 text-left transition-all hover:shadow-sm ${stat.base} ${tableFilter === stat.key ? "ring-2 ring-offset-1 ring-blue-300" : ""}`}>
+                        <div className="text-[11px] font-semibold">{stat.label}</div>
+                        <div className="text-2xl font-bold tabular-nums">{stat.count}</div>
+                        <div className="mt-2 h-1.5 rounded-full bg-white/80 overflow-hidden">
+                          <div className="h-full rounded-full bg-current opacity-60" style={{ width: `${normalizedMenus.length ? (stat.count / normalizedMenus.length) * 100 : 0}%` }} />
+                        </div>
+                      </button>
+                    ))}
                   </div>
-
-                  {/* Selected role badge */}
-                  <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
-                    <FontAwesomeIcon icon={faShieldAlt} className="text-blue-600 text-sm shrink-0" />
-                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 shrink-0">
-                        Selected Role
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs min-w-0">
+                      <FontAwesomeIcon icon={faShieldAlt} className="text-blue-600" />
+                      <span className="font-semibold text-blue-700">Selected Role</span>
+                      <span className="min-w-0 truncate rounded-full border border-blue-200 bg-white px-2 py-1 text-blue-800">
+                        {selectedRoleDetails.length === 1 ? `${selectedRoleDetails[0].roleCode} - ${selectedRoleDetails[0].roleName}` : "No single role selected"}
                       </span>
-                      {selectedRoleDetails.length === 0 ? (
-                        <span className="text-xs text-gray-500">None</span>
-                      ) : selectedRoleDetails.length === 1 ? (
-                        <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs font-medium text-blue-800 max-w-[260px] truncate">
-                          {selectedRoleDetails[0].roleCode} - {selectedRoleDetails[0].roleName}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs font-medium text-blue-800">
-                          {selectedRoleDetails.length} roles
-                        </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={selectedModule}
+                        onChange={(e) => setSelectedModule(e.target.value)}
+                        aria-label="Filter matrix by module"
+                        className="max-w-[200px] rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                      >
+                        <option value="">All Modules</option>
+                        {moduleOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                      </select>
+                      {selectedModule && (
+                        <button
+                          type="button"
+                          title={`Cycle permissions for all menus in ${selectedModule}`}
+                          onClick={() => cycleModulePermissions(moduleRows)}
+                          disabled={saving || loadingMenus}
+                          className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                        >
+                          Change Module Access ({moduleRows.length})
+                        </button>
                       )}
                     </div>
                   </div>
@@ -708,24 +756,21 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
             </div>
 
             {showMenus ? (
-              <div className="flex-1 min-h-0 flex flex-col gap-2">
-
-                <div className="flex-1 min-h-0">
-                  <SearchGlobalReferenceTable
-                    docType="UserAccRight"
-                    columns={menuColumns}
-                    data={filteredMenus}
-                    isLoading={loadingMenus}
-                    itemsPerPage={50}
-                    showFilters={true}
-                    onRowDoubleClick={() => {}}
-                    onRowClick={() => {}}
-                    mobileSelectable={true}
-                    selectedRowChecker={(row) => getPermission(row.menuCode).access}
-                    tableSize={tableSize}
-                    className="h-full"
-                  />
-                </div>
+              <div className="flex-1 min-h-0">
+                <SearchGlobalReferenceTable
+                  docType="UserAccRight"
+                  columns={menuColumns}
+                  data={matrixRows}
+                  isLoading={loadingMenus}
+                  itemsPerPage={50}
+                  showFilters={true}
+                  onRowDoubleClick={() => {}}
+                  onRowClick={() => {}}
+                  mobileSelectable={true}
+                  selectedRowChecker={(row) => getPermission(row.menuCode).access}
+                  tableSize={tableSize}
+                  className="h-full"
+                />
               </div>
             ) : (
               <div className="h-full min-h-[320px] flex items-center justify-center text-center text-gray-500 bg-gray-50 rounded-xl border border-gray-200">
