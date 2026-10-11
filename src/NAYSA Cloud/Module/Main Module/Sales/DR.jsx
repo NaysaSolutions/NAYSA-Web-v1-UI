@@ -3990,7 +3990,10 @@ const DR = () => {
   const pickingStatusLabel = isCancelled ? "CANCELLED" : isPickingFinalized ? "FINALIZED" : "OPEN";
   const transactionStatusLabel = isCancelled ? "CANCELLED" : isTransactionClosed ? "CLOSED" : "OPEN";
   const canCloseDR =
-    !!String(documentID || "").trim() && !isTransactionClosed && !isCancelled;
+    !!String(documentID || "").trim() &&
+    !String(companyInfo?.birAcNo || "").trim() &&
+    !isTransactionClosed &&
+    !isCancelled;
   const isFormDisabled = isViewDocumentUrl || isCancelled || isTransactionClosed || isPickingFinalized;
   const isHeaderDrStatusEditable = false;
   const canUsePickingControls = !isViewDocumentUrl && !isCancelled && !isPickingFinalized;
