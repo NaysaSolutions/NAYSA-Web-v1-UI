@@ -57,6 +57,7 @@ export const pageRegistry = {
   DRC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/DRC.jsx")),
   VDR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/VDR.jsx")),
   SI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/SI.jsx")),
+  PRSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PRSI.jsx")),
   CSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/CSI.jsx")),
   VSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/VSI.jsx")),
   SALESANALYSIS: lazyPage(() => import("./NAYSA Cloud/Query/SOInq/SalesAnalysis.jsx")),
