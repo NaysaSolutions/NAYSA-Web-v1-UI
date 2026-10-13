@@ -131,6 +131,7 @@ const SI = () => {
   const originalSOQuantityRef = useRef({});
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const currRateBeforeEditRef = useRef("");
   const addTypeDropdownRef = useRef(null);
   const headerDiscountInputRef = useRef(null);
   const navigate = useNavigate();
@@ -503,7 +504,11 @@ const SI = () => {
     { key: "groupId", label: "Group ID", width: 120 },
     { key: "ln", label: "LN", width: 56 },
     { key: "siStat", label: "Picking Status", width: 130 },
-    { key: "drNo", label: "DR No.", width: 140 },
+    {
+      key: "drNo",
+      label: String(siTranType || "").toUpperCase() === "SI04" ? "PRSI No." : "DR No.",
+      width: 140,
+    },
     { key: "itemCode", label: "Item Code", width: 140 },
     { key: "itemName", label: "Item Name", width: 240 },
     { key: "itemSpecs", label: "Specification", width: 240 },
@@ -536,6 +541,18 @@ const SI = () => {
     { key: "vatAmount", label: "VAT Amount", width: 130 },
     { key: "salesAmount", label: "Sales Amount", width: 130 },
     { key: "freeItem", label: "Free Item", width: 110 },
+  ];
+
+  const openPRSIColumns = [
+    { key: "prsiNo", label: "PRSI No.", width: 130 },
+    { key: "prsiDate", label: "PRSI Date", width: 110, renderType: "date" },
+    { key: "custCode", label: "Customer Code", width: 130 },
+    { key: "custName", label: "Customer Name", width: 240 },
+    { key: "currCode", label: "Currency", width: 90 },
+    { key: "grossAmount", label: "Gross Amount", width: 130, renderType: "number" },
+    { key: "vatAmount", label: "VAT Amount", width: 130, renderType: "number" },
+    { key: "prsiAmount", label: "PRSI Amount", width: 130, renderType: "number" },
+    { key: "remarks", label: "Remarks", width: 260 },
   ];
 
 
@@ -1362,13 +1379,33 @@ const handlesiNoBlur = () => {
     }
 };
 
-const handleCurrRateNoBlur = (e) => {
+const handleCurrRateNoBlur = async (e) => {
+  const numericRate = parseFormattedNumber(e.target.value || 0);
+  const nextRate = Number.isNaN(numericRate)
+    ? "0.000000"
+    : formatNumber(numericRate, 6);
+  const previousRate = currRateBeforeEditRef.current || nextRate;
 
-  const num = formatNumber(e.target.value, 6);
-  updateState({
-        currRate: isNaN(num) ? "0.000000" : num
-        })
+  if (parseFormattedNumber(previousRate) === parseFormattedNumber(nextRate)) {
+    updateState({ currRate: nextRate });
+    return;
+  }
 
+  const result = await useSwalProceedConfirm(
+    "Apply Currency Rate changes?",
+    `Currency Rate changed from ${previousRate} to ${nextRate}. Do you want to regenerate the GL Entries?`,
+    "Yes, apply changes",
+    "No",
+  );
+
+  if (!result.isConfirmed) {
+    updateState({ currRate: previousRate });
+    return;
+  }
+
+  updateState({ currRate: nextRate });
+  currRateBeforeEditRef.current = nextRate;
+  await regenerateGlEntriesForRows(detailRows, { currRate: nextRate });
 };
 
 const moveFocusBeforeSave = async () => {
@@ -2535,6 +2572,18 @@ const handlePrint = async () => {
     setShowAddTypeDropdown(false);
 
     const lookupCustCode = String(billToCustCode || "").trim();
+    const normalizedSiTranType = String(siTranType || "").toUpperCase();
+
+    if (normalizedSiTranType === "SI04" && !lookupCustCode) {
+      const branchIsValid = await useSwalvalidateRequiredFields(
+        { "Header : Branch": branchCode },
+        "Add PRSI Detail"
+      );
+      if (!branchIsValid) return;
+
+      updateState({ custModalOpen: true, modalContext: "openPRSI" });
+      return;
+    }
 
     if (!lookupCustCode) {
       const branchIsValid = await useSwalvalidateRequiredFields(
@@ -2551,7 +2600,12 @@ const handlePrint = async () => {
     }
 
 
-  if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase())) {
+  if (normalizedSiTranType === "SI04") {
+    await handleOpenPRSILookup();
+    return;
+  }
+
+  if (["SI01", "SI03"].includes(normalizedSiTranType)) {
     await handleOpenDRLookup();
     return;
   }
@@ -2825,6 +2879,108 @@ const handlePrint = async () => {
     }
   };
 
+  const handleOpenPRSILookup = async (overrides = {}) => {
+    const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
+    const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
+
+    if (!lookupCustCode) {
+      const branchIsValid = await useSwalvalidateRequiredFields(
+        { "Header : Branch": lookupBranchCode },
+        "Open PRSI"
+      );
+      if (!branchIsValid) return;
+
+      updateState({ custModalOpen: true, modalContext: "openPRSI" });
+      return;
+    }
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+
+      const { data: response } = await apiClient.get("/getPRSISI_OpenSummary", {
+        params: {
+          branchCode: lookupBranchCode,
+          custCode: lookupCustCode,
+        },
+      });
+      const rawResult = response?.data?.[0]?.result;
+      const summaryRows = rawResult ? JSON.parse(rawResult) : [];
+
+      if (!summaryRows.length) {
+        useSwalErrorAlert(
+          "Open PRSI",
+          "There are no open Provisional Sales Invoices for the selected customer and branch."
+        );
+        return;
+      }
+
+      updateState({
+        openDRSI_Data_Summary: summaryRows,
+        openDRSI_Col_Summary: openPRSIColumns,
+        showOpenDRModal: true,
+      });
+    } catch (error) {
+      console.error("GetOpenPRSISummary failed:", error);
+      useSwalErrorAlert("Open PRSI", getApiErrorMessage(error));
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  const handleInsertSelectedPRSI = async (payload) => {
+    const selectedPRSI = Array.isArray(payload?.records) ? payload.records[0] : null;
+    const prsiId = selectedPRSI?.prsiId || selectedPRSI?.groupId || "";
+
+    if (!prsiId) {
+      updateState({ showOpenDRModal: false });
+      return;
+    }
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+
+      const { data: response } = await apiClient.get("/getPRSISI_OpenDetail", {
+        params: {
+          branchCode,
+          custCode: billToCustCode,
+          documentID: prsiId,
+        },
+      });
+      const rawResult = response?.data?.[0]?.result;
+      const selectedRecords = rawResult ? JSON.parse(rawResult).map(normalizeOpenDRLookupRow) : [];
+
+      if (!selectedRecords.length) {
+        useSwalErrorAlert("Open PRSI", "No item details were returned for the selected PRSI.");
+        return;
+      }
+
+      const duplicateRows = getDuplicateOpenDRRows(selectedRecords);
+      if (duplicateRows.length > 0) {
+        useSwalErrorAlert(
+          "Duplicate PRSI Detail",
+          "The selected PRSI is already included in this Sales Invoice."
+        );
+        return;
+      }
+
+      const headerUpdates = await buildOpenDRHeaderUpdates(selectedRecords, [selectedPRSI]);
+      insertDetailRows(selectedRecords.map(mapOpenDRRecordToDetailRow), insertAfterIndex);
+      setTopTab("details");
+      updateState({
+        ...headerUpdates,
+        showOpenDRModal: false,
+        openDRSI_Data_Summary: [],
+        openDRSI_Col_Summary: [],
+        insertAfterIndex: null,
+      });
+    } catch (error) {
+      console.error("GetOpenPRSIDetail failed:", error);
+      useSwalErrorAlert("Open PRSI", getApiErrorMessage(error));
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
 const handleCancel = async () => {
  if (!detailRows || detailRows.length === 0) {
       return; // Assuming SI also requires detail rows to cancel
@@ -3077,12 +3233,17 @@ const handleSaveAndPrint = async (documentID) => {
             });
         }
 
-        if (modalContext === "addDetail" || modalContext === "openDR") {
+        if (["addDetail", "openDR", "openPRSI"].includes(modalContext)) {
           const nextCustomerCode = custDetails.custCode || selectedData?.custCode || "";
           const nextBillTermCode = custDetails.billtermCode || "";
           const nextSalesRepCode = custDetails.salesRepCode || "";
 
-          if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase()) || modalContext === "openDR") {
+          if (String(siTranType || "").toUpperCase() === "SI04" || modalContext === "openPRSI") {
+            await handleOpenPRSILookup({
+              billToCustCode: nextCustomerCode,
+              branchCode,
+            });
+          } else if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase()) || modalContext === "openDR") {
             await handleOpenDRLookup({
               billToCustCode: nextCustomerCode,
               branchCode,
@@ -3181,6 +3342,8 @@ const handleSaveAndPrint = async (documentID) => {
       headerOverrides.atcCode !== undefined ? headerOverrides.atcCode : atcCode;
     const nextCwvatCode =
       headerOverrides.cwvatCode !== undefined ? headerOverrides.cwvatCode : cwvatCode;
+    const nextCurrRate =
+      headerOverrides.currRate !== undefined ? headerOverrides.currRate : currRate;
     const totalValues = computeTotalsFromRows(rows, nextAtcCode, nextCwvatCode);
 
     return {
@@ -3196,7 +3359,7 @@ const handleSaveAndPrint = async (documentID) => {
       refSiNo1,
       refSiNo2,
       currCode: currCode || "PHP",
-      currRate: parseFormattedNumber(currRate),
+      currRate: parseFormattedNumber(nextCurrRate),
       atcAmount: totalValues.totalAtcAmt,
       atcCode: nextAtcCode || "",
       cwvatCode: nextCwvatCode || "",
@@ -5042,10 +5205,14 @@ return (
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      document.getElementById("refDocNo1")?.focus();
+                      e.currentTarget.blur();
                     }
                   }}
                   onFocus={(e) => {
+                    currRateBeforeEditRef.current = formatNumber(
+                      parseFormattedNumber(e.target.value || currRate || 0),
+                      6,
+                    );
                     if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
                       updateState({ currRate: "" });
                     }
@@ -5507,6 +5674,8 @@ return (
         customParam={
           String(siTranType || "").toUpperCase() === "SI03"
             ? "openFADS"
+            : String(siTranType || "").toUpperCase() === "SI04"
+              ? "openPRSI"
             : String(siTranType || "").toUpperCase() === "SI01"
               ? "openDR"
               : undefined
@@ -5551,11 +5720,12 @@ return (
     {showOpenDRModal && (
       <GlobalLookupModalv1
         isOpen={showOpenDRModal}
-        title="Open Delivery Receipt Summary"
+        title={String(siTranType || "").toUpperCase() === "SI04" ? "Open Provisional Sales Invoice" : "Open Delivery Receipt Summary"}
         endpoint={openDRSI_Col_Summary}
         data={openDRSI_Data_Summary}
-        btnCaption="Get Selected DR"
-        onClose={handleInsertSelectedOpenDR}
+        btnCaption={String(siTranType || "").toUpperCase() === "SI04" ? "Get Selected PRSI" : "Get Selected DR"}
+        onClose={String(siTranType || "").toUpperCase() === "SI04" ? handleInsertSelectedPRSI : handleInsertSelectedOpenDR}
+        singleSelect={String(siTranType || "").toUpperCase() === "SI04"}
         onCancel={() =>
           updateState({
             showOpenDRModal: false,
