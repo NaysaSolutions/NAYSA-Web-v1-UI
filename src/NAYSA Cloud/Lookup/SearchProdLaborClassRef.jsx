@@ -129,7 +129,7 @@ const SearchProdLaborClassRef = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
-      <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl transform animate-scale-in">
+      <div className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl transform animate-scale-in">
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100">
           <div className="flex items-center gap-2 pl-3">
             <h2 className="global-lookup-headertext-ui">{title}</h2>

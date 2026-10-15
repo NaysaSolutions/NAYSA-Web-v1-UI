@@ -29,6 +29,8 @@ import {
   useGetFieldLength,
 } from "@/NAYSA Cloud/Global/procedure";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
+import BOMReferenceLookupModal from "@/NAYSA Cloud/Lookup/SearchBOMRef.jsx";
+import SearchBOMProcessRef from "@/NAYSA Cloud/Lookup/SearchBOMProcessRef.jsx";
 
 const initialForm = {
   processCode: "",
@@ -44,6 +46,7 @@ const initialRegistration = {
 };
 
 const initialBOMProcessForm = {
+  bomProcessId: "",
   bomId: "",
   processEffectivityDate: "",
   bomCode: "",
@@ -60,7 +63,7 @@ const emptyProcessLine = (lineNo = 1) => ({
   lineNo,
   processCode: "",
   processName: "",
-  cycleTime: "0.000000",
+  cycleTime: "0.00",
 });
 
 const parseResult = (response) => {
@@ -97,6 +100,7 @@ const ProdBOMProcess = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const formTopRef = useRef(null);
+  const cycleTimeRefs = useRef([]);
 
   const [activeTab, setActiveTab] = useState("list");
   const [formData, setFormData] = useState(initialForm);
@@ -112,6 +116,9 @@ const ProdBOMProcess = () => {
     emptyProcessLine(3),
   ]);
   const [isBOMProcessEditing, setIsBOMProcessEditing] = useState(false);
+  const [showBOMLookup, setShowBOMLookup] = useState(false);
+  const [showProcessLookup, setShowProcessLookup] = useState(false);
+  const [processLookupRowIndex, setProcessLookupRowIndex] = useState(null);
 
   const userCode = user?.USER_CODE || user?.userCode || "ADMIN";
 
@@ -166,6 +173,31 @@ const ProdBOMProcess = () => {
       resetForm();
     },
     onError: (error) => useSwalErrorAlertAPI("Delete Failed", error),
+  });
+
+  const saveBOMProcessMutation = useMutation({
+    mutationFn: (payload) =>
+      apiClient.post("/prodBOMProcess/upsertBOMProcess", payload),
+    onSuccess: (response) => {
+      const result = response?.data?.data?.[0];
+      if (Number(result?.errorcount || 0) > 0) {
+        useSwalErrorAlert(
+          "Save Failed",
+          result?.errormsg || "Unable to save the BOM Process routing.",
+        );
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["prodBOMProcessSummary"] });
+      if (result?.bomProcessId) {
+        setBOMProcessForm((previous) => ({
+          ...previous,
+          bomProcessId: result.bomProcessId,
+        }));
+      }
+      useSwalSuccessAlert("Saved", "BOM Process routing saved successfully.");
+    },
+    onError: (error) => useSwalErrorAlertAPI("Save Failed", error),
   });
 
   const getMax = (columnName) =>
@@ -359,6 +391,100 @@ const ProdBOMProcess = () => {
     setBOMProcessForm((previous) => ({ ...previous, ...updates }));
   };
 
+  const handleBOMSelect = (bom) => {
+    setShowBOMLookup(false);
+    if (!bom) return;
+
+    setBOMProcessForm((previous) => ({
+      ...previous,
+      bomId: bom.bomId || bom.BOM_ID || bom.groupId || bom.GROUP_ID || "",
+      bomCode: bom.bomCode || bom.BOM_CODE || "",
+      bomEffectivityDate: formatDate(
+        bom.bomDate || bom.BOM_DATE || bom.bomEffectivityDate,
+      ),
+      itemType: bom.invType || bom.INV_TYPE || bom.itemType || "",
+      itemCode: bom.itemCode || bom.ITEM_CODE || "",
+      itemDescription:
+        bom.itemName || bom.ITEM_NAME || bom.itemDescription || "",
+      uom: bom.uomCode || bom.UOM_CODE || bom.uom || "",
+      quantity: Number(
+        bom.bomQty ?? bom.BOM_QTY ?? bom.quantity ?? 0,
+      ).toFixed(6),
+    }));
+  };
+
+  const openProcessLookup = (rowIndex = null) => {
+    if (!isBOMProcessEditing) return;
+    setProcessLookupRowIndex(rowIndex);
+    setShowProcessLookup(true);
+  };
+
+  const handleProcessSelect = (selection) => {
+    setShowProcessLookup(false);
+    if (!selection) {
+      setProcessLookupRowIndex(null);
+      return;
+    }
+
+    const selectedProcesses = Array.isArray(selection) ? selection : [selection];
+    const normalizedSelections = selectedProcesses.map((process) => ({
+      processCode: String(process?.processCode || process?.PROCESS_CODE || "")
+        .trim()
+        .toUpperCase(),
+      processName: process?.processName || process?.PROCESS_NAME || "",
+    }));
+
+    const existingCodes = new Set(
+      bomProcessRows
+        .filter((_, index) => index !== processLookupRowIndex)
+        .map((row) => String(row.processCode || "").trim().toUpperCase())
+        .filter(Boolean),
+    );
+    const duplicateCodes = normalizedSelections
+      .map((process) => process.processCode)
+      .filter((code) => code && existingCodes.has(code));
+
+    if (duplicateCodes.length) {
+      useSwalErrorAlert(
+        "Duplicate Process Code",
+        `${[...new Set(duplicateCodes)].join(", ")} already exists in Process Details.`,
+      );
+      setProcessLookupRowIndex(null);
+      return;
+    }
+
+    if (processLookupRowIndex !== null) {
+      const selectedProcess = normalizedSelections[0];
+      setBOMProcessRows((previous) =>
+        previous.map((row, index) =>
+          index === processLookupRowIndex
+            ? {
+                ...row,
+                processCode: selectedProcess.processCode,
+                processName: selectedProcess.processName,
+              }
+            : row,
+        ),
+      );
+    } else {
+      setBOMProcessRows((previous) => {
+        const populatedRows = previous.filter(
+          (row) => String(row.processCode || "").trim() !== "",
+        );
+        return renumberProcessLines([
+          ...populatedRows,
+          ...normalizedSelections.map((process) => ({
+            ...emptyProcessLine(),
+            processCode: process.processCode,
+            processName: process.processName,
+          })),
+        ]);
+      });
+    }
+
+    setProcessLookupRowIndex(null);
+  };
+
   const updateProcessLine = (rowIndex, field, value) => {
     setBOMProcessRows((previous) =>
       previous.map((row, index) =>
@@ -388,6 +514,9 @@ const ProdBOMProcess = () => {
   };
 
   const resetBOMProcess = () => {
+    setShowBOMLookup(false);
+    setShowProcessLookup(false);
+    setProcessLookupRowIndex(null);
     setBOMProcessForm(initialBOMProcessForm);
     setBOMProcessRows([
       emptyProcessLine(1),
@@ -395,6 +524,139 @@ const ProdBOMProcess = () => {
       emptyProcessLine(3),
     ]);
     setIsBOMProcessEditing(false);
+  };
+
+  const handleEditBOMProcess = async (row) => {
+    const bomProcessId = row?.bomProcessId || "";
+    const bomId = row?.bomId || "";
+    if (!bomProcessId && !bomId) {
+      useSwalErrorAlert(
+        "Unable to Edit",
+        "The selected BOM Process does not have a valid reference.",
+      );
+      return;
+    }
+
+    try {
+      setIsChecking(true);
+      const response = await apiClient.post("/prodBOMProcess/getBOMProcess", {
+        json_data: { bomProcessId, bomId },
+      });
+      const records = parseResult(response);
+      const record = records?.[0];
+
+      if (!record) {
+        useSwalErrorAlert(
+          "Record Not Found",
+          "The selected BOM Process could not be retrieved.",
+        );
+        return;
+      }
+
+      const detailRows = Array.isArray(record.dt1)
+        ? record.dt1
+        : record.dt1
+          ? JSON.parse(record.dt1)
+          : [];
+
+      setBOMProcessForm({
+        bomProcessId: record.bomProcessId || "",
+        bomId: record.bomId || "",
+        processEffectivityDate: formatDate(record.processEffectivityDate),
+        bomCode: record.bomCode || "",
+        bomEffectivityDate: formatDate(record.bomEffectivityDate),
+        itemType: record.itemType || "",
+        itemCode: record.itemCode || "",
+        itemDescription: record.itemDescription || "",
+        uom: record.uom || "",
+        quantity: Number(record.quantity || 0).toFixed(6),
+        remarks: record.remarks || "",
+      });
+      setRegistrationInfo({
+        registeredBy: record.registeredBy || "",
+        registeredDate: record.registeredDate || "",
+        lastUpdatedBy: record.lastUpdatedBy || "",
+        lastUpdatedDate: record.lastUpdatedDate || "",
+      });
+      setBOMProcessRows(
+        detailRows.length
+          ? renumberProcessLines(
+              detailRows.map((detail) => ({
+                lineNo: detail.lineNo,
+                processCode: detail.processCode || "",
+                processName: detail.processName || "",
+                cycleTime: Number(detail.cycleTime || 0).toFixed(2),
+              })),
+            )
+          : [emptyProcessLine(1)],
+      );
+      setIsBOMProcessEditing(true);
+      setActiveTab("process");
+      requestAnimationFrame(() =>
+        formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    } catch (error) {
+      useSwalErrorAlertAPI("Unable to Edit BOM Process", error);
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const handleSaveBOMProcess = () => {
+    if (!bomProcessForm.bomId || !bomProcessForm.processEffectivityDate) {
+      useSwalErrorAlert(
+        "Required Fields",
+        "BOM Code and Process Effectivity Date are required.",
+      );
+      return;
+    }
+
+    const incompleteRows = bomProcessRows.filter((row) => {
+      const processCode = String(row.processCode || "").trim();
+      const cycleTime = Number(row.cycleTime || 0);
+      return (processCode && cycleTime <= 0) || (!processCode && cycleTime > 0);
+    });
+    const detailRows = bomProcessRows.filter(
+      (row) => String(row.processCode || "").trim() !== "",
+    );
+
+    if (!detailRows.length || incompleteRows.length) {
+      useSwalErrorAlert(
+        "Incomplete Process Details",
+        "Every Process Detail must have a Process Code and a Cycle Time greater than zero.",
+      );
+      return;
+    }
+
+    const processCodes = detailRows.map((row) =>
+      String(row.processCode || "").trim().toUpperCase(),
+    );
+    const duplicateCode = processCodes.find(
+      (code, index) => processCodes.indexOf(code) !== index,
+    );
+    if (duplicateCode) {
+      useSwalErrorAlert(
+        "Duplicate Process Code",
+        `${duplicateCode} already exists in Process Details.`,
+      );
+      return;
+    }
+
+    saveBOMProcessMutation.mutate({
+      json_data: {
+        bomProcessId: bomProcessForm.bomProcessId || "",
+        bomId: bomProcessForm.bomId,
+        bomCode: bomProcessForm.bomCode,
+        processEffectivityDate: bomProcessForm.processEffectivityDate,
+        remarks: bomProcessForm.remarks || "",
+        userCode,
+        dt1: detailRows.map((row, index) => ({
+          lineNo: index + 1,
+          processCode: String(row.processCode || "").trim().toUpperCase(),
+          cycleTime: Number(row.cycleTime || 0),
+        })),
+      },
+    });
   };
 
   const bomProcessDetailRows = useMemo(
@@ -467,6 +729,7 @@ const ProdBOMProcess = () => {
             />
             <FontAwesomeIcon
               icon={faMagnifyingGlass}
+              onClick={() => openProcessLookup(row.rowIndex)}
               className={`absolute right-2 text-xs ${
                 isBOMProcessEditing
                   ? "cursor-pointer text-blue-600 hover:text-blue-900"
@@ -498,13 +761,22 @@ const ProdBOMProcess = () => {
         minWidth: 140,
         requiredVisible: true,
         renderType: "number",
-        roundingOff: 6,
+        roundingOff: 2,
         render: (row) => (
           <input
+            ref={(element) => {
+              cycleTimeRefs.current[row.rowIndex] = element;
+            }}
             value={row.cycleTime || ""}
             disabled={!isBOMProcessEditing}
             inputMode="decimal"
-            onFocus={(event) => event.target.select()}
+            min="0"
+            onFocus={(event) => {
+              if (Number(event.target.value || 0) === 0) {
+                updateProcessLine(row.rowIndex, "cycleTime", "");
+              }
+              requestAnimationFrame(() => event.target.select());
+            }}
             onChange={(event) => {
               let value = event.target.value.replace(/[^0-9.]/g, "");
               const parts = value.split(".");
@@ -515,9 +787,27 @@ const ProdBOMProcess = () => {
               updateProcessLine(
                 row.rowIndex,
                 "cycleTime",
-                Number(event.target.value || 0).toFixed(6),
+                Math.max(0, Number(event.target.value || 0)).toFixed(2),
               )
             }
+            onKeyDown={(event) => {
+              if (["-", "+", "e", "E"].includes(event.key)) {
+                event.preventDefault();
+                return;
+              }
+
+              if (event.key === "Enter") {
+                event.preventDefault();
+                const formattedValue = Math.max(
+                  0,
+                  Number(event.currentTarget.value || 0),
+                ).toFixed(2);
+                updateProcessLine(row.rowIndex, "cycleTime", formattedValue);
+                requestAnimationFrame(() => {
+                  cycleTimeRefs.current[row.rowIndex + 1]?.focus();
+                });
+              }
+            }}
             className="global-tran-td-inputclass-ui !h-7 w-full text-right text-[11px]"
           />
         ),
@@ -528,6 +818,31 @@ const ProdBOMProcess = () => {
 
   const bomProcessSummaryColumns = useMemo(
     () => [
+      {
+        key: "__actions",
+        label: "Actions",
+        width: 80,
+        minWidth: 80,
+        maxWidth: 80,
+        sortable: false,
+        filterable: false,
+        requiredVisible: true,
+        render: (row) => (
+          <div className="flex w-full items-center justify-center">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleEditBOMProcess(row);
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded border border-blue-100 bg-blue-50 text-xs text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white"
+              title="Edit BOM Process"
+            >
+              <FontAwesomeIcon icon={faPenToSquare} />
+            </button>
+          </div>
+        ),
+      },
       {
         key: "bomCode",
         label: "BOM Code",
@@ -600,9 +915,14 @@ const ProdBOMProcess = () => {
         sortable: true,
         width: 145,
         renderType: "number",
-        roundingOff: 6,
+        roundingOff: 2,
         render: (row) => (
-          <div className="text-right">{formatQuantity(row.totalCycleTime)}</div>
+          <div className="text-right">
+            {Number(row.totalCycleTime || 0).toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </div>
         ),
       },
       {
@@ -639,7 +959,8 @@ const ProdBOMProcess = () => {
     isSummaryLoading ||
     isChecking ||
     saveMutation.isPending ||
-    deleteMutation.isPending;
+    deleteMutation.isPending ||
+    saveBOMProcessMutation.isPending;
 
   return (
     <div className="global-ref-main-div-ui">
@@ -729,8 +1050,13 @@ const ProdBOMProcess = () => {
                       key: "save-process-routing",
                       label: "Save",
                       icon: faSave,
-                      disabled: true,
-                      title: "Backend integration will be added in the next phase.",
+                      onClick: handleSaveBOMProcess,
+                      disabled:
+                        !isBOMProcessEditing ||
+                        !bomProcessRows.some((row) =>
+                          String(row.processCode || "").trim(),
+                        ) ||
+                        saveBOMProcessMutation.isPending,
                     },
                     {
                       key: "reset-process-routing",
@@ -820,14 +1146,17 @@ const ProdBOMProcess = () => {
             </div>
           </div>
 
-          <div className="global-tran-table-main-div-ui mt-0 flex flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          <div className="global-tran-table-main-div-ui mt-0 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 xl:self-start">
             <SearchGlobalReferenceTable
               docType="Bill of Materials Process"
+              className="!h-auto !min-h-0 [&_.global-tran-table-main-sub-div-ui]:!min-h-0 [&_.custom-scrollbar]:max-h-[440px]"
               columns={columns}
               data={processList}
               isLoading={isListLoading}
               onRowDoubleClick={handleEdit}
               itemsPerPage={50}
+              adaptiveHeight
+              showEmptyPagination
               autoFillGrid
               onRefresh={() =>
                 queryClient.invalidateQueries({ queryKey: ["prodBOMProcessList"] })
@@ -865,9 +1194,7 @@ const ProdBOMProcess = () => {
                       className="peer flex-grow cursor-pointer border-none bg-transparent px-3 focus:outline-none"
                       value={bomProcessForm.processEffectivityDate}
                       disabled={!isBOMProcessEditing}
-                      onChange={(value) =>
-                        updateBOMProcessForm({ processEffectivityDate: value })
-                      }
+                      updateState={updateBOMProcessForm}
                     />
                   </div>
                   <label
@@ -907,7 +1234,7 @@ const ProdBOMProcess = () => {
                   required
                   value={bomProcessForm.bomCode}
                   disabled={!isBOMProcessEditing}
-                  onLookup={() => {}}
+                  onLookup={() => setShowBOMLookup(true)}
                 />
 
                 <FieldRenderer
@@ -935,6 +1262,7 @@ const ProdBOMProcess = () => {
                       className="peer flex-grow border-none bg-transparent px-3 focus:outline-none"
                       value={bomProcessForm.bomEffectivityDate}
                       disabled
+                      updateState={updateBOMProcessForm}
                     />
                   </div>
                   <label
@@ -984,7 +1312,7 @@ const ProdBOMProcess = () => {
             </div>
           </div>
 
-          <div className="global-tran-tab-div-ui">
+          <div className="global-tran-tab-div-ui !pb-2">
             <div className="global-tran-tab-nav-ui">
               <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
                 Process Details
@@ -1004,13 +1332,13 @@ const ProdBOMProcess = () => {
               />
             </div>
 
-            <div className="global-tran-tab-footer-main-div-ui">
+            <div className="global-tran-tab-footer-main-div-ui !mt-3">
               <div className="global-tran-tab-footer-button-div-ui">
                 <button
                   type="button"
-                  disabled={!isBOMProcessEditing}
-                  onClick={() => addProcessLine()}
-                  className="global-tran-tab-footer-button-add-ui disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => openProcessLookup(null)}
+                  className="global-tran-tab-footer-button-add-ui"
+                  style={{ visibility: isBOMProcessEditing ? "visible" : "hidden" }}
                 >
                   <FontAwesomeIcon icon={faPlus} className="mr-2" />
                   Add Process
@@ -1035,6 +1363,7 @@ const ProdBOMProcess = () => {
                 data={bomProcessSummary}
                 isLoading={isSummaryLoading}
                 itemsPerPage={100}
+                showEmptyPagination
                 showFilters
                 autoFit={false}
                 autoFillGrid
@@ -1045,6 +1374,20 @@ const ProdBOMProcess = () => {
         </div>
         )}
       </div>
+
+      <BOMReferenceLookupModal
+        isOpen={showBOMLookup}
+        onClose={handleBOMSelect}
+        title="Select BOM"
+        endpoint="/prodBOMProcess/lookupBOM"
+      />
+
+      <SearchBOMProcessRef
+        isOpen={showProcessLookup}
+        onClose={handleProcessSelect}
+        title="Select BOM Process"
+        enableMultiSelect={processLookupRowIndex === null}
+      />
     </div>
   );
 };

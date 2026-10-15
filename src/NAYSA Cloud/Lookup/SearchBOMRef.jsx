@@ -66,12 +66,15 @@ const BOMReferenceLookupModal = ({
   isOpen,
   onClose,
   title = "Select BOM Reference",
+  endpoint = "/lookupBOM",
+  params = {},
 }) => {
   const [filters, setFilters] = useState(emptyFilters);
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
 
   const hasActiveFilters = Object.values(filters).some((value) => value !== "");
   const debouncedFilters = useDebounce(filters, 300);
+  const serializedParams = JSON.stringify(params || {});
 
   const resetFilters = () => setFilters(emptyFilters);
 
@@ -81,9 +84,9 @@ const BOMReferenceLookupModal = ({
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ["lookupBOM"],
+    queryKey: ["lookupBOM", endpoint, serializedParams],
     queryFn: async () => {
-      const { data: result } = await apiClient.get("/lookupBOM", {
+      const { data: result } = await apiClient.get(endpoint, {
         params: {
           PARAMS: JSON.stringify({
             json_data: {
@@ -97,13 +100,24 @@ const BOMReferenceLookupModal = ({
               wcCode: "",
               wcName: "",
               routeCode: "",
+              ...(params || {}),
             },
           }),
         },
       });
 
       const rawData = result?.data?.[0]?.result || "[]";
-      return Array.isArray(rawData) ? rawData : JSON.parse(rawData);
+      const rows = Array.isArray(rawData) ? rawData : JSON.parse(rawData);
+      return rows.map((row) => ({
+        ...row,
+        invType: row.invType ?? row.itemType ?? "",
+        itemCode: row.itemCode ?? "",
+        itemName: row.itemName ?? row.itemDescription ?? "",
+        uomCode: row.uomCode ?? row.uom ?? "",
+        bomCode: row.bomCode ?? "",
+        bomDate: row.bomDate ?? row.bomEffectivityDate ?? "",
+        bomQty: row.bomQty ?? row.quantity ?? 0,
+      }));
     },
     enabled: isOpen,
     staleTime: 1000 * 60 * 5,

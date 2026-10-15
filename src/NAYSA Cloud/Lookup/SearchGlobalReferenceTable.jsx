@@ -63,6 +63,7 @@ const SearchGlobalReferenceTable = forwardRef(
       data = [],
       itemsPerPage = 50,
       showPagination = true,
+      showEmptyPagination = false,
       showFilters = true,
       showGlobalSearch = true,
       showGroupBy = true,
@@ -80,7 +81,10 @@ const SearchGlobalReferenceTable = forwardRef(
       onRefresh,
       tableSize = "Full",
       onMobileRowOpen,
+      getRowClassName,
+      getCellClassName,
       autoFillGrid: autoFillGridProp = undefined,
+      adaptiveHeight = false,
     },
     ref,
   ) => {
@@ -1321,7 +1325,9 @@ const SearchGlobalReferenceTable = forwardRef(
     return (
       <div
         className={[
-          "global-tran-table-main-div-ui flex flex-col flex-1 min-h-[300px] overflow-hidden",
+          `global-tran-table-main-div-ui flex flex-col overflow-hidden ${
+            adaptiveHeight ? "flex-none min-h-0" : "flex-1 min-h-[300px]"
+          }`,
           className,
         ].join(" ")}
       >
@@ -1592,7 +1598,11 @@ const SearchGlobalReferenceTable = forwardRef(
           </div>
         )}
 
-        <div className="global-tran-table-main-sub-div-ui flex flex-col flex-1 min-h-[400px] relative">
+        <div
+          className={`global-tran-table-main-sub-div-ui flex flex-col relative ${
+            adaptiveHeight ? "flex-none min-h-0" : "flex-1 min-h-[400px]"
+          }`}
+        >
           {isInitialLoading ? (
             <TableLoader />
           ) : useCardView ? (
@@ -1602,7 +1612,7 @@ const SearchGlobalReferenceTable = forwardRef(
           ) : (
             <div
               ref={scrollRef}
-              className={`flex-1 border border-gray-200 dark:border-slate-700 rounded-sm relative custom-scrollbar ${
+              className={`${adaptiveHeight ? "flex-none max-h-[480px]" : "flex-1"} border border-gray-200 dark:border-slate-700 rounded-sm relative custom-scrollbar ${
                 autoFillGrid
                   ? "overflow-x-auto overflow-y-auto"
                   : "overflow-auto"
@@ -1618,6 +1628,7 @@ const SearchGlobalReferenceTable = forwardRef(
                     ? "table-fixed w-full min-w-full"
                     : "table-auto min-w-max w-max"
                 }`}
+                style={adaptiveHeight ? { height: "1px" } : undefined}
               >
                 <thead className="global-tran-thead-div-ui text-[11px] sticky top-0 z-20 bg-white dark:bg-slate-800 shadow-sm">
                   <tr>
@@ -1767,7 +1778,9 @@ const SearchGlobalReferenceTable = forwardRef(
                       return (
                         <tr
                           key={row.__idx ?? idx}
-                          className="global-tran-tr-ui hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer border-b border-gray-100 dark:border-slate-700"
+                          className={`global-tran-tr-ui hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer border-b border-gray-100 dark:border-slate-700 ${
+                            typeof getRowClassName === "function" ? getRowClassName(row) : ""
+                          }`}
                           onClick={() => {
                             if (onRowClick) onRowClick(row);
                             if (isMobile) handleRowOpen(row);
@@ -1785,7 +1798,9 @@ const SearchGlobalReferenceTable = forwardRef(
                                 key={col.key}
                                 className={`global-tran-td-ui py-[3px] px-2 align-center bg-white dark:bg-slate-800 ${
                                   isStickyLeft ? "sticky z-10 shadow-[-1px_0_0_0_rgba(229,231,235,1)]" : ""
-                                } ${col.className || ""}`}
+                                } ${col.className || ""} ${
+                                  typeof getCellClassName === "function" ? getCellClassName(row, col) : ""
+                                }`}
                                 style={{
                                   ...getWidthStyle(col, manualResizedCols[col.key]),
                                   left: isStickyLeft ? leftOffset : undefined,
@@ -1807,12 +1822,12 @@ const SearchGlobalReferenceTable = forwardRef(
           )}
         </div>
 
-        {hasDataFiltered && !isMobileView && showPagination && (
+        {(hasDataFiltered || showEmptyPagination) && !isMobileView && showPagination && (
           <div className="border-t dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 flex items-center justify-center lg:justify-start gap-2">
               <div>
-                Showing <span className="font-semibold text-gray-900 dark:text-slate-100">{effectiveRowsPerPage > 0 ? (safePage - 1) * effectiveRowsPerPage + 1 : 1}</span> –{" "}
-                <span className="font-semibold text-gray-900">{effectiveRowsPerPage > 0 ? Math.min(safePage * effectiveRowsPerPage, totalItems) : totalItems}</span> of{" "}
+                Showing <span className="font-semibold text-gray-900 dark:text-slate-100">{totalItems === 0 ? 0 : effectiveRowsPerPage > 0 ? (safePage - 1) * effectiveRowsPerPage + 1 : 1}</span> –{" "}
+                <span className="font-semibold text-gray-900">{totalItems === 0 ? 0 : effectiveRowsPerPage > 0 ? Math.min(safePage * effectiveRowsPerPage, totalItems) : totalItems}</span> of{" "}
                 <span className="font-semibold text-gray-900">{totalItems}</span>
               </div>
               {isFetching && (
