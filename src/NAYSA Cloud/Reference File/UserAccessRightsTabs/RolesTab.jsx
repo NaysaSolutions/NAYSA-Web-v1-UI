@@ -5,6 +5,7 @@ import React, {
   useImperativeHandle,
   useMemo,
   useCallback,
+  useRef,
 } from "react";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -23,6 +24,7 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const getUserType = (row = {}) =>
   String(
@@ -83,6 +85,8 @@ const RolesTab = forwardRef(
     const [viewingRoles, setViewingRoles] = useState(false);
     const [usersLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const savingRef = useRef(false);
+    const [savingMessage, setSavingMessage] = useState("");
     const [mobileStep, setMobileStep] = useState("users");
 
     /* ================= FILTER ACTIVE ROLES ================= */
@@ -212,8 +216,11 @@ const RolesTab = forwardRef(
       resetState();
     }, [resetState]);
 
+    // Avoid requests for assignments that already exist and prevent double submits.
+    // A backend rate limit cannot be bypassed in JSX; if HTTP 429 occurs,
+    // stop the batch and let the user try again after the server's wait time.
     const handleApplyRoles = useCallback(async () => {
-      if (saving) return;
+      if (savingRef.current) return;
 
       if (selectedUsers.length === 0) {
         await useSwalErrorAlert(
@@ -223,113 +230,92 @@ const RolesTab = forwardRef(
         return;
       }
 
-      setSaving(true);
+      const activeRoleCodes = new Set(activeRoles.map((r) => r.roleCode));
+      const rolesToApply = [...new Set(selectedRoles)].filter((code) => activeRoleCodes.has(code));
+      const desired = new Set(rolesToApply);
+      const selected = new Set(selectedUsers);
 
-      try {
-        const rolesToApply = [...selectedRoles];
-        const rolesToRemove = [];
-
-        selectedUsers.forEach((userCode) => {
-          // Loop through ALL roles (the full list) to identify assignments 
-          // that must be removed because they are either unselected OR now inactive.
-          roles.forEach((role) => {
-            const combo = `${userCode}-${role.roleCode}`;
-
-            if (appliedRolesSet.has(combo)) {
-              // Remove if it's not in the new selection OR if the role itself is no longer active
-              if (!rolesToApply.includes(role.roleCode) || role.active !== "Y") {
-                rolesToRemove.push({
-                  userCode,
-                  roleCode: role.roleCode,
-                });
-              }
-            }
-          });
-        });
-
-        // 1. Save new role assignments
-        if (rolesToApply.length > 0) {
-          const payload = {
-            dt1: rolesToApply.map((code) => ({
-              roleCode: code || "",
-            })),
-            dt2: selectedUsers.map((code) => ({
-              userCode: code || "",
-            })),
-          };
-
-          const { data: res } = await apiClient.post("/UpsertUserRole", {
-            json_data: payload,
-          });
-
-          if (!res?.success) {
-            await useSwalErrorAlert(
-              "Error!",
-              res?.message || "Something went wrong while applying roles."
-            );
-            return;
+      const rolesToRemove = [];
+      const existingForSelectedUsers = new Set();
+      for (const role of roles) {
+        for (const userCode of selectedUsers) {
+          const key = `${userCode}-${role.roleCode}`;
+          if (!appliedRolesSet.has(key)) continue;
+          existingForSelectedUsers.add(key);
+          if (!desired.has(role.roleCode)) {
+            rolesToRemove.push({ userCode, roleCode: role.roleCode });
           }
         }
-
-        // 2. Delete assignments for unselected or inactive roles
-        for (const item of rolesToRemove) {
-          const payload = {
-            dt1: [{ roleCode: item.roleCode }],
-            dt2: [{ userCode: item.userCode }],
-          };
-
-          const { data: delRes } = await apiClient.post("/deleteUserRole", {
-            json_data: payload,
-          });
-
-          if (!delRes?.success) {
-            await useSwalErrorAlert(
-              "Error!",
-              delRes?.message || "Something went wrong while removing roles."
-            );
-            return;
-          }
-        }
-
-        // 3. Update local state to reflect only active, selected roles
-        const newAppliedCombinations = new Set(appliedRolesSet);
-
-        selectedUsers.forEach((userCode) => {
-          roles.forEach((role) => {
-            const combo = `${userCode}-${role.roleCode}`;
-            if (rolesToApply.includes(role.roleCode) && role.active === "Y") {
-              newAppliedCombinations.add(combo);
-            } else {
-              newAppliedCombinations.delete(combo);
-            }
-          });
-        });
-
-        setAppliedUserRoles(newAppliedCombinations);
-        await fetchUserRoles?.(selectedUsers);
-
-        await useSwalSuccessAlert(
-          "Success!",
-          "Users-Role updated successfully!"
-        );
-      } catch (e) {
-        console.error("handleApplyRoles error:", e);
-        await useSwalErrorAlert(
-          "Error!",
-          e?.response?.data?.message || "Error saving role assignment."
-        );
-      } finally {
-        setSaving(false);
       }
-    }, [
-      saving,
-      selectedUsers,
-      selectedRoles,
-      roles, // Full list is required here for the cleanup logic
-      appliedRolesSet,
-      setAppliedUserRoles,
-      fetchUserRoles,
-    ]);
+
+      // Existing UpsertUserRole replaces assignments for the target users.
+      // Keep the original payload contract but skip it when nothing changed.
+      const hasAdditions = selectedUsers.some((userCode) =>
+        rolesToApply.some((roleCode) => !existingForSelectedUsers.has(`${userCode}-${roleCode}`))
+      );
+      const hasChanges = hasAdditions || rolesToRemove.length > 0;
+      if (!hasChanges) {
+        await useSwalSuccessAlert("No Changes", "The selected users already have these role assignments.");
+        return;
+      }
+
+      savingRef.current = true;
+      setSaving(true);
+      let writesCompleted = 0;
+      try {
+        // If the backend's UpsertUserRole replaces role assignments as in
+        // sproc_PHP_AccessRights, a single call handles additions and removals.
+        // Sending role removals again afterwards creates avoidable 429 errors.
+        setSavingMessage("Updating selected users' roles...");
+        const payload = {
+          dt1: rolesToApply.map((roleCode) => ({ roleCode })),
+          dt2: selectedUsers.map((userCode) => ({ userCode })),
+        };
+
+        // For an empty desired role list, UpsertUserRole must still be called
+        // because its SQL procedure deletes existing assignments for these users.
+        const { data: res } = await apiClient.post("/UpsertUserRole", {
+          json_data: payload,
+        });
+        if (res?.success !== true) {
+          throw new Error(res?.message || "Unable to apply role assignments.");
+        }
+        writesCompleted = 1;
+
+        // Reflect the complete replacement for only the selected users.
+        const next = new Set(
+          [...appliedRolesSet].filter((key) =>
+            !selectedUsers.some((userCode) => key.startsWith(`${userCode}-`))
+          )
+        );
+        for (const userCode of selectedUsers) {
+          for (const roleCode of rolesToApply) next.add(`${userCode}-${roleCode}`);
+        }
+        setAppliedUserRoles(next);
+        setSavingMessage("Refreshing role assignments...");
+        if (fetchUserRoles) await fetchUserRoles(selectedUsers);
+
+        await useSwalSuccessAlert("Success!", "User role assignments were updated successfully.");
+      } catch (error) {
+        console.error("handleApplyRoles error:", error);
+        const isRateLimited = error?.response?.status === 429;
+        const retryAfter = error?.response?.headers?.["retry-after"];
+        const rateLimitMessage = retryAfter
+          ? `Too many requests. Please wait ${retryAfter} seconds before trying again.`
+          : "Too many requests. Please wait for the server's rate limit to reset before trying again.";
+        // If a write succeeded but refresh failed, don't claim the save failed.
+        const message = isRateLimited
+          ? rateLimitMessage
+          : writesCompleted
+          ? "Roles were saved, but refreshing the list failed. Reload the page to verify."
+          : error?.response?.data?.message || error?.message || "Error saving role assignments.";
+        await useSwalErrorAlert(isRateLimited ? "Too Many Attempts" : "Role Update Error", message);
+      } finally {
+        setSavingMessage("");
+        setSaving(false);
+        savingRef.current = false;
+      }
+    }, [selectedUsers, selectedRoles, roles, activeRoles, appliedRolesSet, setAppliedUserRoles, fetchUserRoles]);
 
     useImperativeHandle(ref, () => ({
       viewRole: handleViewRole,
@@ -441,6 +427,7 @@ const RolesTab = forwardRef(
 
     return (
       <div className="w-full md:pt-10">
+        {saving && <LoadingSpinner />}
         <div className="flex flex-col md:flex-row gap-4">
           {/* USERS PANEL */}
           <div
@@ -633,7 +620,7 @@ const RolesTab = forwardRef(
         {saving && (
           <div className="mt-2 bg-amber-50 text-amber-700 p-2 rounded text-xs flex items-center gap-2">
             <FontAwesomeIcon icon={faSpinner} spin />
-            Saving role assignments...
+            {savingMessage || "Saving role assignments..."}
           </div>
         )}
       </div>

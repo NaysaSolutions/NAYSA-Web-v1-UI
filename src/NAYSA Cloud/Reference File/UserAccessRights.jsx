@@ -41,7 +41,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import UsersTab from "./UserAccessRightsTabs/UsersTab";
 import RolesTab from "./UserAccessRightsTabs/RolesTab";
 import RoleAccessTab from "./UserAccessRightsTabs/RoleAccessTab";
-import UserRoleTab from "./UserAccessRightsTabs/UserRoleTab";
+// import UserRoleTab from "./UserAccessRightsTabs/UserRoleTab";
 
 const getUserType = (row = {}) =>
   String(
@@ -118,6 +118,10 @@ const UserAccessRights = () => {
 
   // FIX #4: Guards to prevent re-fetching already-loaded data on tab switches
   const usersFetched = useRef(false);
+  const usersRequestRef = useRef(null);
+  const userRolesRequestRef = useRef(null);
+  const userRolesFetched = useRef(false);
+  const [userRolesLoading, setUserRolesLoading] = useState(false);
 
   // ─── Pending add action ──────────────────────────────────────────────────
   useEffect(() => {
@@ -164,153 +168,114 @@ const UserAccessRights = () => {
   }, []); // no deps — only uses stable refs (apiClient, setRoles)
 
   // FIX #1: Also wrapped in useCallback for the same reason
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(() => {
+    if (usersRequestRef.current) return usersRequestRef.current;
     setLoading(true);
-    try {
-      const response = await apiClient.get("/load", {
-        params: { Status: "Active" },
-        timeout: 60000,
-      });
-      const { data } = response;
-
-      let userData = [];
-      if (Array.isArray(data?.data) && data.data[0]?.result) {
-        try {
-          const resultData =
-            typeof data.data[0].result === "string"
-              ? JSON.parse(data.data[0].result)
-              : data.data[0].result;
-
-          if (Array.isArray(resultData)) {
-            userData = resultData.filter(
-              (u) =>
-                (u.userCode || u.USER_CODE || u.userName || u.USER_NAME) &&
-                isRegularUser(u)
+    const request = (async () => {
+      try {
+        const { data } = await apiClient.get("/load", {
+          params: { Status: "Active" }, timeout: 60000,
+        });
+        let userData = [];
+        if (Array.isArray(data?.data) && data.data[0]?.result) {
+          const raw = data.data[0].result;
+          const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+          if (Array.isArray(parsed)) {
+            userData = parsed.filter((u) =>
+              (u.userCode || u.USER_CODE || u.userName || u.USER_NAME) && isRegularUser(u)
             );
           }
-        } catch (parseError) {
-          console.error("Error parsing user data:", parseError);
         }
+        setUsers(userData);
+        usersFetched.current = true;
+        return userData;
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        await Swal.fire({
+          icon: "error", title: "Unable to load users",
+          text: error?.code === "ECONNABORTED"
+            ? "Loading users timed out. Please try opening the tab again."
+            : error?.response?.data?.message || "Unable to load users.",
+        });
+        return [];
+      } finally {
+        setLoading(false);
+        usersRequestRef.current = null;
       }
+    })();
+    usersRequestRef.current = request;
+    return request;
+  }, []);
 
-      setUsers(userData);
-
-      if (userData.length === 0) {
-        await useSwalInfoAlert(
-          "No Regular Users",
-          "No active regular users found in the system."
+  // Fetch assignments once; the controller's unfiltered endpoint directly
+  // queries USERROLE_REF. No long query-string of hundreds of users is needed.
+  // Refreshing after Apply calls the same function explicitly.
+  const fetchUserRoles = useCallback(() => {
+    if (userRolesRequestRef.current) return userRolesRequestRef.current;
+    setUserRolesLoading(true);
+    const request = (async () => {
+      try {
+        const { data } = await apiClient.get("/getUserRoles", {
+          timeout: 60000,
+        });
+        if (data?.success === false) {
+          throw new Error(data?.message || "Unable to retrieve user roles.");
+        }
+        let rows = data?.data ?? [];
+        if (Array.isArray(rows) && rows.length > 0 && (rows[0]?.result || rows[0]?.RESULT)) {
+          const raw = rows[0].result ?? rows[0].RESULT;
+          rows = typeof raw === "string" ? JSON.parse(raw) : raw;
+        }
+        const next = new Set(
+          (Array.isArray(rows) ? rows : []).map((r) => {
+            const u = String(r.userCode ?? r.USER_CODE ?? r.user_code ?? "").trim().toUpperCase();
+            const role = String(r.roleCode ?? r.ROLE_CODE ?? r.role_code ?? "").trim().toUpperCase();
+            return u && role ? `${u}-${role}` : null;
+          }).filter(Boolean)
         );
+        setAppliedUserRoles(next);
+        userRolesFetched.current = true;
+        return next;
+      } catch (error) {
+        console.error("fetchUserRoles failed", error);
+        // Do not erase previously loaded assignments on timeout or 429.
+        const tooMany = error?.response?.status === 429;
+        await Swal.fire({
+          icon: "warning",
+          title: tooMany ? "Too many requests" : "Unable to load user roles",
+          text: tooMany
+            ? "The server rate limit was reached. Wait before trying again."
+            : error?.code === "ECONNABORTED"
+              ? "The request exceeded 60 seconds. Check Laravel logs and SQL Server performance."
+              : error?.response?.data?.message || error?.message || "Unable to retrieve assignments.",
+        });
+        return null;
+      } finally {
+        setUserRolesLoading(false);
+        userRolesRequestRef.current = null;
       }
-
-      return userData;
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      setUsers([]);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, []); // no deps — only uses stable refs
-
-  const fetchUserRoles = async (userCodes = []) => {
-    try {
-      if (!Array.isArray(userCodes) || userCodes.length === 0) {
-        setAppliedUserRoles(new Set());
-        return new Set();
-      }
-
-      const cleanUserCodes = userCodes
-        .map((x) => String(x || "").trim())
-        .filter(Boolean);
-
-      const { data } = await apiClient.get("/getUserRoles", {
-        params: { userCodes: cleanUserCodes.join(",") },
-        timeout: 60000,
-      });
-
-      let rows = data?.data ?? [];
-
-      // If backend returns SQL JSON result format
-      if (
-        Array.isArray(rows) &&
-        rows.length > 0 &&
-        (rows[0]?.result || rows[0]?.RESULT)
-      ) {
-        const raw = rows[0]?.result || rows[0]?.RESULT || "[]";
-        rows = typeof raw === "string" ? JSON.parse(raw) : raw;
-      }
-
-      const s = new Set(
-        (Array.isArray(rows) ? rows : [])
-          .map((r) => {
-            const u =
-              r.userCode ??
-              r.USER_CODE ??
-              r.user_code ??
-              "";
-
-            const rc =
-              r.roleCode ??
-              r.ROLE_CODE ??
-              r.role_code ??
-              "";
-
-            const cleanUser = String(u || "").trim().toUpperCase();
-            const cleanRole = String(rc || "").trim().toUpperCase();
-
-            return cleanUser && cleanRole ? `${cleanUser}-${cleanRole}` : null;
-          })
-          .filter(Boolean)
-      );
-
-      setAppliedUserRoles(s);
-      return s;
-    } catch (e) {
-      console.error("fetchUserRoles failed", e);
-      setAppliedUserRoles(new Set());
-      return new Set();
-    }
-  };
+    })();
+    userRolesRequestRef.current = request;
+    return request;
+  }, []);
 
   // ─── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
     fetchRoles();
   }, [fetchRoles]);
 
-  // ─── Tab-switch data loading ─────────────────────────────────────────────
-  // FIX #4: Skip fetching users/userRoles if data is already loaded.
-  // Previously every tab switch would re-fetch users from scratch, stacking
-  // concurrent requests and slowing the DB connection pool.
+  // Avoid repeated calls on render / tab switches. The ref guards also prevent
+  // duplicate requests in React StrictMode and while another load is running.
   useEffect(() => {
+    if (activeTab !== "roleUserMatch" && activeTab !== "userAccess") return;
     const loadTabData = async () => {
-      if (activeTab === "roleUserMatch" || activeTab === "userAccess") {
-
-        // If users are already loaded, skip re-fetching them
-        if (usersFetched.current && users.length > 0) {
-          if (activeTab === "roleUserMatch") {
-            const userCodes = users
-              .map((u) => u.userCode || u.USER_CODE)
-              .filter(Boolean);
-            await fetchUserRoles(userCodes);
-          }
-          return;
-        }
-
-        // First time loading users
-        const loadedUsers = await fetchUsers();
-        usersFetched.current = true;
-
-        if (activeTab === "roleUserMatch" && loadedUsers.length > 0) {
-          const userCodes = loadedUsers
-            .map((u) => u.userCode || u.USER_CODE)
-            .filter(Boolean);
-          await fetchUserRoles(userCodes);
-        }
+      if (!usersFetched.current) await fetchUsers();
+      if (activeTab === "roleUserMatch" && !userRolesFetched.current) {
+        await fetchUserRoles();
       }
     };
-
-    loadTabData();
-  }, [activeTab, fetchUsers, fetchUserRoles, users]);
+    void loadTabData();
+  }, [activeTab, fetchUsers, fetchUserRoles]);
 
   // ─── Click-away for dropdowns ────────────────────────────────────────────
   useEffect(() => {
@@ -799,7 +764,7 @@ const UserAccessRights = () => {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="global-ref-main-div-ui">
-      {(loading || saving || showSpinner) && <LoadingSpinner />}
+      {(loading || saving || userRolesLoading || showSpinner) && <LoadingSpinner />}
 
       {/* ── Mobile layout ── */}
       <div className="md:hidden pt-[30px]">

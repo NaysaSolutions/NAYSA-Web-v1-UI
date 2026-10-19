@@ -16,7 +16,9 @@ import {
   useSwalSuccessAlert,
   useSwalDeleteConfirm,
   useSwalDeleteRecord,
-} from "@/NAYSA Cloud/Global/behavior";
+  useSwalErrorAlertAPI,
+  useSwalvalidateRequiredFields,
+} from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
@@ -50,6 +52,13 @@ const DEFAULT_FORM = {
   lastUpdatedBy: "",
   lastUpdatedDate: "",
   __existing: false,
+};
+
+const apiErrorMessage = (error, fallback) => {
+  if (error?.response?.status === 429) return "Too many requests. Please wait before trying again.";
+  if (error?.code === "ECONNABORTED") return "The request timed out. Please try again.";
+  return error?.response?.data?.details || error?.response?.data?.message ||
+    error?.response?.data?.errormsg || error?.message || fallback;
 };
 
 const UsersTab = forwardRef(
@@ -179,18 +188,18 @@ const UsersTab = forwardRef(
       const code = String(form.roleCode || "").trim();
       if (!code || !isEditing || form.__existing) return;
 
-      const dup = await checkDuplicate(code);
-
-      if (dup) {
-        setIsDupCode(true);
-        await useSwalErrorAlert(
-          "Duplicate Entry",
-          `Role Code "${code}" already exists.`
-        );
-        setField("roleCode", "");
-        setTimeout(() => codeInputRef.current?.focus?.(), 0);
-      } else {
-        setIsDupCode(false);
+      try {
+        const dup = await checkDuplicate(code);
+        if (dup) {
+          setIsDupCode(true);
+          await useSwalErrorAlert("Duplicate Entry", `Role Code "${code}" already exists.`);
+          setField("roleCode", "");
+          setTimeout(() => codeInputRef.current?.focus?.(), 0);
+        } else {
+          setIsDupCode(false);
+        }
+      } catch (error) {
+        await useSwalErrorAlertAPI("Unable to Validate Role Code", apiErrorMessage(error, "Please try again."));
       }
     };
 
@@ -213,10 +222,7 @@ const UsersTab = forwardRef(
         const errormsg = String(row?.errormsg ?? "");
 
         if (errorcount > 0) {
-          await useSwalErrorAlert(
-            "Validation Error",
-            errormsg || "Please fill in the required field(s)."
-          );
+          await useSwalErrorAlert("Validation Error", errormsg || "Please fill in the required field(s).");
           return;
         }
 
@@ -233,17 +239,11 @@ const UsersTab = forwardRef(
         resetForm(DEFAULT_FORM);
       },
       onError: async (error) => {
-        const msg =
-          error?.response?.data?.message ||
-          error?.response?.data?.errormsg ||
-          error?.message ||
-          "Failed to save role.";
-
-        await useSwalErrorAlert("Validation Error", msg);
+        await useSwalErrorAlertAPI("Unable to Save Role", apiErrorMessage(error, "Failed to save role."));
       },
     });
 
-    const handleSave = useCallback(() => {
+    const handleSave = useCallback(async () => {
       if (!isEditing || saveMutation.isPending || isDupCode) return;
 
       const payload = {
@@ -252,6 +252,28 @@ const UsersTab = forwardRef(
         active: form.active === "N" ? "N" : "Y",
         userCode,
       };
+
+      const valid = await useSwalvalidateRequiredFields({
+        "Role Code": payload.roleCode,
+        "Role Name": payload.roleName,
+        "Status": payload.active,
+      }, "Required Fields");
+      if (!valid) return;
+
+      // A user can click Save without leaving the Role Code field.
+      if (!form.__existing) {
+        try {
+          if (await checkDuplicate(payload.roleCode)) {
+            setIsDupCode(true);
+            await useSwalErrorAlert("Duplicate Entry", `Role Code "${payload.roleCode}" already exists.`);
+            codeInputRef.current?.focus?.();
+            return;
+          }
+        } catch (error) {
+          await useSwalErrorAlertAPI("Unable to Validate Role Code", apiErrorMessage(error, "Please try again."));
+          return;
+        }
+      }
 
       saveMutation.mutate(payload);
     }, [form, isEditing, saveMutation, isDupCode, userCode]);
@@ -274,7 +296,7 @@ const UsersTab = forwardRef(
         const errormsg = String(sqlRow.errormsg ?? "");
 
         if (errorcount > 0) {
-          await useSwalErrorAlert("Error", errormsg);
+          await useSwalErrorAlert("Cannot Delete", errormsg);
           return;
         }
 
@@ -283,20 +305,14 @@ const UsersTab = forwardRef(
           await fetchRoles();
         }
 
-        await useSwalDeleteRecord("Deleted");
+        await useSwalDeleteRecord("Role Deleted", "The role was deleted successfully.");
 
         resetForm(DEFAULT_FORM);
         setIsEditing(false);
         setSelectedRow(null);
       },
       onError: async (error) => {
-        const msg =
-          error?.response?.data?.message ||
-          error?.response?.data?.errormsg ||
-          error?.message ||
-          "Failed to delete role.";
-
-        await useSwalErrorAlert("Error", msg);
+        await useSwalErrorAlertAPI("Unable to Delete Role", apiErrorMessage(error, "Failed to delete role."));
       },
     });
 
@@ -305,13 +321,17 @@ const UsersTab = forwardRef(
         const code = row?.roleCode;
         if (!code) return;
 
-        const used = await checkInUsed(code);
-
+        if (deleteMutation.isPending || saveMutation.isPending) return;
+        let used;
+        try {
+          used = await checkInUsed(code);
+        } catch (error) {
+          await useSwalErrorAlertAPI("Unable to Check Role Usage", apiErrorMessage(error, "Please try again."));
+          return;
+        }
         if (used) {
-          return useSwalErrorAlert(
-            "Cannot Delete",
-            `Role Code "${code}" is already in use.`
-          );
+          await useSwalErrorAlert("Cannot Delete", `Role Code "${code}" is already in use.`);
+          return;
         }
 
         const confirm = await useSwalDeleteConfirm(
@@ -323,7 +343,7 @@ const UsersTab = forwardRef(
 
         deleteMutation.mutate(row);
       },
-      [deleteMutation]
+      [deleteMutation, saveMutation.isPending]
     );
 
     /* ================= EDIT ================= */
@@ -338,8 +358,8 @@ const UsersTab = forwardRef(
         setForm({ ...DEFAULT_FORM, ...record, __existing: true });
         setIsEditing(true);
         setSelectedRow(row);
-      } catch {
-        await useSwalErrorAlert("Error", "Could not fetch record.");
+      } catch (error) {
+        await useSwalErrorAlertAPI("Unable to Load Role", apiErrorMessage(error, "Could not fetch record."));
       }
     };
 
