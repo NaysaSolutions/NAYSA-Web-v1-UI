@@ -1,6 +1,6 @@
 import Swal from 'sweetalert2';
 
-const SWAL_AUTO_CLOSE_TIMER = 5000; // 5 seconds
+const SWAL_AUTO_CLOSE_TIMER = 3000; // 5 seconds
 
 export function focusNextRowField(fieldName, currentIndex) {
   const selector = `#${fieldName}-input-${currentIndex + 1}`;

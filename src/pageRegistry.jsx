@@ -106,6 +106,7 @@ export const pageRegistry = {
 
   // Production 
   WO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Production/WO.jsx")),
+  ProdFOHTransaction: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Production/ProdFOHTransaction.jsx")),
   StorePortalOrder: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/StorePortalOrder.jsx")),
   Commissary: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/Commissary.jsx")),
 

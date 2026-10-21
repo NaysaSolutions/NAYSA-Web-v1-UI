@@ -36,11 +36,13 @@ import Swal from "sweetalert2";
 
 import {
   apiClient,
+  ensureCsrf,
   getTenant,
 } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import {
   useSwalErrorAlertAPI,
+  useSwalErrorAlert,
   useSwalValidationAlert,
   useSwalSuccessAlert,
   useSwalDeleteConfirm,
@@ -5039,6 +5041,7 @@ export default function HeartStrong() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("switches");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [currentTenant, setCurrentTenant] = useState(() => ({
     code:
       getTenant?.() ||
@@ -5215,6 +5218,142 @@ export default function HeartStrong() {
     setSidebarOpen(false);
   };
 
+  const promptInitializePassword = async () => {
+    const result = await Swal.fire({
+      title: "Confirm Initialize",
+      text: "Enter your password to authorize the initialization.",
+      icon: "warning",
+      input: "password",
+      inputPlaceholder: "Password",
+      inputAttributes: {
+        autocapitalize: "off",
+        autocorrect: "off",
+        autocomplete: "new-password",
+      },
+      showCancelButton: true,
+      confirmButtonText: "Initialize",
+      cancelButtonText: "Cancel",
+      focusConfirm: false,
+      reverseButtons: true,
+      confirmButtonColor: "#dc2626",
+      preConfirm: (value) => {
+        if (!value || !value.trim()) {
+          Swal.showValidationMessage(
+            "Password is required to proceed."
+          );
+          return null;
+        }
+
+        return value.trim();
+      },
+    });
+
+    return result.isConfirmed ? result.value : null;
+  };
+
+  const handleInitializeClick = async () => {
+    if (isInitializing) return;
+
+    const password = await promptInitializePassword();
+    if (!password) return;
+
+    /*
+     * Re-authenticate the current HeartStrong/System Admin account
+     * before running Initialize. This preserves the authorization
+     * behavior previously located in Navbar.jsx.
+     */
+    try {
+      await ensureCsrf();
+
+      await apiClient.post(
+        "/login",
+        {
+          USER_CODE: user?.USER_CODE,
+          PASSWORD: password,
+        },
+        {
+          withCredentials: true,
+          headers: {
+            "X-Skip-Logout-Broadcast": "1",
+          },
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Initialize password verification failed:",
+        error
+      );
+
+      if (
+        error?.response?.status === 401 ||
+        error?.response?.status === 403
+      ) {
+        await useSwalErrorAlert(
+          "Incorrect Password",
+          error?.response?.data?.message ||
+            "The password you entered is incorrect."
+        );
+      } else {
+        await useSwalErrorAlert(
+          "Verification Error",
+          error?.response?.data?.message ||
+            error?.message ||
+            "Failed to verify password."
+        );
+      }
+
+      return;
+    }
+
+    setIsInitializing(true);
+
+    try {
+      const response = await apiClient.post(
+        "/initialize",
+        {
+          mode: "Initialize",
+          params: {
+            user_code: user?.USER_CODE,
+          },
+        },
+        {
+          withCredentials: true,
+        }
+      );
+
+      const apiMessage = response?.data?.message;
+      const apiSuccess =
+        typeof response?.data?.success !== "undefined"
+          ? Boolean(response.data.success)
+          : true;
+
+      if (!apiSuccess) {
+        await useSwalErrorAlert(
+          "Initialization Failed",
+          apiMessage || "Initialization failed."
+        );
+        return;
+      }
+
+      await useSwalSuccessAlert(
+        "Initialized",
+        apiMessage ||
+          "Initialize completed successfully."
+      );
+    } catch (error) {
+      console.error("API initialize failed:", error);
+
+      await useSwalErrorAlert(
+        "Initialization Error",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to execute API initialize."
+      );
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
   if (!canManage) {
     return (
       <main className="mt-[80px] min-h-screen bg-slate-100/80 px-3 py-4">
@@ -5296,7 +5435,25 @@ export default function HeartStrong() {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleInitializeClick}
+                disabled={isInitializing}
+                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-red-300/40 bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none dark:bg-red-700 dark:hover:bg-red-600"
+                title="Initialize Transactions"
+              >
+                <RotateCcw
+                  size={16}
+                  className={
+                    isInitializing ? "animate-spin" : ""
+                  }
+                />
+                {isInitializing
+                  ? "Initializing..."
+                  : "Initialize"}
+              </button>
+
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
