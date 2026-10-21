@@ -134,12 +134,12 @@ const WO_DETAIL_COLUMNS = [
   { key: "itemCode", label: "Item Code", width: 130 },
   { key: "itemName", label: "Item Description", width: 280 },
   { key: "uomCode", label: "UOM", width: 90 },
-  { key: "decimal6Needed", label: "BOM Qty Needed", width: 140 },
+  { key: "qtyNeeded", label: "BOM Qty Needed", width: 140 },
   { key: "scrapQty", label: "Scrap Qty", width: 140 },
   { key: "requiredQty", label: "Required Qty", width: 130 },
   { key: "issuedQty", label: "Issued Qty", width: 140 },
   { key: "unservedQty", label: "Unserved Qty", width: 130 },
-  { key: "decimal6Hand", label: "Qty on Hand", width: 130 },
+  { key: "qtyHand", label: "Qty on Hand", width: 130 },
   { key: "issuedAmt", label: "Issued Amt", width: 130 },
   { key: "requiredAmt", label: "Required Amt", width: 130 },
   { key: "issuedWac", label: "Issued Ave. Cost", width: 150 },
@@ -299,7 +299,7 @@ function normalizeHd(hd = {}) {
 }
 
 function normalizeRow(row = {}, index = 0) {
-  const decimal6Needed = n(row.decimal6Needed ?? row.QTY_NEEDED);
+  const qtyNeeded = n(row.qtyNeeded ?? row.QTY_NEEDED);
   const scrapQty = n(row.scrapQty ?? row.SCRAP_QTY ?? row.scrapRate ?? row.SCRAP_RATE);
   const requiredQty = n(row.requiredQty ?? row.REQUIRED_QTY);
   const issuedQty = n(row.issuedQty ?? row.ISSUED_QTY);
@@ -313,12 +313,12 @@ function normalizeRow(row = {}, index = 0) {
     itemCode: row.itemCode || row.ITEM_CODE || "",
     itemName: row.itemName || row.ITEM_NAME || "",
     uomCode: row.uomCode || row.UOM_CODE || "",
-    decimal6Needed,
+    qtyNeeded,
     scrapQty,
     requiredQty,
     issuedQty,
     unservedQty: n(row.unservedQty ?? row.UNSERVED_QTY),
-    decimal6Hand: n(row.decimal6Hand ?? row.QTY_HAND),
+    qtyHand: n(row.qtyHand ?? row.QTY_HAND),
     issuedAmt,
     requiredAmt,
     issuedWac,
@@ -332,7 +332,7 @@ function normalizeRow(row = {}, index = 0) {
 
 function recalcRows(rows, batchQty) {
   return rows.map((row, index) => {
-    const requiredQty = (n(row.decimal6Needed) + n(row.scrapQty)) * n(batchQty);
+    const requiredQty = (n(row.qtyNeeded) + n(row.scrapQty)) * n(batchQty);
     const issuedQty = n(row.issuedQty);
     const requiredAmt = requiredQty * n(row.issuedWac);
     const issuedAmt = issuedQty * n(row.issuedWac);
