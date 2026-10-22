@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBolt,
@@ -36,25 +36,29 @@ const ProdFOHTransaction = () => {
   const [activeTab, setActiveTab] = useState("directLabor");
   const [collapseNavigation, setCollapseNavigation] = useState(false);
   const [activeView, setActiveView] = useState("details");
-  const [resetVersion, setResetVersion] = useState(0);
-  const [addVersion, setAddVersion] = useState(0);
+  const [resetVersions, setResetVersions] = useState({});
+  const [addVersions, setAddVersions] = useState({});
   const [editingTabs, setEditingTabs] = useState({});
+  const actionRefs = useRef({});
   const isEditing = Boolean(editingTabs[activeTab]);
+  const registerActions = useCallback((tabKey, actions) => {
+    actionRefs.current[tabKey] = actions;
+  }, []);
   const detailButtons = [
     { key: "add", label: "Add", icon: faPlus, onClick: () => {
       setEditingTabs((previous) => ({ ...previous, [activeTab]: true }));
-      setAddVersion((value) => value + 1);
+      setAddVersions((previous) => ({ ...previous, [activeTab]: (previous[activeTab] || 0) + 1 }));
     } },
-    { key: "save", label: "Save", icon: faSave, onClick: () => {}, disabled: !isEditing },
+    { key: "save", label: "Save", icon: faSave, onClick: () => actionRefs.current[activeTab]?.save?.(), disabled: !isEditing },
     { key: "print", label: "Print", icon: faPrint, onClick: () => {}, disabled: true },
     { key: "reset", label: "Reset", icon: faRotateLeft, onClick: () => {
       setEditingTabs((previous) => ({ ...previous, [activeTab]: false }));
-      setResetVersion((value) => value + 1);
+      setResetVersions((previous) => ({ ...previous, [activeTab]: (previous[activeTab] || 0) + 1 }));
     } },
   ];
   const summaryButtons = [
-    { key: "find", label: "Find", icon: faMagnifyingGlass, onClick: () => {} },
-    { key: "reset-summary", label: "Reset", icon: faRotateLeft, onClick: () => {} },
+    { key: "find", label: "Find", icon: faMagnifyingGlass, onClick: () => actionRefs.current[activeTab]?.find?.() },
+    { key: "reset-summary", label: "Reset", icon: faRotateLeft, onClick: () => actionRefs.current[activeTab]?.resetSummary?.() },
   ];
 
   return (
@@ -117,12 +121,12 @@ const ProdFOHTransaction = () => {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <div className={activeTab === "directLabor" ? "block" : "hidden"}><DirectLabor isActive={activeTab === "directLabor"} isEditing={Boolean(editingTabs.directLabor)} onViewChange={setActiveView} addVersion={addVersion} resetVersion={resetVersion} /></div>
-          <div className={activeTab === "rentAllocation" ? "block" : "hidden"}><RentAllocation isActive={activeTab === "rentAllocation"} isEditing={Boolean(editingTabs.rentAllocation)} onViewChange={setActiveView} addVersion={addVersion} resetVersion={resetVersion} /></div>
-          <div className={activeTab === "laboratory" ? "block" : "hidden"}><Laboratory isActive={activeTab === "laboratory"} isEditing={Boolean(editingTabs.laboratory)} onViewChange={setActiveView} addVersion={addVersion} resetVersion={resetVersion} /></div>
-          <div className={activeTab === "electricity" ? "block" : "hidden"}><Electricity isActive={activeTab === "electricity"} isEditing={Boolean(editingTabs.electricity)} onViewChange={setActiveView} addVersion={addVersion} resetVersion={resetVersion} /></div>
-          <div className={activeTab === "depreciation" ? "block" : "hidden"}><Depreciation isActive={activeTab === "depreciation"} isEditing={Boolean(editingTabs.depreciation)} onViewChange={setActiveView} addVersion={addVersion} resetVersion={resetVersion} /></div>
-          <div className={activeTab === "boilerDiesel" ? "block" : "hidden"}><BoilerDiesel isActive={activeTab === "boilerDiesel"} isEditing={Boolean(editingTabs.boilerDiesel)} onViewChange={setActiveView} addVersion={addVersion} resetVersion={resetVersion} /></div>
+          <div className={activeTab === "directLabor" ? "block" : "hidden"}><DirectLabor isActive={activeTab === "directLabor"} isEditing={Boolean(editingTabs.directLabor)} onViewChange={setActiveView} onRecordLoaded={() => setEditingTabs((previous) => ({ ...previous, directLabor: true }))} addVersion={addVersions.directLabor || 0} resetVersion={resetVersions.directLabor || 0} registerActions={(actions) => registerActions("directLabor", actions)} onSaved={(continueEditing = false) => setEditingTabs((previous) => ({ ...previous, directLabor: continueEditing }))} /></div>
+          <div className={activeTab === "rentAllocation" ? "block" : "hidden"}><RentAllocation isActive={activeTab === "rentAllocation"} isEditing={Boolean(editingTabs.rentAllocation)} onViewChange={setActiveView} onRecordLoaded={() => setEditingTabs((previous) => ({ ...previous, rentAllocation: true }))} addVersion={addVersions.rentAllocation || 0} resetVersion={resetVersions.rentAllocation || 0} registerActions={(actions) => registerActions("rentAllocation", actions)} onSaved={(continueEditing = false) => setEditingTabs((previous) => ({ ...previous, rentAllocation: continueEditing }))} /></div>
+          <div className={activeTab === "laboratory" ? "block" : "hidden"}><Laboratory isActive={activeTab === "laboratory"} isEditing={Boolean(editingTabs.laboratory)} onViewChange={setActiveView} onRecordLoaded={() => setEditingTabs((previous) => ({ ...previous, laboratory: true }))} addVersion={addVersions.laboratory || 0} resetVersion={resetVersions.laboratory || 0} registerActions={(actions) => registerActions("laboratory", actions)} onSaved={(continueEditing = false) => setEditingTabs((previous) => ({ ...previous, laboratory: continueEditing }))} /></div>
+          <div className={activeTab === "electricity" ? "block" : "hidden"}><Electricity isActive={activeTab === "electricity"} isEditing={Boolean(editingTabs.electricity)} onViewChange={setActiveView} addVersion={addVersions.electricity || 0} resetVersion={resetVersions.electricity || 0} registerActions={(actions) => registerActions("electricity", actions)} onSaved={(continueEditing = false) => setEditingTabs((previous) => ({ ...previous, electricity: continueEditing }))} /></div>
+          <div className={activeTab === "depreciation" ? "block" : "hidden"}><Depreciation isActive={activeTab === "depreciation"} isEditing={Boolean(editingTabs.depreciation)} onViewChange={setActiveView} addVersion={addVersions.depreciation || 0} resetVersion={resetVersions.depreciation || 0} registerActions={(actions) => registerActions("depreciation", actions)} onSaved={(continueEditing = false) => setEditingTabs((previous) => ({ ...previous, depreciation: continueEditing }))} /></div>
+          <div className={activeTab === "boilerDiesel" ? "block" : "hidden"}><BoilerDiesel isActive={activeTab === "boilerDiesel"} isEditing={Boolean(editingTabs.boilerDiesel)} onViewChange={setActiveView} addVersion={addVersions.boilerDiesel || 0} resetVersion={resetVersions.boilerDiesel || 0} registerActions={(actions) => registerActions("boilerDiesel", actions)} onSaved={(continueEditing = false) => setEditingTabs((previous) => ({ ...previous, boilerDiesel: continueEditing }))} /></div>
         </div>
       </div>
     </div>

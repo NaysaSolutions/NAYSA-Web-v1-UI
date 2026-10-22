@@ -877,13 +877,20 @@ export default function WO() {
     }`;
   const overUnderQty = n(hd.woQty) - n(hd.worQty);
   const overUnderAmt = n(hd.worAmt) - n(hd.woAmt);
+  const isReleasedWorkOrder =
+    String(savedWoStatus || hd.woStatus || "").toUpperCase() === "R";
+  const hasIssuedQuantity = dt1.some((row) => n(row.issuedQty) > 0);
   const woStatusOptions = [
     { value: "O", label: "O - Open" },
     { value: "C", label: "C - Closed" },
     { value: "X", label: "X - Cancelled" },
     { value: "R", label: "R - Released" },
     { value: "AC", label: "AC - Accounting Closed" },
-  ];
+  ].filter(
+    (option) =>
+      !(isReleasedWorkOrder && option.value === "O") &&
+      !(hasIssuedQuantity && option.value === "X")
+  );
   const tranTypeOptions = [
     { value: "JV", label: "Journal Voucher" },
     { value: "ADJ", label: "Adjustment" },
@@ -1117,7 +1124,7 @@ export default function WO() {
             </div>
 
             <div className="global-tran-textbox-group-div-ui">
-              <FieldRenderer id="woStatus" label="WO Status" type="select" value={hd.woStatus || "O"} disabled={isFormDisabled} options={woStatusOptions} onChange={(val) => updateHd("woStatus", val)} />
+              <FieldRenderer id="woStatus" label="WO Status" type="select" value={hd.woStatus || "O"} disabled={isFormDisabled || !isRetrieved} options={woStatusOptions} onChange={(val) => updateHd("woStatus", val)} />
             </div>
 
             <div className="col-span-full">
@@ -1231,7 +1238,7 @@ export default function WO() {
           </div>
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_tr>td:first-child]:border-l [&_th]:border-b [&_th]:border-slate-200">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
                     {orderedDetailColumns.map((column) =>
@@ -1242,21 +1249,13 @@ export default function WO() {
                   </tr>
                 </thead>
                 <tbody className="relative">
-                  {dt1.length === 0 ? (
-                    <tr className="global-tran-tr-ui">
-                      <td colSpan={orderedDetailColumns.length} className="global-tran-td-ui py-8 text-center text-slate-500">
-                        Load a BOM to generate Work Order item details.
-                      </td>
-                    </tr>
-                  ) : (
-                    sortedDetailRows.map(({ row, originalIndex }) => (
+                  {sortedDetailRows.map(({ row, originalIndex }) => (
                       <tr key={`${row.itemCode}-${originalIndex}`} className="global-tran-tr-ui">
                         {orderedDetailColumns.map((column) =>
                           renderDetailCell(column, row, originalIndex)
                         )}
                       </tr>
-                    ))
-                  )}
+                    ))}
                 </tbody>
               </table>
               {renderDetailHeaderContextMenu()}

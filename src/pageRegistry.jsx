@@ -107,6 +107,13 @@ export const pageRegistry = {
   // Production 
   WO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Production/WO.jsx")),
   ProdFOHTransaction: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Production/ProdFOHTransaction.jsx")),
+  ProjectJobOrder: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Project Accounting/ProjectJobOrder.jsx")),
+  ProjectBOQ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Project Accounting/ProjectBOQ.jsx")),
+  ProjectMaterialRequisition: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Project Accounting/ProjectMaterialRequisition.jsx")),
+  ProjectMaterialIssue: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Project Accounting/ProjectMaterialIssue.jsx")),
+  PostProjectMaterialIssue: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Project Accounting/PostProjectMaterialIssue.jsx")),
+  ProjectReferenceCodes: lazyPage(() => import("./NAYSA Cloud/Reference File/ProjectReferenceCodes.jsx")),
+  ProjectMaster: lazyPage(() => import("./NAYSA Cloud/Master Data/ProjectMaster.jsx")),
   StorePortalOrder: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/StorePortalOrder.jsx")),
   Commissary: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/Commissary.jsx")),
 

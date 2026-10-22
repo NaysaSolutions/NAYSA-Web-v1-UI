@@ -131,6 +131,23 @@ const parseResult = (response) => {
   }
 };
 
+const toDisplayDate = (value) => {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return "";
+
+  const isoDate = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) return `${isoDate[2]}/${isoDate[3]}/${isoDate[1]}`;
+
+  const displayDate = rawValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (displayDate) {
+    return `${displayDate[1].padStart(2, "0")}/${displayDate[2].padStart(2, "0")}/${displayDate[3]}`;
+  }
+
+  return rawValue;
+};
+
+const HISTORY_REFRESH_INTERVAL = 30000;
+
 const ProdFOHSetup = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -199,7 +216,14 @@ const ProdFOHSetup = () => {
     queryKey: ["prodFOHStandardSummary"],
     queryFn: async () =>
       parseResult(await apiClient.get("/prodFOHSetup/loadStandard")),
-    enabled: false,
+    enabled: activeTab === "standard" && activeStandardTab === "summary",
+    staleTime: 1000 * 10,
+    gcTime: 1000 * 60 * 30,
+    refetchInterval: activeTab === "standard" && activeStandardTab === "summary" ? HISTORY_REFRESH_INTERVAL : false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const resetStandardSummary = () => {
@@ -285,8 +309,9 @@ const ProdFOHSetup = () => {
         ...previous,
         bomId: source.bomId || bomId,
         bomCode: source.bomCode || bom.bomCode || "",
-        bomEffectivityDate:
-          source.bomEffectivityDate || bom.bomEffectivityDate || bom.bomDate || "",
+        bomEffectivityDate: toDisplayDate(
+          source.bomEffectivityDate || bom.bomEffectivityDate || bom.bomDate,
+        ),
         itemType: source.itemType || bom.itemType || bom.invType || "",
         itemCode: source.itemCode || bom.itemCode || "",
         itemDescription:
@@ -774,8 +799,8 @@ const ProdFOHSetup = () => {
         fohStandardId: record.fohStandardId || "",
         bomId: record.bomId || "",
         bomCode: record.bomCode || "",
-        bomEffectivityDate: record.bomEffectivityDate || "",
-        fohEffectivityDate: record.fohEffectivityDate || "",
+        bomEffectivityDate: toDisplayDate(record.bomEffectivityDate),
+        fohEffectivityDate: toDisplayDate(record.fohEffectivityDate),
         itemType: record.itemType || "",
         itemCode: record.itemCode || "",
         itemDescription: record.itemDescription || "",
@@ -2074,9 +2099,9 @@ const ProdFOHSetup = () => {
                 </div>
               </aside>
               <div className={`min-w-0 flex-1 ${activeOtherTab === "rent" ? "" : "hidden"}`}>
-                <RentSetup ref={rentAllocationRef} onStateChange={setRentAllocationState} />
+                <RentSetup ref={rentAllocationRef} isActive={activeTab === "other" && activeOtherTab === "rent"} onStateChange={setRentAllocationState} />
               </div>
-              <div className={`min-w-0 flex-1 ${activeOtherTab === "laboratory" ? "" : "hidden"}`}><LaboratorySetup ref={laboratorySetupRef} onStateChange={setLaboratorySetupState} /></div>
+              <div className={`min-w-0 flex-1 ${activeOtherTab === "laboratory" ? "" : "hidden"}`}><LaboratorySetup ref={laboratorySetupRef} isActive={activeTab === "other" && activeOtherTab === "laboratory"} onStateChange={setLaboratorySetupState} /></div>
             </div>
       </div>
 

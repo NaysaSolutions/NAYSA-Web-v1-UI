@@ -5,6 +5,7 @@ import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 // Lookup / modal components
 import SearchGlobalReportTable from "../../Lookup/SearchGlobalReportTable";
@@ -23,6 +24,7 @@ import {
   faEye,
   faTable,
   faThLarge,
+  faHistory,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Reusable UI components
@@ -175,6 +177,144 @@ const ComparisonModal = ({ data, onClose }) => {
 };
 
 /* =========================================================
+   TRANSACTION TRACK CHANGES MODAL
+========================================================= */
+const TrackChangesModal = ({ data, onClose }) => {
+  if (!data) return null;
+
+  const displayValue = (value) =>
+    value === null || value === undefined || value === "" ? "-" : String(value);
+
+  const displaySection = (section) => {
+    const names = { Header: "Header", DT1: "Detail 1", DT2: "Detail 2" };
+    return names[section] || displayValue(section);
+  };
+
+  const displayField = (field) =>
+    String(field || "")
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/_/g, " ")
+      .replace(/\bSl\b/g, "SL")
+      .replace(/\bId\b/g, "ID")
+      .replace(/\bNo\b/g, "No")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "-";
+
+  const changes = Array.isArray(data.changes) ? data.changes : [];
+  const versions = [
+    { title: "Previous Version", value: data.previousVersion, current: false },
+    { title: "Current Version", value: data.currentVersion, current: true },
+  ];
+
+  const changeTypeClass = (changeType) => {
+    const type = String(changeType || "").toLowerCase();
+    if (type === "added") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if (type === "deleted") return "border-red-200 bg-red-50 text-red-700";
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-5xl rounded-xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden border border-gray-200 dark:border-gray-800">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 border border-blue-100 dark:border-blue-800 shrink-0">
+                <FontAwesomeIcon icon={faHistory} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Track Changes</h2>
+                <p className="text-[12px] text-gray-500 truncate">
+                  Document: <span className="font-semibold text-gray-700 dark:text-gray-200">{displayValue(data.docCode)} {displayValue(data.docNo)}</span>
+                </p>
+              </div>
+            </div>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-red-500 transition-colors" title="Close">
+              <FontAwesomeIcon icon={faTimes} size="lg" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto p-4 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {versions.map(({ title, value, current }) => (
+              <div key={title} className={`rounded-lg border p-4 ${current ? "border-blue-200 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/20" : "border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-800/60"}`}>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-blue-600">{title}</h3>
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${current ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-200"}`}>
+                    {current ? "CURRENT" : "BEFORE"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-[86px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[12px]">
+                  <span className="text-gray-500">Activity</span><span className="font-semibold text-gray-800 dark:text-gray-100 break-words">{displayValue(value?.activity)}</span>
+                  <span className="text-gray-500">User</span><span className="font-semibold text-gray-800 dark:text-gray-100 break-words">{value ? `${displayValue(value.userCode)} - ${displayValue(value.userName)}` : "-"}</span>
+                  <span className="text-gray-500">Date/Time</span><span className="text-gray-700 dark:text-gray-200 break-words">{displayValue(value?.dateStamp)}</span>
+                  <span className="text-gray-500">IP Address</span><span className="text-gray-700 dark:text-gray-200 break-words">{displayValue(value?.ipAdd)}</span>
+                  <span className="text-gray-500">Browser</span><span className="text-gray-700 dark:text-gray-200 break-words">{displayValue(value?.browser)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5">
+            <div className="mb-2 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-blue-600">Changes</h3>
+              {data.hasPrevious && data.hasChanges && changes.length > 0 && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                  {changes.length} {changes.length === 1 ? "change" : "changes"}
+                </span>
+              )}
+            </div>
+            {!data.hasPrevious ? (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-5 text-center text-[12px] text-gray-500">No previous transaction version available.</div>
+            ) : !data.hasChanges || changes.length === 0 ? (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-5 text-center text-[12px] text-gray-500">No changes were detected between these versions.</div>
+            ) : (
+              <div className="overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 max-h-[330px]">
+                <table className="w-full min-w-[820px] text-left text-[12px] table-fixed">
+                  <thead className="sticky top-0 z-10 bg-blue-100 dark:bg-gray-800 text-[10px] uppercase font-bold text-gray-700 dark:text-gray-200">
+                    <tr>
+                      <th className="px-3 py-2 w-[110px]">Section</th>
+                      <th className="px-3 py-2 w-[65px] text-center">Line</th>
+                      <th className="px-3 py-2 w-[150px]">Field</th>
+                      <th className="px-3 py-2">Previous Value</th>
+                      <th className="px-3 py-2">New Value</th>
+                      <th className="px-3 py-2 w-[105px] text-center">Change Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {changes.map((change, index) => (
+                      <tr key={`${change.section}-${change.lineNo}-${change.field}-${index}`} className="border-t border-gray-100 dark:border-gray-800 align-top odd:bg-white even:bg-gray-50/40 hover:bg-blue-50/40 dark:odd:bg-gray-900 dark:even:bg-gray-800/30">
+                        <td className="px-3 py-2 break-words">{displaySection(change.section)}</td>
+                        <td className="px-3 py-2 text-center">{displayValue(change.lineNo)}</td>
+                        <td className="px-3 py-2 font-medium break-words">{displayField(change.field)}</td>
+                        <td className="px-3 py-2 whitespace-pre-wrap break-words text-red-700 bg-red-50/20 dark:text-red-300">{displayValue(change.beforeValue)}</td>
+                        <td className="px-3 py-2 whitespace-pre-wrap break-words font-medium text-emerald-700 bg-emerald-50/20 dark:text-emerald-300">{displayValue(change.afterValue)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-semibold ${changeTypeClass(change.changeType)}`}>
+                            {displayValue(change.changeType)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="px-4 sm:px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+          <button type="button" onClick={onClose} className="bg-blue-600 text-white px-4 h-8 rounded-md text-[11px] hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2">
+            <FontAwesomeIcon icon={faTimes} className="text-[10px]" /> Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+/* =========================================================
    DATE HELPERS
 ========================================================= */
 const getInitialDate = (offsetMonth = 0) => {
@@ -268,6 +408,8 @@ const AuditTrail = () => {
 
   const [activeTab, setActiveTab] = useState("transactions");
   const [selectedRowCompare, setSelectedRowCompare] = useState(null);
+  const [selectedTrackChanges, setSelectedTrackChanges] = useState(null);
+  const [isTrackChangesLoading, setIsTrackChangesLoading] = useState(false);
 
   // Mobile result view
   const [isMobile, setIsMobile] = useState(false);
@@ -514,6 +656,52 @@ const AuditTrail = () => {
     }
   };
 
+  const handleTrackChanges = async (row) => {
+    const originalRow = row?.__auditOriginalRow || row;
+    const trailId = originalRow?.trailId;
+
+    if (!trailId) {
+      useSwalErrorAlert(
+        "Track Changes",
+        "No transaction snapshot is available for this audit event."
+      );
+      return;
+    }
+
+    setIsTrackChangesLoading(true);
+
+    try {
+      const { data: response } = await apiClient.post("getDocChanges", {
+        PARAMS: JSON.stringify({ trailId }),
+      });
+      const raw = response?.data?.[0]?.result;
+      let parsed = raw;
+
+      if (typeof raw === "string") {
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          throw new Error("The transaction change history returned an invalid response.");
+        }
+      }
+
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("No transaction change history was returned.");
+      }
+
+      setSelectedTrackChanges(parsed);
+    } catch (error) {
+      useSwalErrorAlert(
+        "Track Changes Failed",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to load transaction changes."
+      );
+    } finally {
+      setIsTrackChangesLoading(false);
+    }
+  };
+
   const formatLabel = (key) =>
     String(key || "")
       .replace(/([A-Z])/g, " $1")
@@ -580,6 +768,18 @@ const AuditTrail = () => {
                   />
                   <span>View</span>
                 </button>
+                {type === "transactions" && (
+                  <button
+                    type="button"
+                    disabled={!row?.trailId}
+                    onClick={() => handleTrackChanges(row)}
+                    className="shrink-0 bg-gray-500 text-white px-3 h-8 rounded-md text-[11px] hover:bg-gray-600 transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Track Changes"
+                  >
+                    <FontAwesomeIcon icon={faHistory} />
+                    <span className="hidden sm:inline">Track Changes</span>
+                  </button>
+                )}
               </div>
 
               <div className="px-4">
@@ -637,14 +837,21 @@ const AuditTrail = () => {
         data={selectedRowCompare}
         onClose={() => setSelectedRowCompare(null)}
       />
+      <TrackChangesModal
+        data={selectedTrackChanges}
+        onClose={() => setSelectedTrackChanges(null)}
+      />
 
-      {isManualSearch && (isFetchTrans || isFetchRef) && (
+      {((isManualSearch && (isFetchTrans || isFetchRef)) ||
+        isTrackChangesLoading) && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/40 backdrop-blur-[1px]">
           <div className="flex flex-col items-center gap-2">
             <LoadingSpinner />
-            <span className="text-blue-600 font-semibold text-sm">
-              Fetching Audit Data...
-            </span>
+            {!isTrackChangesLoading && (
+              <span className="text-blue-600 font-semibold text-sm">
+                Fetching Audit Data...
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -940,7 +1147,6 @@ const AuditTrail = () => {
             key={transTableKey}
             ref={tableRefTrans}
             isLoading={isColsTransLoading}
-            isFetching={isFetchTrans && isManualSearch}
             columns={colsTrans}
             data={tableDataTrans}
             initialState={tableStateRef.current.transactions}
@@ -948,6 +1154,10 @@ const AuditTrail = () => {
             showFilters
             rightActionLabel="View"
             onRowAction={handleViewRow}
+            onRowActionsClick={handleTrackChanges}
+            actionsIcon={faHistory}
+            actionsTitle="Track Changes"
+            isRowActionsDisabled={(row) => !row?.trailId}
             onStateChange={(tbl) => {
               tableStateRef.current.transactions = tbl;
             }}
@@ -965,7 +1175,6 @@ const AuditTrail = () => {
             key={refTableKey}
             ref={tableRefRef}
             isLoading={isColsRefLoading}
-            isFetching={isFetchRef && isManualSearch}
             columns={colsRef}
             data={tableDataRef}
             initialState={tableStateRef.current.reference}

@@ -12,6 +12,16 @@ const columns = [
   { key: "actualCycleTime", label: "Actual Cycle Time - Hours", width: 170, align: "right", numeric: true }, { key: "actualHeadCount", label: "Actual Total Head Count", width: 170, align: "right", numeric: true },
   { key: "actualHourlyRate", label: "Actual Hourly Rate", width: 160, align: "right", numeric: true }, { key: "actualLaborCost", label: "Actual Labor Cost", width: 170, align: "right", numeric: true },
 ];
-const DirectLabor = (props) => <FOHTransactionPanel {...props} title="Direct Labor Reporting" detailTitle="Direct Labor Details" headerFields={headerFields} columns={columns} totalLabel="Total Labor Cost" />;
+const summaryColumns = [
+  { key: "workOrderNo", label: "Work Order No.", width: 140 },
+  { key: "workOrderDate", label: "Work Order Date", width: 140 },
+  { key: "itemCode", label: "Item Code", width: 150 },
+  { key: "itemDescription", label: "Item Name", width: 320 },
+  { key: "qtyToProduce", label: "Quantity to Produce", width: 170, align: "right", numeric: true },
+  { key: "registeredBy", label: "Registered By", width: 140 },
+  { key: "registeredDate", label: "Registered Date", width: 190 },
+];
+
+const DirectLabor = (props) => <FOHTransactionPanel {...props} title="Direct Labor Reporting" detailTitle="Direct Labor Details" headerFields={headerFields} columns={columns} totalLabel="Total Labor Cost" endpoints={{ load: "/prodFOHTransaction/loadDirectLabor", get: "/prodFOHTransaction/getDirectLabor", upsert: "/prodFOHTransaction/upsertDirectLabor" }} summaryColumns={summaryColumns} />;
 
 export default DirectLabor;

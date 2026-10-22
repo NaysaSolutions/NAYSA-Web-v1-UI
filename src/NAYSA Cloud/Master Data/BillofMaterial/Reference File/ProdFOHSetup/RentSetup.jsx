@@ -33,7 +33,7 @@ const allocatedRentAmount = (total, count, index) => {
     : regularShare;
 };
 
-const RentSetup = forwardRef(({ onStateChange }, ref) => {
+const RentSetup = forwardRef(({ onStateChange, isActive = false }, ref) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [form, setForm] = useState(emptyForm);
@@ -59,10 +59,14 @@ const RentSetup = forwardRef(({ onStateChange }, ref) => {
   } = useQuery({
     queryKey: ["prodFOHRentAllocationSummary"],
     queryFn: async () => parseResult(await apiClient.get("/prodFOHSetup/loadRentAllocationSummary")),
-    enabled: false,
-    staleTime: Infinity,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    enabled: isActive && rentAllocationTab === "summary",
+    staleTime: 1000 * 10,
+    gcTime: 1000 * 60 * 30,
+    refetchInterval: isActive && rentAllocationTab === "summary" ? 30000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const totalSqm = useMemo(() => areas.reduce((total, area) => total + Number(area.areaSqm || 0), 0), [areas]);

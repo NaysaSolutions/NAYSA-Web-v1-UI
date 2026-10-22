@@ -15,7 +15,11 @@ const columns = [
   { key: "productionHourlyRate", label: "Production Report per Hour Rate", width: 220, align: "right", numeric: true },
   { key: "remarks", label: "Remarks", width: 240 },
 ];
+const summaryColumns = [
+  { key: "cutoffPeriod", label: "Cut-off Period", width: 180 }, { key: "productionFohExpense", label: "Production FOH Expense", width: 220, align: "right", numeric: true, decimals: 2 },
+  { key: "registeredBy", label: "Registered By", width: 180 }, { key: "registeredDate", label: "Registered Date", width: 220 },
+];
 
-const BoilerDiesel = (props) => <FOHTransactionPanel {...props} title="Boiler Diesel Expense" detailTitle="Boiler Diesel Expense History" headerFields={headerFields} columns={columns} initialRows={4} totalLabel="Current Rate" />;
+const BoilerDiesel = (props) => <FOHTransactionPanel {...props} title="Boiler Diesel Expense" detailTitle="Boiler Diesel Expense History" headerFields={headerFields} columns={columns} initialRows={4} totalLabel="Current Rate" endpoints={{ load: "/prodFOHTransaction/loadBoilerDiesel", get: "/prodFOHTransaction/getBoilerDiesel", upsert: "/prodFOHTransaction/upsertBoilerDiesel" }} summaryColumns={summaryColumns} />;
 
 export default BoilerDiesel;

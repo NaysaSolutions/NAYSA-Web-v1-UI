@@ -57,7 +57,6 @@ const SearchSalesRepRef = ({ isOpen, onClose }) => {
     refetch,
   } = useQuery({
     queryKey: ["lookupsalesRep"],
-    queryKey: ["lookupsalesRep"],
     queryFn: async () => {
       const { data: result } = await apiClient.get("/salesRep");
 
@@ -75,7 +74,6 @@ const SearchSalesRepRef = ({ isOpen, onClose }) => {
       }));
     },
     enabled: isOpen,
-    staleTime: 1000 * 60 * 5,
     staleTime: 1000 * 60 * 5,
     placeholderData: keepPreviousData,
   });
@@ -180,7 +178,6 @@ const SearchSalesRepRef = ({ isOpen, onClose }) => {
                 <tr>
                   {[
                     { label: "Sales Rep Code", key: "salesRepCode" },
-                    { label: "Sales Rep Name", key: "salesRepName" },
                     { label: "Sales Rep Name", key: "salesRepName" },
                   ].map((col) => (
                     <th key={col.key} className="px-4 py-2 text-left border-b border-slate-200">

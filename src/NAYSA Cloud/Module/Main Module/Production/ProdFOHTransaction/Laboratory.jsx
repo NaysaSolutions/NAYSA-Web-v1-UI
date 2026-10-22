@@ -18,12 +18,17 @@ const headerFields = [
 const columns = [
   { key: "laboratoryCode", label: "Laboratory Code", width: 150 },
   { key: "laboratoryDescription", label: "Laboratory Description", width: 360 },
-  { key: "testQuantity", label: "Test Quantity", width: 140, align: "right", numeric: true },
+  { key: "testQuantity", label: "Test Quantity", width: 140, align: "right", numeric: true, quantity: true },
   { key: "unitCost", label: "Unit Cost", width: 150, align: "right", numeric: true },
   { key: "laboratoryCost", label: "Laboratory Cost", width: 170, align: "right", numeric: true },
   { key: "remarks", label: "Remarks", width: 260 },
 ];
+const summaryColumns = [
+  { key: "workOrderNo", label: "Work Order No.", width: 140 }, { key: "workOrderDate", label: "Work Order Date", width: 140 },
+  { key: "itemCode", label: "Item Code", width: 150 }, { key: "itemDescription", label: "Item Name", width: 320 },
+  { key: "qtyToProduce", label: "Quantity to Produce", width: 170, align: "right", numeric: true }, { key: "registeredBy", label: "Registered By", width: 140 },
+];
 
-const Laboratory = (props) => <FOHTransactionPanel {...props} title="Laboratory Cost Reporting" detailTitle="Laboratory Details" headerFields={headerFields} columns={columns} totalLabel="Total Laboratory Cost" />;
+const Laboratory = (props) => <FOHTransactionPanel {...props} title="Laboratory Cost Reporting" detailTitle="Laboratory Details" headerFields={headerFields} columns={columns} totalLabel="Total Laboratory Cost" totalKey="laboratoryCost" endpoints={{ load: "/prodFOHTransaction/loadLaboratory", get: "/prodFOHTransaction/getLaboratory", upsert: "/prodFOHTransaction/upsertLaboratory", lookupDetails: "/prodFOHTransaction/lookupLaboratoryByCategory" }} summaryColumns={summaryColumns} />;
 
 export default Laboratory;

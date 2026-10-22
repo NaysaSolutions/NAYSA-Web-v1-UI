@@ -29,7 +29,7 @@ const formatDate = (value) => {
   return year && month && day ? `${month}/${day}/${year}` : datePart;
 };
 
-const LaboratorySetup = forwardRef(({ onStateChange }, ref) => {
+const LaboratorySetup = forwardRef(({ onStateChange, isActive = false }, ref) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("priceMatrix");
@@ -55,10 +55,14 @@ const LaboratorySetup = forwardRef(({ onStateChange }, ref) => {
   } = useQuery({
     queryKey: ["prodFOHLaboratoryPriceSummary"],
     queryFn: async () => parseResult(await apiClient.get("/prodFOHSetup/loadLaboratoryPriceSummary")),
-    enabled: false,
-    staleTime: Infinity,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    enabled: isActive && activeTab === "priceSummary",
+    staleTime: 1000 * 10,
+    gcTime: 1000 * 60 * 30,
+    refetchInterval: isActive && activeTab === "priceSummary" ? 30000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const {
@@ -68,10 +72,14 @@ const LaboratorySetup = forwardRef(({ onStateChange }, ref) => {
   } = useQuery({
     queryKey: ["prodFOHCategoryLaboratorySummary"],
     queryFn: async () => parseResult(await apiClient.get("/prodFOHSetup/loadCategoryLaboratorySummary")),
-    enabled: false,
-    staleTime: Infinity,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    enabled: isActive && activeTab === "categorySummary",
+    staleTime: 1000 * 10,
+    gcTime: 1000 * 60 * 30,
+    refetchInterval: isActive && activeTab === "categorySummary" ? 30000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const saveMutation = useMutation({

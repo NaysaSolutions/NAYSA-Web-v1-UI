@@ -12,6 +12,11 @@ const columns = [
   { key: "cycleTime", label: "Cycle Time (Hour)", width: 160, align: "right", numeric: true }, { key: "standardHourlyRate", label: "Std Hourly Rate", width: 160, align: "right", numeric: true },
   { key: "amount", label: "Amount", width: 170, align: "right", numeric: true },
 ];
-const RentAllocation = (props) => <FOHTransactionPanel {...props} title="Rent Allocation Transaction" detailTitle="Rent Allocation Details" headerFields={headerFields} columns={columns} totalLabel="Total Rent Allocation" />;
+const summaryColumns = [
+  { key: "workOrderNo", label: "Work Order No.", width: 140 }, { key: "workOrderDate", label: "Work Order Date", width: 140 },
+  { key: "itemCode", label: "Item Code", width: 150 }, { key: "itemDescription", label: "Item Name", width: 320 },
+  { key: "qtyToProduce", label: "Quantity to Produce", width: 170, align: "right", numeric: true }, { key: "registeredBy", label: "Registered By", width: 140 },
+];
+const RentAllocation = (props) => <FOHTransactionPanel {...props} title="Rent Allocation Transaction" detailTitle="Rent Allocation Details" headerFields={headerFields} columns={columns} totalLabel="Total Rent Allocation" totalKey="amount" endpoints={{ load: "/prodFOHTransaction/loadRentAllocation", get: "/prodFOHTransaction/getRentAllocation", upsert: "/prodFOHTransaction/upsertRentAllocation" }} summaryColumns={summaryColumns} />;
 
 export default RentAllocation;

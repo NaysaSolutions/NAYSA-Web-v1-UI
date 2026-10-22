@@ -395,6 +395,19 @@ export const useSwalErrorAlertAPI = (
   title = "Error!",
   message = "Something went wrong."
 ) => {
+  const resolvedMessage = typeof message === "string"
+    ? message
+    : message?.response?.data?.message ||
+      message?.response?.data?.error ||
+      message?.message ||
+      "Something went wrong.";
+  const escapedTitle = String(title).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+  })[character]);
+  const escapedMessage = String(resolvedMessage).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+  })[character]);
+
   return Swal.fire({
     toast: true,
     position: "top-end",
@@ -411,10 +424,10 @@ export const useSwalErrorAlertAPI = (
         </div>
 
         <div class="swal-sonner-error-toast-content">
-          <div class="swal-sonner-error-toast-title">${title}</div>
+          <div class="swal-sonner-error-toast-title">${escapedTitle}</div>
           ${
-            message
-              ? `<div class="swal-sonner-error-toast-message">${message}</div>`
+            escapedMessage
+              ? `<div class="swal-sonner-error-toast-message">${escapedMessage}</div>`
               : ""
           }
         </div>
