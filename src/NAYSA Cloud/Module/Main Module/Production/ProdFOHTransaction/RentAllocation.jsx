@@ -17,6 +17,6 @@ const summaryColumns = [
   { key: "itemCode", label: "Item Code", width: 150 }, { key: "itemDescription", label: "Item Name", width: 320 },
   { key: "qtyToProduce", label: "Quantity to Produce", width: 170, align: "right", numeric: true }, { key: "registeredBy", label: "Registered By", width: 140 },
 ];
-const RentAllocation = (props) => <FOHTransactionPanel {...props} title="Rent Allocation Transaction" detailTitle="Rent Allocation Details" headerFields={headerFields} columns={columns} totalLabel="Total Rent Allocation" totalKey="amount" endpoints={{ load: "/prodFOHTransaction/loadRentAllocation", get: "/prodFOHTransaction/getRentAllocation", upsert: "/prodFOHTransaction/upsertRentAllocation" }} summaryColumns={summaryColumns} />;
+const RentAllocation = (props) => <FOHTransactionPanel {...props} title="Rent Allocation Transaction" detailTitle="Rent Allocation Details" headerFields={headerFields} columns={columns} totalLabel="Total Rent Allocation" totalKey="amount" endpoints={{ load: "/prodFOHTransaction/loadRentAllocation", get: "/prodFOHTransaction/getRentAllocation", upsert: "/prodFOHTransaction/upsertRentAllocation", lookupDetails: "/prodFOHTransaction/lookupRentByWorkOrder", lookupType: "rentAllocation" }} summaryColumns={summaryColumns} />;
 
 export default RentAllocation;

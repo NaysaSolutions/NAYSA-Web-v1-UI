@@ -1,12 +1,12 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCircleCheck, faFlask, faLayerGroup, faListCheck, faMagnifyingGlass, faPenToSquare, faTableCellsLarge } from "@fortawesome/free-solid-svg-icons";
+import { faCircleCheck, faFlask, faLayerGroup, faListCheck, faMagnifyingGlass, faPenToSquare, faTableCellsLarge, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
-import { useSwalErrorAlert, useSwalErrorAlertAPI, useSwalSuccessAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { useSwalDeleteConfirm, useSwalDeleteRecord, useSwalErrorAlert, useSwalErrorAlertAPI, useSwalSuccessAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
 
 const laboratoryTabs = [
@@ -108,6 +108,44 @@ const LaboratorySetup = forwardRef(({ onStateChange, isActive = false }, ref) =>
     },
     onError: (error) => useSwalErrorAlertAPI("Save Failed", error),
   });
+
+  const deletePriceMutation = useMutation({
+    mutationFn: (payload) => apiClient.post("/prodFOHSetup/deleteLaboratoryPriceMatrix", payload),
+    onSuccess: (response) => {
+      const result = response?.data?.data?.[0];
+      if (Number(result?.errorcount || 0) > 0) return useSwalErrorAlert("Delete Failed", result?.errormsg || "Unable to delete Laboratory Price Matrix.");
+      queryClient.invalidateQueries({ queryKey: ["prodFOHLaboratoryPriceSummary"] });
+      useSwalDeleteRecord("Deleted", "Laboratory Price Matrix deleted successfully.");
+    },
+    onError: (error) => useSwalErrorAlertAPI("Delete Failed", error),
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (payload) => apiClient.post("/prodFOHSetup/deleteCategoryLaboratoryMatrix", payload),
+    onSuccess: (response) => {
+      const result = response?.data?.data?.[0];
+      if (Number(result?.errorcount || 0) > 0) return useSwalErrorAlert("Delete Failed", result?.errormsg || "Unable to delete Category-Laboratory Matrix.");
+      queryClient.invalidateQueries({ queryKey: ["prodFOHCategoryLaboratorySummary"] });
+      useSwalDeleteRecord("Deleted", "Category-Laboratory Matrix deleted successfully.");
+    },
+    onError: (error) => useSwalErrorAlertAPI("Delete Failed", error),
+  });
+
+  const deletePriceMatrix = async (row) => {
+    const selectedDate = String(row?.effectivityDate || "").split("T")[0];
+    if (!selectedDate) return;
+    const confirmation = await useSwalDeleteConfirm("Delete Laboratory Price Matrix?", `Delete the matrix effective ${formatDate(selectedDate)}? This action will be recorded in the audit trail.`);
+    if (!confirmation?.isConfirmed) return;
+    deletePriceMutation.mutate({ json_data: { effectivityDate: selectedDate, userCode } });
+  };
+
+  const deleteCategoryMatrix = async (row) => {
+    const selectedDate = String(row?.effectivityDate || "").split("T")[0];
+    if (!selectedDate) return;
+    const confirmation = await useSwalDeleteConfirm("Delete Category-Laboratory Matrix?", `Delete the matrix effective ${formatDate(selectedDate)}? This action will be recorded in the audit trail.`);
+    if (!confirmation?.isConfirmed) return;
+    deleteCategoryMutation.mutate({ json_data: { effectivityDate: selectedDate, userCode } });
+  };
 
   async function addCategoryMatrix() {
     setIsLoading(true);
@@ -256,7 +294,7 @@ const LaboratorySetup = forwardRef(({ onStateChange, isActive = false }, ref) =>
   };
 
   useImperativeHandle(ref, () => ({ add, save, reset, refreshSummary, resetSummary }));
-  useEffect(() => onStateChange?.({ activeView: activeTab, isEditing: activeTab === "categoryMatrix" ? isCategoryEditing : isEditing, isBusy: isLoading || isSummaryLoading || isCategorySummaryLoading || saveMutation.isPending || saveCategoryMutation.isPending }), [activeTab, isCategoryEditing, isCategorySummaryLoading, isEditing, isLoading, isSummaryLoading, onStateChange, saveCategoryMutation.isPending, saveMutation.isPending]);
+  useEffect(() => onStateChange?.({ activeView: activeTab, isEditing: activeTab === "categoryMatrix" ? isCategoryEditing : isEditing, isBusy: isLoading || isSummaryLoading || isCategorySummaryLoading || saveMutation.isPending || saveCategoryMutation.isPending || deletePriceMutation.isPending || deleteCategoryMutation.isPending }), [activeTab, deleteCategoryMutation.isPending, deletePriceMutation.isPending, isCategoryEditing, isCategorySummaryLoading, isEditing, isLoading, isSummaryLoading, onStateChange, saveCategoryMutation.isPending, saveMutation.isPending]);
 
   const updateUnitCost = (rowIndex, value) => {
     let nextValue = String(value ?? "").replace(/,/g, "").replace(/[^0-9.]/g, "");
@@ -305,16 +343,19 @@ const LaboratorySetup = forwardRef(({ onStateChange, isActive = false }, ref) =>
     {
       key: "__actions",
       label: "Actions",
-      width: 80,
-      minWidth: 80,
-      maxWidth: 80,
+      width: 95,
+      minWidth: 95,
+      maxWidth: 95,
       sortable: false,
       filterable: false,
       requiredVisible: true,
       render: (row) => (
-        <div className="flex w-full items-center justify-center">
+        <div className="flex w-full items-center justify-center gap-1">
           <button type="button" onClick={() => editPriceMatrix(row)} className="inline-flex h-7 w-7 items-center justify-center rounded border border-blue-100 bg-blue-50 text-xs text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white" title="Edit Laboratory Price Matrix">
             <FontAwesomeIcon icon={faPenToSquare} />
+          </button>
+          <button type="button" onClick={() => deletePriceMatrix(row)} className="inline-flex h-7 w-7 items-center justify-center rounded border border-red-100 bg-red-50 text-xs text-red-600 transition-colors hover:border-red-600 hover:bg-red-600 hover:text-white" title="Delete Laboratory Price Matrix">
+            <FontAwesomeIcon icon={faTrashAlt} />
           </button>
         </div>
       ),
@@ -330,9 +371,10 @@ const LaboratorySetup = forwardRef(({ onStateChange, isActive = false }, ref) =>
     {
       key: "__selectCategory",
       label: "Actions",
-      width: 64,
-      minWidth: 64,
-      maxWidth: 64,
+      width: 90,
+      minWidth: 90,
+      maxWidth: 90,
+      className: "whitespace-nowrap",
       sortable: false,
       filterable: false,
       requiredVisible: true,
@@ -397,13 +439,13 @@ const LaboratorySetup = forwardRef(({ onStateChange, isActive = false }, ref) =>
     {
       key: "__actions",
       label: "Actions",
-      width: 80,
-      minWidth: 80,
-      maxWidth: 80,
+      width: 95,
+      minWidth: 95,
+      maxWidth: 95,
       sortable: false,
       filterable: false,
       requiredVisible: true,
-      render: (row) => <div className="flex w-full justify-center"><button type="button" onClick={() => editCategoryMatrix(row)} className="inline-flex h-7 w-7 items-center justify-center rounded border border-blue-100 bg-blue-50 text-xs text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white" title="Edit Category-Laboratory Matrix"><FontAwesomeIcon icon={faPenToSquare} /></button></div>,
+      render: (row) => <div className="flex w-full justify-center gap-1"><button type="button" onClick={() => editCategoryMatrix(row)} className="inline-flex h-7 w-7 items-center justify-center rounded border border-blue-100 bg-blue-50 text-xs text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white" title="Edit Category-Laboratory Matrix"><FontAwesomeIcon icon={faPenToSquare} /></button><button type="button" onClick={() => deleteCategoryMatrix(row)} className="inline-flex h-7 w-7 items-center justify-center rounded border border-red-100 bg-red-50 text-xs text-red-600 transition-colors hover:border-red-600 hover:bg-red-600 hover:text-white" title="Delete Category-Laboratory Matrix"><FontAwesomeIcon icon={faTrashAlt} /></button></div>,
     },
     { key: "effectivityDate", label: "Effectivity Date", width: 180, render: (row) => formatDate(row.effectivityDate) },
     { key: "categoryCount", label: "No. of Categories", width: 180, renderType: "number" },
@@ -415,7 +457,7 @@ const LaboratorySetup = forwardRef(({ onStateChange, isActive = false }, ref) =>
 
   return (
     <div className="w-full">
-      {(isLoading || saveMutation.isPending || saveCategoryMutation.isPending) && <LoadingSpinner />}
+      {(isLoading || saveMutation.isPending || saveCategoryMutation.isPending || deletePriceMutation.isPending || deleteCategoryMutation.isPending) && <LoadingSpinner />}
       <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-gradient-to-b from-slate-50/80 to-white px-3 pt-0 dark:border-slate-700 dark:from-slate-800/60 dark:to-slate-900">
         {laboratoryTabs.map((tab) => (
           <button

@@ -22,6 +22,6 @@ const summaryColumns = [
   { key: "registeredDate", label: "Registered Date", width: 190 },
 ];
 
-const DirectLabor = (props) => <FOHTransactionPanel {...props} title="Direct Labor Reporting" detailTitle="Direct Labor Details" headerFields={headerFields} columns={columns} totalLabel="Total Labor Cost" endpoints={{ load: "/prodFOHTransaction/loadDirectLabor", get: "/prodFOHTransaction/getDirectLabor", upsert: "/prodFOHTransaction/upsertDirectLabor" }} summaryColumns={summaryColumns} />;
+const DirectLabor = (props) => <FOHTransactionPanel {...props} title="Direct Labor Reporting" detailTitle="Direct Labor Details" headerFields={headerFields} columns={columns} totalLabel="Total Labor Cost" endpoints={{ load: "/prodFOHTransaction/loadDirectLabor", get: "/prodFOHTransaction/getDirectLabor", upsert: "/prodFOHTransaction/upsertDirectLabor", lookupType: "directLabor" }} summaryColumns={summaryColumns} />;
 
 export default DirectLabor;

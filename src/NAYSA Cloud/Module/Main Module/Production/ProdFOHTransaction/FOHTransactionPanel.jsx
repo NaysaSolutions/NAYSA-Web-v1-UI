@@ -127,9 +127,22 @@ const FOHTransactionPanel = ({ title, detailTitle, headerFields = [], columns = 
           actualLaborCost: Number(row.actualLaborCost ?? 0),
         })));
       } else if (isRentAllocation) {
-        setRows(laborDetails.map((row, index) => {
-          const cycleTime = parseFormattedNumber(row.actualCycleTime ?? row.cycleTime ?? 0);
-          const standardHourlyRate = parseFormattedNumber(row.standardHourlyRate ?? row.actualHourlyRate ?? 0);
+        const rentResponse = endpoints?.lookupDetails
+          ? await apiClient.post(endpoints.lookupDetails, {
+              json_data: {
+                workOrderNo: workOrder.woNo || workOrder.WO_NO || selected.woNo || "",
+                workOrderId: workOrder.woId || workOrder.WO_ID || selected.woId || "",
+                branchCode: workOrder.branchCode || workOrder.BRANCH_CODE || selected.branchCode || "",
+                itemCode,
+              },
+            })
+          : null;
+        const rentDetails = Array.isArray(rentResponse?.data?.data)
+          ? rentResponse.data.data
+          : laborDetails;
+        setRows(rentDetails.map((row, index) => {
+          const cycleTime = parseFormattedNumber(row.cycleTime ?? row.actualCycleTime ?? 0);
+          const standardHourlyRate = parseFormattedNumber(row.standardHourlyRate ?? 0);
           return {
             lineNo: row.lineNo ?? index + 1,
             processCode: row.processCode || "",
@@ -147,8 +160,8 @@ const FOHTransactionPanel = ({ title, detailTitle, headerFields = [], columns = 
         const laboratoryCategory = laboratoryRows[0] || {};
         setValues((current) => ({
           ...current,
-          categoryCode: laboratoryCategory.categoryCode || categoryCode,
-          categoryDescription: laboratoryCategory.categoryName || current.categoryDescription || "",
+          categoryCode: laboratoryResponse?.data?.categoryCode || laboratoryCategory.categoryCode || categoryCode,
+          categoryDescription: laboratoryResponse?.data?.categoryName || laboratoryCategory.categoryName || current.categoryDescription || "",
         }));
         setRows(laboratoryRows.map((row, index) => ({
           lineNo: row.lineNo ?? index + 1,
@@ -192,6 +205,7 @@ const FOHTransactionPanel = ({ title, detailTitle, headerFields = [], columns = 
   };
 
   const total = rows.reduce((sum, row) => sum + parseFormattedNumber(row[totalKey] || 0), 0);
+  const totalColumnIndex = Math.max(columns.findIndex((column) => column.key === totalKey), 0);
 
   const saveTransaction = async () => {
     if (!endpoints?.upsert) return;
@@ -331,11 +345,11 @@ const FOHTransactionPanel = ({ title, detailTitle, headerFields = [], columns = 
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      {(isSaving || isLoadingRecord) && <LoadingSpinner />}
+      {(isSaving || isLoadingRecord || loadingWorkOrder) && <LoadingSpinner />}
       <div className="flex flex-col justify-between gap-2 border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white px-4 sm:flex-row sm:items-center dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
         <div className="flex flex-wrap gap-0">
           {views.map((view) => (
-            <button key={view.key} type="button" onClick={() => setActiveView(view.key)} className={`relative inline-flex items-center gap-2 border px-5 py-3 text-xs font-semibold transition-colors ${activeView === view.key ? "-mb-px rounded-t-lg border-b-white border-slate-200 bg-white text-blue-700 shadow-[inset_0_2px_0_0_#2563eb] dark:border-slate-700 dark:border-b-slate-900 dark:bg-slate-900 dark:text-blue-300" : "border-transparent text-slate-500 hover:bg-blue-50/60 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800"}`}>
+            <button key={view.key} type="button" onClick={() => setActiveView(view.key)} className={`relative inline-flex items-center gap-2 border px-5 py-3 text-sm font-semibold transition-colors ${activeView === view.key ? "-mb-px rounded-t-lg border-b-white border-slate-200 bg-white text-blue-700 shadow-[inset_0_2px_0_0_#2563eb] dark:border-slate-700 dark:border-b-slate-900 dark:bg-slate-900 dark:text-blue-300" : "border-transparent text-slate-500 hover:bg-blue-50/60 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800"}`}>
               <FontAwesomeIcon icon={view.icon} className="text-[11px]" />{view.label}
             </button>
           ))}
@@ -374,11 +388,11 @@ const FOHTransactionPanel = ({ title, detailTitle, headerFields = [], columns = 
           {columns.length ? (
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
               <table className="w-full min-w-[850px] border-collapse text-xs">
-                <thead><tr className="bg-blue-100 text-slate-800 dark:bg-blue-950 dark:text-slate-100">{columns.map((column) => <th key={column.key} style={{ width: column.width }} className={`border-b border-r border-blue-200 px-3 py-2 font-semibold last:border-r-0 dark:border-blue-900 ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}>{column.label}</th>)}</tr></thead>
-                <tbody>{rows.map((row, rowIndex) => <tr key={row.lineNo} className="h-9 border-b border-slate-100 last:border-b-0 dark:border-slate-800">{columns.map((column) => {
+                <thead><tr className="bg-blue-100 text-slate-800 dark:bg-blue-950 dark:text-slate-100">{columns.map((column) => <th key={column.key} style={{ width: column.width }} className={`border-b border-r border-blue-200 px-3 py-1.5 font-semibold last:border-r-0 dark:border-blue-900 ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}>{column.label}</th>)}</tr></thead>
+                <tbody>{rows.map((row, rowIndex) => <tr key={row.lineNo} className="h-8 border-b border-slate-100 last:border-b-0 dark:border-slate-800">{columns.map((column) => {
                   const editable = (isDirectLabor && ["actualCycleTime", "actualHeadCount"].includes(column.key)) || (isLaboratory && column.key === "testQuantity");
                   const numericValue = column.key === "actualLaborCost" ? formatNumber(row[column.key] || 0, 2) : column.numeric ? formatNumber(row[column.key] || 0, column.quantity ? quantityDecimals : 2) : row[column.key] || "";
-                  return <td key={column.key} className={`border-r border-slate-100 px-3 py-2 last:border-r-0 dark:border-slate-800 ${column.align === "right" ? "text-right tabular-nums" : column.align === "center" ? "text-center" : "text-left"}`}>
+                  return <td key={column.key} className={`border-r border-slate-100 px-3 py-1 last:border-r-0 dark:border-slate-800 ${column.align === "right" ? "text-right tabular-nums" : column.align === "center" ? "text-center" : "text-left"}`}>
                     {editable ? <input
                       type="text"
                       inputMode="decimal"
@@ -400,19 +414,28 @@ const FOHTransactionPanel = ({ title, detailTitle, headerFields = [], columns = 
                         window.setTimeout(() => document.getElementById(`foh-${column.key}-${nextRow}`)?.focus(), 0);
                       }}
                       id={`foh-${column.key}-${rowIndex}`}
-                      className="h-7 w-full bg-transparent text-right tabular-nums outline-none focus:ring-0 disabled:cursor-not-allowed"
+                      className="h-6 w-full bg-transparent text-right tabular-nums outline-none focus:ring-0 disabled:cursor-not-allowed"
                     /> : numericValue}
                   </td>;
                 })}</tr>)}</tbody>
-                <tfoot><tr className="border-t border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/50"><td colSpan={Math.max(columns.length - 1, 1)} className="px-3 py-2 text-right font-semibold">{totalLabel}</td><td className="px-3 py-2 text-right font-semibold tabular-nums">{formatNumber(total, 2)}</td></tr></tfoot>
+                <tfoot><tr className="border-t border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/50">
+                  {totalColumnIndex > 0 && <td colSpan={totalColumnIndex} className="px-3 py-1.5 text-right font-semibold">{totalLabel}</td>}
+                  <td className="px-3 py-1.5 text-right font-semibold tabular-nums">{formatNumber(total, 2)}</td>
+                  {columns.length - totalColumnIndex - 1 > 0 && <td colSpan={columns.length - totalColumnIndex - 1} />}
+                </tr></tfoot>
               </table>
             </div>
           ) : <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/30 px-6 text-center text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/20">{emptyMessage}</div>}
         </div>
       </div>
 
-      <div className={activeView === "summary" ? "block" : "hidden"}><div className="p-5"><div className="mb-4 flex items-center gap-3"><span className="h-5 w-1 rounded-full bg-blue-600" aria-hidden="true" /><h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title} History</h2></div>{summaryColumns.length ? <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700"><table className="w-full min-w-[900px] border-collapse text-xs"><thead><tr className="bg-blue-100 text-slate-800 dark:bg-blue-950 dark:text-slate-100"><th className="w-20 border-b border-r border-blue-200 px-3 py-2 text-center font-semibold">Actions</th>{summaryColumns.map((column) => <th key={column.key} style={{ width: column.width }} className={`border-b border-r border-blue-200 px-3 py-2 font-semibold last:border-r-0 ${column.align === "right" ? "text-right" : "text-left"}`}>{column.label}</th>)}</tr></thead><tbody>{summaryLoading && summaryRows.length === 0 ? <tr><td colSpan={summaryColumns.length + 1} className="px-3 py-8 text-center text-slate-400">Loading records...</td></tr> : summaryRows.length ? summaryRows.map((row) => <tr key={row.transactionId} className="border-b border-slate-100 hover:bg-blue-50 dark:border-slate-800 dark:hover:bg-slate-800"><td className="border-r border-slate-100 px-3 py-1.5 text-center dark:border-slate-800"><button type="button" onClick={() => loadTransaction(row)} className="inline-flex h-7 w-8 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 transition hover:border-blue-600 hover:bg-blue-600 hover:text-white" title="View Transaction" aria-label="View Transaction"><FontAwesomeIcon icon={faEye} /></button></td>{summaryColumns.map((column) => <td key={column.key} className={`border-r border-slate-100 px-3 py-2 last:border-r-0 dark:border-slate-800 ${column.align === "right" ? "text-right tabular-nums" : "text-left"}`}>{column.numeric ? formatNumber(parseFormattedNumber(row[column.key]), column.decimals ?? quantityDecimals) : String(row[column.key] ?? "")}</td>)}</tr>) : <tr><td colSpan={summaryColumns.length + 1} className="px-3 py-8 text-center text-slate-400">No records found.</td></tr>}</tbody></table></div> : <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/30 text-xs text-slate-400">History is not yet configured.</div>}</div></div>
-      <SearchClosedWorkOrder isOpen={workOrderLookupOpen} onClose={selectWorkOrder} />
+      <div className={activeView === "summary" ? "block" : "hidden"}><div className="p-5"><div className="mb-4 flex items-center gap-3"><span className="h-5 w-1 rounded-full bg-blue-600" aria-hidden="true" /><h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title} History</h2></div>{summaryColumns.length ? <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700"><table className="w-full min-w-[900px] border-collapse text-xs"><thead><tr className="bg-blue-100 text-slate-800 dark:bg-blue-950 dark:text-slate-100"><th className="w-20 border-b border-r border-blue-200 px-3 py-1.5 text-center font-semibold">Actions</th>{summaryColumns.map((column) => <th key={column.key} style={{ width: column.width }} className={`border-b border-r border-blue-200 px-3 py-1.5 font-semibold last:border-r-0 ${column.align === "right" ? "text-right" : "text-left"}`}>{column.label}</th>)}</tr></thead><tbody>{summaryLoading && summaryRows.length === 0 ? <tr><td colSpan={summaryColumns.length + 1} className="px-3 py-8 text-center text-slate-400">Loading records...</td></tr> : summaryRows.length ? summaryRows.map((row) => <tr key={row.transactionId} className="h-8 border-b border-slate-100 hover:bg-blue-50 dark:border-slate-800 dark:hover:bg-slate-800"><td className="border-r border-slate-100 px-3 py-1 text-center dark:border-slate-800"><button type="button" onClick={() => loadTransaction(row)} className="inline-flex h-6 w-8 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 transition hover:border-blue-600 hover:bg-blue-600 hover:text-white" title="View Transaction" aria-label="View Transaction"><FontAwesomeIcon icon={faEye} /></button></td>{summaryColumns.map((column) => <td key={column.key} className={`border-r border-slate-100 px-3 py-1 last:border-r-0 dark:border-slate-800 ${column.align === "right" ? "text-right tabular-nums" : "text-left"}`}>{column.numeric ? formatNumber(parseFormattedNumber(row[column.key]), column.decimals ?? quantityDecimals) : String(row[column.key] ?? "")}</td>)}</tr>) : <tr><td colSpan={summaryColumns.length + 1} className="px-3 py-8 text-center text-slate-400">No records found.</td></tr>}</tbody></table></div> : <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/30 text-xs text-slate-400">History is not yet configured.</div>}</div></div>
+      <SearchClosedWorkOrder
+        isOpen={workOrderLookupOpen}
+        onClose={selectWorkOrder}
+        transactionType={endpoints?.lookupType || ""}
+        excludeWorkOrderNo={values.workOrderNo || ""}
+      />
     </section>
   );
 };

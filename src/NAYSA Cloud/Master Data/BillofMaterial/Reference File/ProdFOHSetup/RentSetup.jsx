@@ -1,11 +1,11 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBuilding, faClockRotateLeft, faMagnifyingGlass, faPenToSquare, faUsers } from "@fortawesome/free-solid-svg-icons";
+import { faBuilding, faClockRotateLeft, faMagnifyingGlass, faPenToSquare, faTrashAlt, faUsers } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
-import { useSwalErrorAlert, useSwalErrorAlertAPI, useSwalSuccessAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { useSwalDeleteConfirm, useSwalDeleteRecord, useSwalErrorAlert, useSwalErrorAlertAPI, useSwalSuccessAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import RentAllocationRCModal from "./RentAllocationRCModal.jsx";
@@ -195,6 +195,24 @@ const RentSetup = forwardRef(({ onStateChange, isActive = false }, ref) => {
     onError: (error) => useSwalErrorAlertAPI("Save Failed", error),
   });
 
+  const deleteAllocationMutation = useMutation({
+    mutationFn: (payload) => apiClient.post("/prodFOHSetup/deleteRentAllocation", payload),
+    onSuccess: (response) => {
+      const result = response?.data?.data?.[0];
+      if (Number(result?.errorcount || 0) > 0) return useSwalErrorAlert("Delete Failed", result?.errormsg || "Unable to delete Rent Allocation.");
+      queryClient.invalidateQueries({ queryKey: ["prodFOHRentAllocationSummary"] });
+      useSwalDeleteRecord("Deleted", "Rent Allocation deleted successfully.");
+    },
+    onError: (error) => useSwalErrorAlertAPI("Delete Failed", error),
+  });
+
+  const handleDeleteHistory = useCallback(async (row) => {
+    if (!row?.rentAllocationId) return;
+    const confirmation = await useSwalDeleteConfirm("Delete Rent Allocation?", `Delete the Rent Allocation effective ${displayDate(row.effectivityDate)}? This action will be recorded in the audit trail.`);
+    if (!confirmation?.isConfirmed) return;
+    deleteAllocationMutation.mutate({ json_data: { rentAllocationId: row.rentAllocationId, userCode } });
+  }, [userCode]);
+
   const validateEffectivityDate = async (effectivityDate, rentAllocationId = "") => {
     if (!effectivityDate) return true;
     try {
@@ -265,9 +283,9 @@ const RentSetup = forwardRef(({ onStateChange, isActive = false }, ref) => {
     onStateChange?.({
       isEditing,
       activeView: rentAllocationTab,
-      isBusy: isRCLoading || isHistoryLoading || isLoadingRentAreas || saveMutation.isPending,
+      isBusy: isRCLoading || isHistoryLoading || isLoadingRentAreas || saveMutation.isPending || deleteAllocationMutation.isPending,
     });
-  }, [isEditing, isHistoryLoading, isLoadingRentAreas, isRCLoading, onStateChange, rentAllocationTab, saveMutation.isPending]);
+  }, [deleteAllocationMutation.isPending, isEditing, isHistoryLoading, isLoadingRentAreas, isRCLoading, onStateChange, rentAllocationTab, saveMutation.isPending]);
 
   const updateNumericField = (key, value) => {
     let nextValue = String(value ?? "").replace(/,/g, "").replace(/[^0-9.]/g, "");
@@ -346,7 +364,7 @@ const RentSetup = forwardRef(({ onStateChange, isActive = false }, ref) => {
     ];
   }, [allocationSummaryTab]);
   const historyColumns = useMemo(() => [
-    { key: "actions", label: "Actions", width: 85, sortable: false, filterable: false, requiredVisible: true, render: (row) => <div className="flex justify-center"><button type="button" onClick={() => handleEditHistory(row)} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-700" title="Edit Rent Allocation"><FontAwesomeIcon icon={faPenToSquare} /></button></div> },
+    { key: "actions", label: "Actions", width: 95, sortable: false, filterable: false, requiredVisible: true, render: (row) => <div className="flex justify-center gap-1"><button type="button" onClick={() => handleEditHistory(row)} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-700" title="Edit Rent Allocation"><FontAwesomeIcon icon={faPenToSquare} /></button><button type="button" onClick={() => handleDeleteHistory(row)} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-600 hover:text-white" title="Delete Rent Allocation"><FontAwesomeIcon icon={faTrashAlt} /></button></div> },
     { key: "effectivityDate", label: "Effectivity Date", width: 145, render: (row) => displayDate(row.effectivityDate) },
     { key: "totalRentAmount", label: "Total Rent Amount", width: 160, render: (row) => <div className="text-right tabular-nums">{money(row.totalRentAmount)}</div> },
     { key: "workingDays", label: "Working Days", width: 125, render: (row) => <div className="text-right tabular-nums">{money(row.workingDays)}</div> },
@@ -357,7 +375,7 @@ const RentSetup = forwardRef(({ onStateChange, isActive = false }, ref) => {
     { key: "remarks", label: "Remarks", width: 280 },
     { key: "registeredBy", label: "Registered By", width: 145 },
     { key: "registeredDate", label: "Registered Date", width: 165 },
-  ], [handleEditHistory]);
+  ], [handleDeleteHistory, handleEditHistory]);
   const selectedAreaHourlyRate = Number(calculatedAreas[selectedAreaIndex]?.standardHourlyRate || 0);
   const allocatedRCHourlyRate = selectedRCs.length > 0 ? selectedAreaHourlyRate / selectedRCs.length : 0;
 

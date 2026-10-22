@@ -706,6 +706,30 @@ const ProdFOHSetup = () => {
     onError: (error) => useSwalErrorAlertAPI("Save Failed", error),
   });
 
+  const deleteStandardMutation = useMutation({
+    mutationFn: (payload) => apiClient.post("/prodFOHSetup/deleteStandard", payload),
+    onSuccess: (response) => {
+      const result = response?.data?.data?.[0];
+      if (Number(result?.errorcount || 0) > 0) {
+        useSwalErrorAlert("Delete Failed", result?.errormsg || "Unable to delete the FOH Standard Setup.");
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["prodFOHStandardSummary"] });
+      useSwalDeleteRecord("Deleted", "FOH Standard Setup deleted successfully.");
+    },
+    onError: (error) => useSwalErrorAlertAPI("Delete Failed", error),
+  });
+
+  const handleDeleteStandard = async (row) => {
+    if (!row?.fohStandardId) return;
+    const confirmation = await useSwalDeleteConfirm(
+      "Delete FOH Standard?",
+      `Delete ${row.bomCode || "this FOH Standard"}? This action will be recorded in the audit trail.`,
+    );
+    if (!confirmation?.isConfirmed) return;
+    deleteStandardMutation.mutate({ json_data: { fohStandardId: row.fohStandardId, userCode } });
+  };
+
   const handleSaveStandard = () => {
     if (!standardForm.bomId) {
       useSwalErrorAlert("Required Field", "BOM Code is required.");
@@ -1268,14 +1292,14 @@ const ProdFOHSetup = () => {
       {
         key: "__actions",
         label: "Actions",
-        width: 80,
-        minWidth: 80,
-        maxWidth: 80,
+        width: 95,
+        minWidth: 95,
+        maxWidth: 95,
         sortable: false,
         filterable: false,
         requiredVisible: true,
         render: (row) => (
-          <div className="flex w-full items-center justify-center">
+          <div className="flex w-full items-center justify-center gap-1">
             <button
               type="button"
               onClick={(event) => {
@@ -1286,6 +1310,17 @@ const ProdFOHSetup = () => {
               title="Edit FOH Standard"
             >
               <FontAwesomeIcon icon={faPenToSquare} />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleDeleteStandard(row);
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded border border-red-100 bg-red-50 text-xs text-red-600 transition-colors hover:border-red-600 hover:bg-red-600 hover:text-white"
+              title="Delete FOH Standard"
+            >
+              <FontAwesomeIcon icon={faTrashAlt} />
             </button>
           </div>
         ),
@@ -1595,6 +1630,7 @@ const ProdFOHSetup = () => {
     saveRentAreaMutation.isPending ||
     deleteRentAreaMutation.isPending ||
     saveStandardMutation.isPending ||
+    deleteStandardMutation.isPending ||
     laboratoryCodeState.isBusy ||
     laboratorySetupState.isBusy;
 

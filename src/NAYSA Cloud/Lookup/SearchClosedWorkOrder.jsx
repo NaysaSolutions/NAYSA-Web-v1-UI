@@ -47,7 +47,7 @@ const normalizeRow = (row) => {
   };
 };
 
-const SearchClosedWorkOrder = ({ isOpen, onClose, status = "Closed" }) => {
+const SearchClosedWorkOrder = ({ isOpen, onClose, status = "Closed", transactionType = "", excludeWorkOrderNo = "" }) => {
   const { companyInfo } = useAuth() || {};
   const quantityDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
   const [rows, setRows] = useState([]);
@@ -60,7 +60,7 @@ const SearchClosedWorkOrder = ({ isOpen, onClose, status = "Closed" }) => {
     setLoading(true);
     try {
       const [{ data }, configuredColumns] = await Promise.all([
-        apiClient.get("/prodFOHTransaction/lookupWorkOrder", { params: { status } }),
+        apiClient.get("/prodFOHTransaction/lookupWorkOrder", { params: { status, transactionType } }),
         useSelectedHSColConfig("lookupWorkOrder", ""),
       ]);
       const rawResult = data?.data?.[0]?.result || "[]";
@@ -74,7 +74,9 @@ const SearchClosedWorkOrder = ({ isOpen, onClose, status = "Closed" }) => {
       const nextColumns = visibleColumns.length ? visibleColumns : fallbackColumns;
       setColumns(nextColumns);
       setFilters(makeEmptyFilters(nextColumns));
-      setRows((Array.isArray(source) ? source : []).map(normalizeRow));
+      setRows((Array.isArray(source) ? source : [])
+        .map(normalizeRow)
+        .filter((row) => String(row.woNo || "").trim().toUpperCase() !== String(excludeWorkOrderNo || "").trim().toUpperCase()));
     } finally {
       setLoading(false);
     }
@@ -82,7 +84,7 @@ const SearchClosedWorkOrder = ({ isOpen, onClose, status = "Closed" }) => {
 
   useEffect(() => {
     if (isOpen) loadRows();
-  }, [isOpen, status]);
+  }, [isOpen, status, transactionType, excludeWorkOrderNo]);
 
   const displayedRows = useMemo(() => {
     const result = rows.filter((row) => columns.every(({ key }) => String(row[key] ?? "").toLowerCase().includes(String(filters[key] || "").toLowerCase())));
