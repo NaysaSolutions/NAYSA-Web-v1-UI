@@ -454,6 +454,18 @@ const ProjectMaterialIssue = () => {
   );
 
   useEffect(() => {
+    const refreshFinalizedDocument = (event) => {
+      const finalizedIds = event?.detail?.documentIds || [];
+      if (state.documentID && finalizedIds.includes(state.documentID)) {
+        loadDocument(state.documentNo, state.branchCode);
+      }
+    };
+
+    window.addEventListener("project-mi-finalized", refreshFinalizedDocument);
+    return () => window.removeEventListener("project-mi-finalized", refreshFinalizedDocument);
+  }, [loadDocument, state.branchCode, state.documentID, state.documentNo]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const docNo = params.get("isNo");
     const branchCode = params.get("branchCode");
@@ -1146,8 +1158,12 @@ const ProjectMaterialIssue = () => {
   const statusLabel = isCancelled
     ? "CANCELLED"
     : isPosted
-      ? "POSTED"
+      ? "FINALIZED"
       : state.status || (state.documentID ? "OPEN" : "NEW");
+  const normalizedStatus = String(statusLabel).trim().toUpperCase();
+  const statusColor = normalizedStatus === "CANCELLED"
+    ? "global-tran-stat-text-closed-ui"
+    : "global-tran-stat-text-open-ui";
 
   return (
     <div className="global-tran-main-div-ui">
@@ -1198,11 +1214,7 @@ const ProjectMaterialIssue = () => {
             />
             <div>
               <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-              <h1
-                className={`global-tran-stat-text-ui uppercase ${
-                  isCancelled ? "text-red-600" : isPosted ? "text-green-700" : "text-blue-700"
-                }`}
-              >
+              <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>
                 {statusLabel}
               </h1>
             </div>

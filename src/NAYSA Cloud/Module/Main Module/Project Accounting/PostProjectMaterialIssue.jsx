@@ -25,16 +25,27 @@ const parsePostingRows = (response) => {
 };
 
 const fallbackColumns = [
+  { key: "branchCode", label: "Branch Code", width: 120, renderType: "text" },
   { key: "branchName", label: "Branch Name", width: 150, renderType: "text" },
   { key: "docNo", label: "MI No.", width: 120, renderType: "text" },
   { key: "docDate", label: "MI Date", width: 120, renderType: "date" },
   { key: "mrNo", label: "MR No.", width: 120, renderType: "text" },
+  { key: "boqNo", label: "BOQ No.", width: 120, renderType: "text" },
+  { key: "joNo", label: "JO No.", width: 120, renderType: "text" },
   { key: "projCode", label: "Project Code", width: 130, renderType: "text" },
   { key: "projName", label: "Project Name", width: 220, renderType: "text" },
+  { key: "custCode", label: "Customer Code", width: 130, renderType: "text" },
   { key: "custName", label: "Customer Name", width: 220, renderType: "text" },
+  { key: "custRefNo", label: "Cust Ref No.", width: 130, renderType: "text" },
+  { key: "phaseCode", label: "Phase Code", width: 120, renderType: "text" },
+  { key: "phaseName", label: "Phase Name", width: 180, renderType: "text" },
+  { key: "siteCode", label: "Site Code", width: 120, renderType: "text" },
+  { key: "siteName", label: "Site Name", width: 180, renderType: "text" },
+  { key: "activityCode", label: "Activity Code", width: 130, renderType: "text" },
+  { key: "activityName", label: "Activity Name", width: 180, renderType: "text" },
   { key: "rcCode", label: "RC Code", width: 110, renderType: "text" },
-  { key: "totalAmount", label: "Total Amount", width: 140, renderType: "number", roundingOff: 2 },
-  { key: "docStatus", label: "Document Status", width: 130, renderType: "text" },
+  { key: "rcName", label: "RC Name", width: 180, renderType: "text" },
+  { key: "remarks", label: "Remarks", width: 240, renderType: "text" },
 ];
 
 const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
@@ -65,8 +76,8 @@ const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
         if (!postingRows.length) {
           useSwalValidationAlert({
             icon: "info",
-            title: "No Transactions to Post",
-            message: "There are no fully allocated Project Material Issue Slip records available for posting.",
+            title: "No Transactions to Finalize",
+            message: "There are no fully allocated Project Material Issue Slip records available for finalization.",
           });
           onClose?.();
           return;
@@ -80,7 +91,7 @@ const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
       } catch (error) {
         useSwalValidationAlert({
           icon: "error",
-          title: "Posting Load Error",
+          title: "Finalization Load Error",
           message: error?.response?.data?.details || error?.response?.data?.message || error.message,
         });
       } finally {
@@ -95,7 +106,7 @@ const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
   }, [isOpen, onClose, userCode]);
 
   const handlePost = async (selectedRows, password) => {
-    await useHandlePostTran(
+    const result = await useHandlePostTran(
       selectedRows,
       password,
       POSTING_DOC_CODE,
@@ -103,6 +114,11 @@ const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
       setLoading,
       onClose
     );
+    if (result?.success) {
+      window.dispatchEvent(new CustomEvent("project-mi-finalized", {
+        detail: { documentIds: selectedRows.map((row) => row.groupId).filter(Boolean) },
+      }));
+    }
   };
 
   if (!isOpen) return null;
@@ -113,8 +129,8 @@ const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={rows}
           colConfigData={columns}
-          title="Post Project Material Issue Slip"
-          btnCaption="Post"
+          title="Finalize Project Material Issue Slip"
+          btnCaption="Finalize"
           onClose={onClose}
           onPost={handlePost}
           onViewDocument={(row) => {

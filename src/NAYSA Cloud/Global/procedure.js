@@ -544,7 +544,7 @@ export const useHandlePostTran = async (
         message: postedSummary,
       });
       onClose?.();
-      return;
+      return { success: true, data: res?.data, message: postedSummary };
     }
 
 
