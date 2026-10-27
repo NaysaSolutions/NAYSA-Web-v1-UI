@@ -8,9 +8,6 @@ import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
 import { useHandlePostTran } from "@/NAYSA Cloud/Global/procedure.js";
 import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-const ENDPOINT = "postingProjectMaterialBackload";
-const POSTING_DOC_CODE = "ProjectMaterialBackload";
-
 const parsePostingRows = (response) => {
   const raw = response?.data?.data?.[0]?.result;
   if (Array.isArray(raw)) return raw;
@@ -39,7 +36,15 @@ const fallbackColumns = [
   { key: "totalAmount", label: "Total Amount", width: 140, classNames: "text-right", renderType: "number", renderFormat: "2" },
 ];
 
-const PostProjectMaterialBackload = ({ isOpen, onClose, userCode }) => {
+const PostProjectMaterialBackload = ({
+  isOpen,
+  onClose,
+  userCode,
+  endpoint = "postingProjectMaterialBackloadIncoming",
+  postingDocCode = "ProjectMaterialBackloadIncoming",
+  transactionType = "I",
+  transactionPath = "/prj/transaction/project-material-backload-incoming",
+}) => {
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -54,8 +59,8 @@ const PostProjectMaterialBackload = ({ isOpen, onClose, userCode }) => {
       setReady(false);
       try {
         const [response, configuredColumns] = await Promise.all([
-          apiClient.get(`/${ENDPOINT}`),
-          useSelectedHSColConfig(ENDPOINT, userCode || ""),
+          apiClient.get(`/${endpoint}`),
+          useSelectedHSColConfig(endpoint, userCode || ""),
         ]);
         const postingRows = parsePostingRows(response).map((row, index) => ({
           ...row,
@@ -68,7 +73,7 @@ const PostProjectMaterialBackload = ({ isOpen, onClose, userCode }) => {
           useSwalValidationAlert({
             icon: "info",
             title: "No Transactions to Finalize",
-            message: "There are no open Incoming or Outgoing Project Material Backload records available for finalization.",
+            message: `There are no open ${transactionType === "I" ? "Incoming" : "Outgoing"} Project Material Backload records available for finalization.`,
           });
           onClose?.();
           return;
@@ -94,10 +99,10 @@ const PostProjectMaterialBackload = ({ isOpen, onClose, userCode }) => {
     return () => {
       active = false;
     };
-  }, [isOpen, onClose, userCode]);
+  }, [endpoint, isOpen, onClose, transactionType, userCode]);
 
   const handlePost = async (selectedRows, password) => {
-    const result = await useHandlePostTran(selectedRows, password, POSTING_DOC_CODE, userCode, setLoading, onClose);
+    const result = await useHandlePostTran(selectedRows, password, postingDocCode, userCode, setLoading, onClose);
     if (result?.success) {
       window.dispatchEvent(new CustomEvent("project-backload-finalized", {
         detail: { documentIds: selectedRows.map((row) => row.groupId).filter(Boolean) },
@@ -113,12 +118,12 @@ const PostProjectMaterialBackload = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={rows}
           colConfigData={columns}
-          title="Finalize Project Material Backload"
+          title={`Finalize ${transactionType === "I" ? "Incoming" : "Outgoing"} Project Material Backload`}
           btnCaption="Finalize"
           onClose={onClose}
           onPost={handlePost}
           onViewDocument={(row) => {
-            const url = `${window.location.origin}/prj/transaction/project-material-backload?blNo=${encodeURIComponent(row.docNo || "")}&branchCode=${encodeURIComponent(row.branchCode || "")}&tranType=${encodeURIComponent(row.transactionType === "Outgoing" ? "O" : "I")}&viewDocument=true`;
+            const url = `${window.location.origin}${transactionPath}?blNo=${encodeURIComponent(row.docNo || "")}&branchCode=${encodeURIComponent(row.branchCode || "")}&viewDocument=true`;
             window.open(url, "_blank", "noopener,noreferrer");
           }}
           remoteLoading={loading}

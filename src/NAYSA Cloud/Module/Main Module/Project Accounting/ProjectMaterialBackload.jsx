@@ -15,6 +15,7 @@ import LocationLookupModal from "@/NAYSA Cloud/Lookup/SearchLocation.jsx";
 import QstatLookupModal from "@/NAYSA Cloud/Lookup/SearchQStatRef.jsx";
 import COAMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 import SearchGlobalItemPickingModal from "@/NAYSA Cloud/Lookup/SearchGlobalItemPickingModal.jsx";
+import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -22,20 +23,19 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import { formatNumber, parseFormattedNumber, useSwalErrorAlert, useSwalProceedConfirm, useSwalshowSaveSuccessDialog } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useGetCurrentDayV2, useformatToDatev2 } from "@/NAYSA Cloud/Global/dates.js";
+import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
 import {
   transactionActionsCellStyle,
   transactionActionsHeaderStyle,
   useResizableTableColumns,
 } from "@/NAYSA Cloud/Global/datatable.jsx";
 
-const DOC_TYPE = "PRJ_BL";
-const DETAILS_ROUTE = "/page/ProjectMaterialBackload";
 const parseResult = (response) => {
   const raw = response?.data?.data?.[0]?.result;
   if (!raw) return null;
   try { return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; }
 };
-const blankRow = (lineNo, invType = "FG") => ({ lineNo, groupId: "", uniqueKey: "", invType, itemNo: "", itemDesc: "", uomCode: "", qtyHand: "0.000000", requestQty: "0.000000", allocatedQty: "0.000000", allocationStatus: "F", quantity: "0.000000", unitCost: "0.000000", amount: "0.00", lotNo: "", bbDate: "", qsCode: "", whCode: "", locCode: "", acctCode: "", costMethod: "", fifoDocCode: "", fifoDocNo: "", wacKey: "", fifoLocId: null, wacLocId: null });
+const blankRow = (lineNo, invType = "FG", decQty = 2) => ({ lineNo, groupId: "", boqNo: "", boqLineNo: null, uniqueKey: "", invType, itemNo: "", itemDesc: "", uomCode: "", qtyHand: formatNumber(0, decQty), requestQty: formatNumber(0, decQty), allocatedQty: formatNumber(0, decQty), allocationStatus: "F", quantity: formatNumber(0, decQty), unitCost: "0.000000", amount: "0.00", lotNo: "", bbDate: "", qsCode: "", whCode: "", locCode: "", acctCode: "", costMethod: "", fifoDocCode: "", fifoDocNo: "", wacKey: "", fifoLocId: null, wacLocId: null });
 const calculateRowAmount = (row) => Math.round(parseFormattedNumber(row?.quantity) * parseFormattedNumber(row?.unitCost) * 100) / 100;
 const formatGlReferenceDate = (value) => {
   const rawValue = String(value || "").trim();
@@ -47,17 +47,19 @@ const formatGlReferenceDate = (value) => {
   return rawValue;
 };
 
-const StockModal = ({ request, onClose }) => {
+const StockModal = ({ request, endpoint, onClose }) => {
+  const { companyInfo } = useAuth();
+  const decQty = Number(companyInfo?.itemDecqtyFG ?? 2);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let alive = true;
-    apiClient.post("/getProjectMaterialBackloadOpenStock", { json_data: request })
+    apiClient.post(endpoint, { json_data: request })
       .then((response) => { if (alive) setRows(parseResult(response)?.stockRows || []); })
       .catch((error) => Swal.fire({ icon: "error", title: "Stock Lookup Error", text: error?.response?.data?.details || error.message }))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [request]);
+  }, [endpoint, request]);
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-5">
       {loading && <LoadingSpinner />}
@@ -65,7 +67,7 @@ const StockModal = ({ request, onClose }) => {
         <div className="flex items-center justify-between border-b px-5 py-4"><h2 className="font-semibold text-blue-700">Select Stock Card Layer</h2><button onClick={() => onClose(null)}>×</button></div>
         <div className="max-h-[60vh] overflow-auto p-4">
           <table className="w-full border-collapse text-xs"><thead className="bg-blue-100"><tr>{["Method","Warehouse","Location","Lot No.","Quality Status","BB Date","Qty on Hand","Unit Cost","Reference","Action"].map((x) => <th key={x} className={`border border-slate-200 px-3 py-2 ${["Qty on Hand","Unit Cost"].includes(x) ? "text-right" : "text-left"}`}>{x}</th>)}</tr></thead>
-          <tbody>{rows.map((row) => <tr key={row.uniqueKey}><td className="border px-3 py-2">{row.costMethod}</td><td className="border px-3 py-2">{row.whCode}</td><td className="border px-3 py-2">{row.locCode}</td><td className="border px-3 py-2">{row.lotNo}</td><td className="border px-3 py-2">{row.qsCode}</td><td className="border px-3 py-2">{row.bbDate}</td><td className="border px-3 py-2 text-right">{formatNumber(row.qtyHand, 6)}</td><td className="border px-3 py-2 text-right">{formatNumber(row.unitCost, 6)}</td><td className="border px-3 py-2">{row.fifoDocNo || row.wacKey}</td><td className="border px-3 py-2 text-center"><button className="rounded bg-blue-600 px-3 py-1 text-white" onClick={() => onClose(row)}>Select</button></td></tr>)}</tbody></table>
+          <tbody>{rows.map((row) => <tr key={row.uniqueKey}><td className="border px-3 py-2">{row.costMethod}</td><td className="border px-3 py-2">{row.whCode}</td><td className="border px-3 py-2">{row.locCode}</td><td className="border px-3 py-2">{row.lotNo}</td><td className="border px-3 py-2">{row.qsCode}</td><td className="border px-3 py-2">{row.bbDate}</td><td className="border px-3 py-2 text-right">{formatNumber(row.qtyHand, decQty)}</td><td className="border px-3 py-2 text-right">{formatNumber(row.unitCost, 6)}</td><td className="border px-3 py-2">{row.fifoDocNo || row.wacKey}</td><td className="border px-3 py-2 text-center"><button className="rounded bg-blue-600 px-3 py-1 text-white" onClick={() => onClose(row)}>Select</button></td></tr>)}</tbody></table>
           {!loading && !rows.length && <div className="p-8 text-center text-slate-500">No available stock for the selected warehouse and location.</div>}
         </div>
       </div>
@@ -73,14 +75,31 @@ const StockModal = ({ request, onClose }) => {
   );
 };
 
-const ProjectMaterialBackload = () => {
+const ProjectMaterialBackload = ({
+  docType = "PRJ_BLI",
+  transactionType = "I",
+  detailsRoute = "/prj/transaction/project-material-backload-incoming",
+  componentKey = "ProjectMaterialBackloadIncoming",
+  endpoints = {},
+}) => {
+  const DOC_TYPE = docType;
+  const DETAILS_ROUTE = detailsRoute;
+  const api = {
+    load: endpoints.load || "/getProjectMaterialBackloadIncoming",
+    upsert: endpoints.upsert || "/upsertProjectMaterialBackloadIncoming",
+    history: endpoints.history || "/getProjectMaterialBackloadIncomingHistory",
+    stock: endpoints.stock || "/getProjectMaterialBackloadOutgoingOpenStock",
+    allocation: endpoints.allocation || "/saveProjectMaterialBackloadOutgoingAllocation",
+    entries: endpoints.entries || "/generateProjectMaterialBackloadIncomingEntries",
+  };
   const { currentUserRow, companyInfo, getAllTopHSDocRow } = useAuth();
   const glCurrDefault = companyInfo?.currCode || "PHP";
-  const getQtyDecimals = (invType) => Number(companyInfo?.[{ FG: "itemDecqtyFG", RM: "itemDecqtyRM", MS: "itemDecqtyMS" }[String(invType || "").toUpperCase()]] ?? 2);
+  const decQty = Number(companyInfo?.itemDecqtyFG ?? 2);
+  const getQtyDecimals = () => decQty;
   const getCostDecimals = (invType) => Number(companyInfo?.[{ FG: "itemDecUcostFG", RM: "itemDecUcostRM", MS: "itemDecUcostMS" }[String(invType || "").toUpperCase()]] ?? 2);
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
   const documentTitle = `${hsDoc?.docName || "Project Material Backload"} Transaction`;
-  const { pagePermission, isReadOnly, isFullAccess, canSave } = usePagePermission({ componentKey:"ProjectMaterialBackload", menuName:documentTitle, debug:false });
+  const { pagePermission, isReadOnly, isFullAccess, canSave } = usePagePermission({ componentKey, menuName:documentTitle, debug:false });
   const [topTab, setTopTab] = useState("details");
   const [loading, setLoading] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -89,6 +108,9 @@ const ProjectMaterialBackload = () => {
   const [locationOpen, setLocationOpen] = useState(false);
   const [itemLookup, setItemLookup] = useState(null);
   const [itemLookupIndex, setItemLookupIndex] = useState(null);
+  const [boqLookupOpen, setBoqLookupOpen] = useState(false);
+  const [boqLookupRows, setBoqLookupRows] = useState([]);
+  const [boqLookupColumns, setBoqLookupColumns] = useState([]);
   const [stockIndex, setStockIndex] = useState(null);
   const [pickingIndex, setPickingIndex] = useState(null);
   const [pickingStockRows, setPickingStockRows] = useState([]);
@@ -98,7 +120,7 @@ const ProjectMaterialBackload = () => {
   const [accountOpen, setAccountOpen] = useState(false);
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const addDropdownRef = useRef(null);
-  const initial = useCallback(() => ({ documentID: "", documentNo: "", documentDate: useGetCurrentDayV2(), documentStatus: "", status: "OPEN", branchCode: currentUserRow?.branchCode || "", branchName: currentUserRow?.branchName || "", tranType: "I", projCode: "", projName: "", custCode: "", custName: "", phaseCode: "", siteCode: "", actCode: "", rcCode: "", referenceNo: "", whCode: "", whName: "", locCode: "", locName: "", remarks: "", detailRows: [], detailRowsGL: [], startDate: `${new Date().getFullYear()}-01-01`, endDate: `${new Date().getFullYear()}-12-31` }), [currentUserRow]);
+  const initial = useCallback(() => ({ documentID: "", documentNo: "", documentDate: useGetCurrentDayV2(), documentStatus: "", status: "OPEN", branchCode: currentUserRow?.branchCode || "", branchName: currentUserRow?.branchName || "", tranType: transactionType, projCode: "", projName: "", custCode: "", custName: "", phaseCode: "", siteCode: "", actCode: "", rcCode: "", referenceNo: "", whCode: "", whName: "", locCode: "", locName: "", remarks: "", detailRows: [], detailRowsGL: [], startDate: `${new Date().getFullYear()}-01-01`, endDate: `${new Date().getFullYear()}-12-31` }), [currentUserRow, transactionType]);
   const [state, setState] = useState(initial);
   const update = (patch) => setState((old) => ({ ...old, ...patch }));
   const normalizedStatus = String(state.status || "").trim().toUpperCase();
@@ -130,10 +152,10 @@ const ProjectMaterialBackload = () => {
   const load = useCallback(async (docNo, branchCode, tranType) => {
     setLoading(true);
     try {
-      const response = await apiClient.get("/getProjectMaterialBackload", { params: { blNo: docNo, branchCode, tranType } });
+      const response = await apiClient.get(api.load, { params: { blNo: docNo, branchCode, tranType: transactionType } });
       const data = parseResult(response);
       if (!data) return;
-      setState((old) => ({ ...old, documentID: data.blId || "", documentNo: data.blNo || "", documentDate: useformatToDatev2(data.blDate), documentStatus: data.documentStatus || "", status: data.docStatus || "OPEN", branchCode: data.branchCode || "", tranType: data.tranType || "I", projCode: data.projCode || "", projName: data.projName || "", custCode: data.custCode || "", custName: data.custName || "", phaseCode: data.phaseCode || "", siteCode: data.siteCode || "", actCode: data.actCode || "", rcCode: data.rcCode || "", referenceNo: data.referenceNo || "", whCode: data.whCode || "", whName: data.whName || "", locCode: data.locCode || "", locName: data.locName || "", remarks: data.particular || "", detailRows: (data.dt1 || []).map((row, index) => ({ ...row, lineNo: row.lineNo || index + 1, qtyHand: formatNumber(row.qtyHand || 0, getQtyDecimals(row.invType)), requestQty: formatNumber(row.requestQty ?? row.quantity ?? 0, getQtyDecimals(row.invType)), allocatedQty: formatNumber(row.allocatedQty ?? row.quantity ?? 0, getQtyDecimals(row.invType)), allocationStatus: row.allocationStatus || "F", quantity: formatNumber(row.quantity || 0, getQtyDecimals(row.invType)), unitCost: formatNumber(row.unitCost || 0, getCostDecimals(row.invType)), amount: formatNumber(row.amount || 0, 2) })), detailRowsGL: data.dt2 || [] }));
+      setState((old) => ({ ...old, documentID: data.blId || "", documentNo: data.blNo || "", documentDate: useformatToDatev2(data.blDate), documentStatus: data.documentStatus || "", status: data.docStatus || "OPEN", branchCode: data.branchCode || "", tranType: transactionType, projCode: data.projCode || "", projName: data.projName || "", custCode: data.custCode || "", custName: data.custName || "", phaseCode: data.phaseCode || "", siteCode: data.siteCode || "", actCode: data.actCode || "", rcCode: data.rcCode || "", referenceNo: data.referenceNo || "", whCode: data.whCode || "", whName: data.whName || "", locCode: data.locCode || "", locName: data.locName || "", remarks: data.particular || "", detailRows: (data.dt1 || []).map((row, index) => ({ ...row, lineNo: row.lineNo || index + 1, qtyHand: formatNumber(row.qtyHand || 0, getQtyDecimals(row.invType)), requestQty: formatNumber(row.requestQty ?? row.quantity ?? 0, getQtyDecimals(row.invType)), allocatedQty: formatNumber(row.allocatedQty ?? row.quantity ?? 0, getQtyDecimals(row.invType)), allocationStatus: row.allocationStatus || "F", quantity: formatNumber(row.quantity || 0, getQtyDecimals(row.invType)), unitCost: formatNumber(row.unitCost || 0, getCostDecimals(row.invType)), amount: formatNumber(row.amount || 0, 2) })), detailRowsGL: (data.dt2 || []).map((row) => ({ ...row, slRefNo: row.slRefNo ?? row.slrefNo ?? "", slRefDate: row.slRefDate ?? row.slrefDate ?? "" })) }));
     } catch (error) { await Swal.fire({ icon: "error", title: "Retrieval Error", text: error?.response?.data?.details || error.message }); }
     finally { setLoading(false); }
   }, [companyInfo]);
@@ -166,6 +188,15 @@ const ProjectMaterialBackload = () => {
   const confirmApplyHeaderValue = async (field, value, label, headerPatch, detailExtra = {}) => {
     if (state.tranType === "O" && state.detailRows.some((row) => parseFormattedNumber(row.allocatedQty) > 0)) {
       useSwalErrorAlert(`${label} Change Blocked`, `Release all Outgoing Backload allocations before changing the ${label}.`);
+      return;
+    }
+    if (state.tranType === "O") {
+      setState((old) => ({
+        ...old,
+        ...headerPatch,
+        detailRowsGL: [],
+        detailRows: old.detailRows.map((row) => ({ ...row, [field]: value, ...detailExtra })),
+      }));
       return;
     }
     let applyAll = false;
@@ -208,33 +239,68 @@ const ProjectMaterialBackload = () => {
     });
   };
   const addItems = (invType) => { setShowAddDropdown(false); setItemLookup(invType); };
+  const openBoqItems = async () => {
+    setShowAddDropdown(false);
+    if (!state.projCode) return useSwalErrorAlert("Project Required", "Select a Project before loading BOQ items.");
+    setLoading(true);
+    try {
+      const [response, columns] = await Promise.all([
+        apiClient.post("/getProjectBackloadBOQDetails", { json_data: { branchCode: state.branchCode, projCode: state.projCode } }),
+        useSelectedHSColConfig("getProjectBackloadBOQDetails", currentUserRow?.userCode || ""),
+      ]);
+      setBoqLookupRows(parseResult(response) || []);
+      setBoqLookupColumns(Array.isArray(columns) ? columns : []);
+      setBoqLookupOpen(true);
+    } catch (error) {
+      useSwalErrorAlert("BOQ Lookup Error", error?.response?.data?.details || error.message);
+    } finally { setLoading(false); }
+  };
+  const applyBoqItems = (payload) => {
+    const selected = payload?.records || [];
+    setBoqLookupOpen(false);
+    if (!selected.length) return;
+    const existing = new Set(state.detailRows.filter((row) => row.boqNo).map((row) => String(row.groupId || "").toUpperCase()));
+    if (selected.some((row) => existing.has(String(row.groupId || "").toUpperCase()))) {
+      useSwalErrorAlert("Duplicate BOQ Reference", "The selected item from the BOQ Reference already exists in Item Details. Selecting the same BOQ item more than once is not allowed.");
+      return;
+    }
+    setState((old) => ({
+      ...old,
+      detailRowsGL: [],
+      detailRows: [...old.detailRows, ...selected.map((item, index) => {
+        const qty = parseFormattedNumber(item.boqBalance);
+        const cost = parseFormattedNumber(item.unitCost);
+        return { ...blankRow(old.detailRows.length + index + 1, item.invType, decQty), groupId:item.groupId || "", boqNo:item.boqNo || "", boqLineNo:item.boqLineNo ?? null, itemNo:item.itemNo || "", itemDesc:item.itemDesc || "", uomCode:item.uomCode || "", requestQty:formatNumber(qty,getQtyDecimals(item.invType)), quantity:formatNumber(transactionType === "I" ? qty : 0,getQtyDecimals(item.invType)), unitCost:formatNumber(cost,getCostDecimals(item.invType)), amount:formatNumber(transactionType === "I" ? qty*cost : 0,2), whCode:old.whCode, locCode:old.locCode };
+      })],
+    }));
+  };
   const insertBlankRow = (index) => setState((old) => {
     const rows = [...old.detailRows];
-    rows.splice(index + 1, 0, blankRow(index + 2, ""));
+    rows.splice(index + 1, 0, blankRow(index + 2, "", decQty));
     return { ...old, detailRowsGL: [], detailRows: rows.map((row, rowIndex) => ({ ...row, lineNo: rowIndex + 1 })) };
   });
   const removeRow = async (index) => {
     const row=state.detailRows[index];
     if(state.detailRows.length===1){useSwalErrorAlert("Delete Backload Detail","At least one Backload detail is required.");return;}
-    if(state.tranType==="O" && parseFormattedNumber(row?.allocatedQty)>0){const confirm=await useSwalProceedConfirm("Delete Allocated Backload Detail?","Deleting this line will release its inventory allocation.","Yes");if(!confirm?.isConfirmed)return;setLoading(true);try{await apiClient.post("/saveProjectMaterialBackloadAllocation",{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode||"",dt1:[]}});}catch(error){useSwalErrorAlert("Delete Detail Failed",error?.response?.data?.details||error.message);setLoading(false);return;}finally{setLoading(false);}}
+    if(state.tranType==="O" && parseFormattedNumber(row?.allocatedQty)>0){const confirm=await useSwalProceedConfirm("Delete Allocated Backload Detail?","Deleting this line will release its inventory allocation.","Yes");if(!confirm?.isConfirmed)return;setLoading(true);try{await apiClient.post(api.allocation,{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode||"",dt1:[]}});}catch(error){useSwalErrorAlert("Delete Detail Failed",error?.response?.data?.details||error.message);setLoading(false);return;}finally{setLoading(false);}}
     const rows=state.detailRows.filter((_,i)=>i!==index).map((item,i)=>({...item,lineNo:i+1}));setState((old)=>({...old,detailRows:rows,detailRowsGL:[]}));if(state.documentID)await persistRows(rows);
   };
   const generateGLEntries = async (sourceRows = state.detailRows) => {
     if (!sourceRows.length || (state.tranType === "O" && !sourceRows.some((row) => parseFormattedNumber(row.allocatedQty) > 0))) return [];
-    const response = await apiClient.post("/generateProjectMaterialBackloadEntries", { json_data: { blDate: state.documentDate, tranType: state.tranType, custCode: state.custCode, custName: state.custName, rcCode: state.rcCode, dt1: sourceRows.map((row, index) => ({ ...row, lineNo: index + 1, amount: calculateRowAmount(row) })) } });
+    const response = await apiClient.post(api.entries, { json_data: { blDate: state.documentDate, tranType: transactionType, custCode: state.custCode, custName: state.custName, rcCode: state.rcCode, dt1: sourceRows.map((row, index) => ({ ...row, lineNo: index + 1, amount: calculateRowAmount(row) })) } });
     const rows = response?.data?.data || [];
     if (rows[0]?.errorCount) throw new Error(rows[0].errorMsg || "Unable to generate General Ledger entries.");
     const normalized = rows.map((row, index) => ({ ...row, recNo: index + 1 }));
     update({ detailRowsGL: normalized });
     return normalized;
   };
-  const copyDocument = () => setState((old) => ({ ...old, documentID: "", documentNo: "", documentStatus: "", status: "OPEN", documentDate: useGetCurrentDayV2(), detailRows: old.detailRows.map((row, index) => ({ ...row, lineNo: index + 1, groupId: "", ...(old.tranType === "O" ? {allocatedQty:"0.000000",allocationStatus:"F",quantity:"0.000000",unitCost:"0.000000",amount:"0.00"} : {}) })), detailRowsGL: [] }));
+  const copyDocument = () => setState((old) => ({ ...old, documentID: "", documentNo: "", documentStatus: "", status: "OPEN", documentDate: useGetCurrentDayV2(), detailRows: old.detailRows.map((row, index) => ({ ...row, lineNo: index + 1, groupId: "", boqNo: "", boqLineNo: null, ...(old.tranType === "O" ? {allocatedQty:formatNumber(0,decQty),allocationStatus:"F",quantity:formatNumber(0,decQty),unitCost:"0.000000",amount:"0.00"} : {}) })), detailRowsGL: [] }));
   const persistRows = async (sourceRows, showSuccess = false) => {
     setLoading(true);
     try {
       const glRows = await generateGLEntries(sourceRows);
-      const payload = { branchCode: state.branchCode, blId: state.documentID, blNo: state.documentNo, blDate: state.documentDate, tranType: state.tranType, projCode: state.projCode, projName: state.projName, custCode: state.custCode, custName: state.custName, phaseCode: state.phaseCode, siteCode: state.siteCode, actCode: state.actCode, rcCode: state.rcCode, referenceNo: state.referenceNo, whCode: state.whCode, locCode: state.locCode, particular: state.remarks, userCode: currentUserRow?.userCode || "", dt1: sourceRows.map((row, i) => ({ ...row, lineNo: i + 1, qtyHand: parseFormattedNumber(row.qtyHand), requestQty: parseFormattedNumber(row.requestQty), allocatedQty: parseFormattedNumber(row.allocatedQty), quantity: parseFormattedNumber(row.quantity), unitCost: parseFormattedNumber(row.unitCost), amount: calculateRowAmount(row), whCode: row.whCode || state.whCode, locCode: row.locCode || state.locCode })), dt2: glRows.map((row, index) => ({ ...row, recNo: index + 1, debit: parseFormattedNumber(row.debit), credit: parseFormattedNumber(row.credit) })) };
-      const response = await apiClient.post("/upsertProjectMaterialBackload", { json_data: payload });
+      const payload = { branchCode: state.branchCode, blId: state.documentID, blNo: state.documentNo, blDate: state.documentDate, docCode: DOC_TYPE, tranType: transactionType, projCode: state.projCode, projName: state.projName, custCode: state.custCode, custName: state.custName, phaseCode: state.phaseCode, siteCode: state.siteCode, actCode: state.actCode, rcCode: state.rcCode, referenceNo: state.referenceNo, whCode: state.whCode, locCode: state.locCode, particular: state.remarks, userCode: currentUserRow?.userCode || "", dt1: sourceRows.map((row, i) => ({ ...row, lineNo: i + 1, qtyHand: parseFormattedNumber(row.qtyHand), requestQty: parseFormattedNumber(row.requestQty), allocatedQty: parseFormattedNumber(row.allocatedQty), quantity: parseFormattedNumber(row.quantity), unitCost: parseFormattedNumber(row.unitCost), amount: calculateRowAmount(row), whCode: row.whCode || state.whCode, locCode: row.locCode || state.locCode })), dt2: glRows.map((row, index) => ({ ...row, recNo: index + 1, debit: parseFormattedNumber(row.debit), credit: parseFormattedNumber(row.credit) })) };
+      const response = await apiClient.post(api.upsert, { json_data: payload });
       const result = response?.data?.data?.[0] || {};
       if (result.errorCount) throw new Error(result.errorMsg);
       await load(result.docNo || state.documentNo, state.branchCode, state.tranType);
@@ -250,7 +316,7 @@ const ProjectMaterialBackload = () => {
     if (!row?.groupId || parseFormattedNumber(row.requestQty) <= 0) return;
     setLoading(true);
     try {
-      const response = await apiClient.post("/getProjectMaterialBackloadOpenStock", { json_data: { blId:state.documentID,blNo:state.documentNo,branchCode:state.branchCode,whCode:row.whCode || state.whCode,locCode:row.locCode || state.locCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty) } });
+      const response = await apiClient.post(api.stock, { json_data: { blId:state.documentID,blNo:state.documentNo,branchCode:state.branchCode,docCode:DOC_TYPE,whCode:row.whCode || state.whCode,locCode:row.locCode || state.locCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty) } });
       const result = parseResult(response) || {};
       setPickingStockRows(result.stockRows || []); setExistingAllocations(result.existingAllocations || []); setPickingIndex(index);
     } catch (error) { useSwalErrorAlert("Stock Retrieval Failed", error?.response?.data?.details || error.message); } finally { setLoading(false); }
@@ -259,7 +325,7 @@ const ProjectMaterialBackload = () => {
     if (pickingIndex === null) return;
     const row=state.detailRows[pickingIndex]; setLoading(true);
     try {
-      const response=await apiClient.post("/saveProjectMaterialBackloadAllocation",{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode || "",dt1:allocation?.allocations || []}});
+      const response=await apiClient.post(api.allocation,{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,docCode:DOC_TYPE,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode || "",dt1:allocation?.allocations || []}});
       const result=parseResult(response) || {}; const allocated=parseFormattedNumber(result.totalAllocated); const amount=parseFormattedNumber(result.itemAmount);
       const rows=state.detailRows.map((item,index)=>index===pickingIndex?{...item,allocatedQty:formatNumber(allocated,getQtyDecimals(item.invType)),quantity:formatNumber(allocated,getQtyDecimals(item.invType)),allocationStatus:result.allocationStatus || "F",unitCost:formatNumber(allocated?amount/allocated:0,getCostDecimals(item.invType)),amount:formatNumber(amount,2)}:item);
       setPickingIndex(null); await persistRows(rows);
@@ -269,11 +335,13 @@ const ProjectMaterialBackload = () => {
   const bulkAllocation=async(release=false)=>{
     if(!state.documentID)return useSwalErrorAlert("Save Required","Save the Outgoing Backload before allocating stock.");
     const confirm=await useSwalProceedConfirm(release?"Release All?":"Allocate All?",release?"This will release all Outgoing Backload allocations.":"This will allocate available stock for all Outgoing Backload details.","Yes"); if(!confirm?.isConfirmed)return;
-    setLoading(true);try{let rows=[...state.detailRows];for(let i=0;i<rows.length;i+=1){const row=rows[i];const stock=release?[]:((parseResult(await apiClient.post("/getProjectMaterialBackloadOpenStock",{json_data:{blId:state.documentID,blNo:state.documentNo,branchCode:state.branchCode,whCode:row.whCode||state.whCode,locCode:row.locCode||state.locCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty)}}))||{}).stockRows||[]);const response=await apiClient.post("/saveProjectMaterialBackloadAllocation",{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode||"",dt1:release?[]:buildAutoAllocations(stock,row.requestQty)}});const result=parseResult(response)||{};const allocated=parseFormattedNumber(result.totalAllocated),amount=parseFormattedNumber(result.itemAmount);rows[i]={...row,allocatedQty:formatNumber(allocated,getQtyDecimals(row.invType)),quantity:formatNumber(allocated,getQtyDecimals(row.invType)),allocationStatus:result.allocationStatus||"F",unitCost:formatNumber(allocated?amount/allocated:0,getCostDecimals(row.invType)),amount:formatNumber(amount,2)};}await persistRows(rows);}catch(error){useSwalErrorAlert(release?"Release All Failed":"Allocate All Failed",error?.response?.data?.details||error.message);}finally{setLoading(false);}
+    setLoading(true);try{let rows=[...state.detailRows];for(let i=0;i<rows.length;i+=1){const row=rows[i];const stock=release?[]:((parseResult(await apiClient.post(api.stock,{json_data:{blId:state.documentID,blNo:state.documentNo,branchCode:state.branchCode,docCode:DOC_TYPE,whCode:row.whCode||state.whCode,locCode:row.locCode||state.locCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty)}}))||{}).stockRows||[]);const response=await apiClient.post(api.allocation,{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,docCode:DOC_TYPE,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode||"",dt1:release?[]:buildAutoAllocations(stock,row.requestQty)}});const result=parseResult(response)||{};const allocated=parseFormattedNumber(result.totalAllocated),amount=parseFormattedNumber(result.itemAmount);rows[i]={...row,allocatedQty:formatNumber(allocated,getQtyDecimals(row.invType)),quantity:formatNumber(allocated,getQtyDecimals(row.invType)),allocationStatus:result.allocationStatus||"F",unitCost:formatNumber(allocated?amount/allocated:0,getCostDecimals(row.invType)),amount:formatNumber(amount,2)};}await persistRows(rows);}catch(error){useSwalErrorAlert(release?"Release All Failed":"Allocate All Failed",error?.response?.data?.details||error.message);}finally{setLoading(false);}
   };
 
   const detailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
+    { key: "boqNo", label: "BOQ No.", width: 120 },
+    { key: "boqLineNo", label: "BOQ LN", width: 90 },
     { key: "invType", label: "Type", width: 80 },
     { key: "allocationStatus", label: "Picking Status", width: 140 },
     { key: "itemNo", label: "Item Code", width: 130 },
@@ -304,7 +372,9 @@ const ProjectMaterialBackload = () => {
     (column) =>
       (!["allocationStatus","requestQty","allocatedQty"].includes(column.key) || state.tranType === "O") &&
       (column.key !== "quantity" || state.tranType === "I") &&
-      (column.key !== "acctCode" || state.tranType === "I"),
+      // Both Incoming and Outgoing require a line account. It is the credit
+      // account used when the GL entries are generated.
+      (!["qtyHand","lotNo","qsCode","bbDate","whCode","locCode"].includes(column.key) || state.tranType === "I"),
   );
   const sortedDetailRows = getSortedRows(
     state.detailRows.map((row, originalIndex) => ({ row, originalIndex })),
@@ -340,8 +410,12 @@ const ProjectMaterialBackload = () => {
     switch (column.key) {
       case "ln":
         return <td key={column.key} className={`${common} text-center`} style={style}>{index + 1}</td>;
+      case "boqNo":
+        return <td key={column.key} className={common} style={style}>{row.boqNo || ""}</td>;
+      case "boqLineNo":
+        return <td key={column.key} className={`${common} text-right`} style={style}>{row.boqLineNo ?? ""}</td>;
       case "invType":
-        return <td key={column.key} className={common} style={style}>{row.itemNo ? row.invType : <select className="global-tran-td-inputclass-ui w-full border-0 bg-transparent text-xs" value={row.invType || ""} disabled={finalized} onChange={(event) => setState((old) => ({ ...old, detailRowsGL: [], detailRows: old.detailRows.map((detail, rowIndex) => rowIndex === index ? { ...blankRow(detail.lineNo, event.target.value), whCode: detail.whCode || old.whCode, locCode: detail.locCode || old.locCode } : detail) }))}><option value="">Select Type</option><option value="FG">FG</option><option value="RM">RM</option><option value="MS">MS</option></select>}</td>;
+        return <td key={column.key} className={common} style={style}>{row.itemNo ? row.invType : <select className="global-tran-td-inputclass-ui w-full border-0 bg-transparent text-xs" value={row.invType || ""} disabled={finalized} onChange={(event) => setState((old) => ({ ...old, detailRowsGL: [], detailRows: old.detailRows.map((detail, rowIndex) => rowIndex === index ? { ...blankRow(detail.lineNo, event.target.value, decQty), whCode: detail.whCode || old.whCode, locCode: detail.locCode || old.locCode } : detail) }))}><option value="">Select Type</option><option value="FG">FG</option><option value="RM">RM</option><option value="MS">MS</option></select>}</td>;
       case "itemNo":
         return <td key={column.key} className={common} style={style}>{row.itemNo ? row.itemNo : renderLookupCell("", () => { if (row.invType) setItemLookupIndex(index); }, !row.invType)}</td>;
       case "itemDesc":
@@ -443,7 +517,7 @@ const ProjectMaterialBackload = () => {
                 <FieldRenderer id="branch" label="Branch" value={state.branchName} disabled />
                 <FieldRenderer id="blNo" label="Backload No." type="lookup" value={state.documentNo} disabled={finalized} onChange={(v) => update({ documentNo: v })} onBlur={() => state.documentNo && load(state.documentNo, state.branchCode, state.tranType)} onLookup={() => setDocLookupOpen(true)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (state.documentNo) load(state.documentNo,state.branchCode,state.tranType); document.getElementById("documentDate")?.focus(); } }} />
                 <div className="relative w-full"><div className={`flex items-stretch global-ref-textbox-ui ${finalized ? "global-ref-textbox-disabled" : "global-ref-textbox-enabled"}`}><DateFormatInput id="documentDate" value={state.documentDate} disabled={finalized} className="peer flex-grow border-none bg-transparent px-3 focus:outline-none" updateState={(x) => update({ documentDate: x.documentDate })} /></div><label htmlFor="documentDate" className="global-ref-floating-label">Backload Date</label></div>
-                <FieldRenderer id="tranType" label="Transaction Type" type="select" value={state.tranType} disabled={Boolean(state.documentID) || finalized} options={[{ value: "I", label: "Incoming" }, { value: "O", label: "Outgoing" }]} onChange={(v) => update({ tranType: v, detailRows: [], detailRowsGL: [], documentNo: "" })} />
+                <FieldRenderer id="tranType" label="Transaction Type" type="select" value={transactionType} disabled options={[{ value: "I", label: "Incoming" }, { value: "O", label: "Outgoing" }]} />
               </div>
               <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer id="project" label="Project Code" required type="lookup" value={state.projCode} disabled={finalized} onLookup={() => setProjectOpen(true)} />
@@ -538,13 +612,14 @@ const ProjectMaterialBackload = () => {
                 <div className="border-b border-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-slate-700 dark:text-slate-500">Add Item</div>
                 <div className="p-2">
                   {[{value:"FG",name:"Finished Goods",hint:"Add FG item",icon:faBoxOpen},{value:"MS",name:"Material Supplies",hint:"Add MS item",icon:faTableCellsLarge},{value:"RM",name:"Raw Material",hint:"Add RM item",icon:faWarehouse}].map((item,index) => <button key={item.value} type="button" className={`${index ? "mt-1 " : ""}flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700`} onClick={() => addItems(item.value)}><div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200"><FontAwesomeIcon icon={item.icon}/></span><div className="flex flex-col items-start"><span>{item.name}</span><span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">{item.hint}</span></div></div><span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">{item.value}</span></button>)}
+                  <button type="button" className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-slate-700" onClick={openBoqItems}><div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300"><FontAwesomeIcon icon={faClipboardCheck}/></span><div className="flex flex-col items-start"><span>BOQ Items</span><span className="text-[11px] font-normal text-slate-400">Select from Project BOQ</span></div></div><span className="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-600 dark:bg-slate-700">BOQ</span></button>
                 </div>
               </div>}
               <button type="button" disabled={finalized || !state.projCode || !state.whCode} className={`global-tran-tab-footer-button-add-ui ${finalized || !state.projCode || !state.whCode ? "cursor-not-allowed opacity-50" : ""}`} onClick={() => setShowAddDropdown((value) => !value)}><FontAwesomeIcon icon={faPlus} className="mr-2"/>Add</button>
             </div>
             {state.tranType === "O" && <><button type="button" className="ml-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700" disabled={loading || finalized || !state.documentID} onClick={()=>bulkAllocation(false)}><FontAwesomeIcon icon={faClipboardCheck} className="mr-2"/>Allocate All</button><button type="button" className="ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700" disabled={loading || finalized || !state.detailRows.some((row)=>parseFormattedNumber(row.allocatedQty)>0)} onClick={()=>bulkAllocation(true)}><FontAwesomeIcon icon={faMinus} className="mr-2"/>Release All</button></>}
           </div>
-          <div className="global-tran-tab-footer-total-main-div-ui grid grid-cols-2 gap-1">{state.tranType === "O" && <><div className="global-tran-tab-footer-total-label-ui">Total Required Quantity:</div><div className="global-tran-tab-footer-total-value-ui">{formatNumber(state.detailRows.reduce((sum,row)=>sum+parseFormattedNumber(row.requestQty),0),6)}</div><div className="global-tran-tab-footer-total-label-ui">Total Allocated Quantity:</div><div className="global-tran-tab-footer-total-value-ui">{formatNumber(state.detailRows.reduce((sum,row)=>sum+parseFormattedNumber(row.allocatedQty),0),6)}</div></>}<div className="global-tran-tab-footer-total-label-ui">Total Amount:</div><div className="global-tran-tab-footer-total-value-ui">{formatNumber(total,2)}</div></div>
+          <div className="global-tran-tab-footer-total-main-div-ui grid grid-cols-2 gap-1">{state.tranType === "O" && <><div className="global-tran-tab-footer-total-label-ui">Total Required Quantity:</div><div className="global-tran-tab-footer-total-value-ui">{formatNumber(state.detailRows.reduce((sum,row)=>sum+parseFormattedNumber(row.requestQty),0),decQty)}</div><div className="global-tran-tab-footer-total-label-ui">Total Allocated Quantity:</div><div className="global-tran-tab-footer-total-value-ui">{formatNumber(state.detailRows.reduce((sum,row)=>sum+parseFormattedNumber(row.allocatedQty),0),decQty)}</div></>}<div className="global-tran-tab-footer-total-label-ui">Total Amount:</div><div className="global-tran-tab-footer-total-value-ui">{formatNumber(total,2)}</div></div>
         </div>
       </section>
       <section className="global-tran-tab-div-ui">
@@ -565,15 +640,16 @@ const ProjectMaterialBackload = () => {
         <div className="global-tran-tab-footer-main-div-ui"><div className="global-tran-tab-footer-button-div-ui"/><div className="global-tran-tab-footer-total-main-div-ui"><div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Debit ({glCurrDefault}):</label><label className="global-tran-tab-footer-total-value-ui">{formatNumber(totalDebit,2)}</label></div><div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Credit ({glCurrDefault}):</label><label className="global-tran-tab-footer-total-value-ui">{formatNumber(totalCredit,2)}</label></div></div></div>
       </section>
     </div>
-    <div className={topTab === "history" ? "" : "hidden"}><AllTranHistory showHeader={false} isActive={topTab === "history"} endpoint="/getProjectMaterialBackloadHistory" cacheKey={`PRJ_BL:${state.branchCode}:${state.startDate}:${state.endDate}`} activeTabKey="PRJ_BL_Summary" branchCode={state.branchCode} startDate={state.startDate} endDate={state.endDate} status="All" historyExportName="Project Material Backload History" onRowDoubleClick={(row) => { load(row.docNo,row.branchCode,row.tranType === "Incoming" ? "I" : row.tranType === "Outgoing" ? "O" : row.tranType); setTopTab("details"); }} /></div>
+    <div className={topTab === "history" ? "" : "hidden"}><AllTranHistory showHeader={false} isActive={topTab === "history"} endpoint={api.history} cacheKey={`${DOC_TYPE}:${state.branchCode}:${state.startDate}:${state.endDate}`} activeTabKey={`${DOC_TYPE}_Summary`} branchCode={state.branchCode} startDate={state.startDate} endDate={state.endDate} status="All" historyExportName={`${transactionType === "I" ? "Incoming" : "Outgoing"} Project Material Backload History`} onRowDoubleClick={(row) => { load(row.docNo,row.branchCode,transactionType); setTopTab("details"); }} /></div>
     {docLookupOpen && <AllTranDocNo isOpen params={{ branchCode:state.branchCode,branchName:state.branchName,docType:DOC_TYPE,documentTitle:hsDoc?.docName || "Project Material Backload",fieldNo:"blNo",tranType:state.tranType }} docNo={state.documentNo} onRetrieve={async ({docNo,modalClose}) => { await load(docNo,state.branchCode,state.tranType); setDocLookupOpen(Boolean(modalClose)); }} onSelected={({docNo}) => { update({documentNo:docNo}); setDocLookupOpen(false); }} onResponse={{documentNo:state.documentNo}} onClose={() => setDocLookupOpen(false)} />}
     <SearchProjectRef isOpen={projectOpen} onClose={(project) => { setProjectOpen(false); if (project) update({ projCode: project.projectCode || "", projName: project.projectName || "", custCode: project.customerCode || "", custName: project.customerName || "", phaseCode: project.phaseCode || "", siteCode: project.siteCode || "", actCode: project.activityCode || "", rcCode: project.rcCode || "", detailRows: [], detailRowsGL: [] }); }} />
     {warehouseOpen && <WarehouseLookupModal isOpen onClose={async (row) => { setWarehouseOpen(false); if (!row) { setSelectedDetailIndex(null); return; } const whCode=row.whouseCode || row.whCode || ""; const whName=row.whouseName || row.whName || ""; if (selectedDetailIndex === null) await confirmApplyHeaderValue("whCode",whCode,"Warehouse",{ whCode,whName,locCode:"",locName:"" },{ locCode:"" }); else await confirmApplyDetailValue(selectedDetailIndex,"whCode",whCode,"Warehouse",{ locCode:"" }); setSelectedDetailIndex(null); }} filter={`ByBC${state.branchCode}`} branchCode={state.branchCode} invType={selectedDetailIndex === null ? undefined : state.detailRows[selectedDetailIndex]?.invType} />}
     {locationOpen && <LocationLookupModal isOpen onClose={async (row) => { setLocationOpen(false); if (!row) { setSelectedDetailIndex(null); return; } const locCode=row.locCode || ""; const locName=row.locName || ""; if (selectedDetailIndex === null) await confirmApplyHeaderValue("locCode",locCode,"Location",{ locCode,locName }); else await confirmApplyDetailValue(selectedDetailIndex,"locCode",locCode,"Location"); setSelectedDetailIndex(null); }} whCode={selectedDetailIndex === null ? state.whCode : (state.detailRows[selectedDetailIndex]?.whCode || state.whCode)} />}
     {qualityOpen && <QstatLookupModal isOpen onClose={async (row) => { setQualityOpen(false); if (row && selectedDetailIndex !== null) await confirmApplyDetailValue(selectedDetailIndex,"qsCode",row.qstatCode || row.qsCode || "","Quality Status"); setSelectedDetailIndex(null); }} filter="ActiveAll" />}
     {accountOpen && <COAMastLookupModal isOpen onClose={async (row) => { setAccountOpen(false); if (row && selectedDetailIndex !== null) await confirmApplyDetailValue(selectedDetailIndex,"acctCode",row.acctCode || row.accountCode || "","Account Code"); setSelectedDetailIndex(null); }} source="acctCode" />}
-    {itemLookupIndex !== null && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${state.detailRows[itemLookupIndex]?.invType || "FG"}`} docType="PRJ_BL" customParam="ActiveAll" enableMultiSelect={false} onClose={(payload) => { const rowIndex=itemLookupIndex; setItemLookupIndex(null); const item=payload?.records?.[0]; if (!item || rowIndex === null) return; setState((old) => ({ ...old, detailRowsGL: [], detailRows:old.detailRows.map((row,index) => index===rowIndex ? { ...row,itemNo:item.itemCode || "",itemDesc:item.itemName || item.itemDesc || "",uomCode:item.uomCode || "",qtyHand:formatNumber(item.qtyHand || 0,6),unitCost:formatNumber(item.unitCost || 0,6),quantity:"0.000000",amount:"0.00",whCode:row.whCode || old.whCode,locCode:row.locCode || old.locCode } : row) })); }} onCancel={() => setItemLookupIndex(null)} />}
-    {itemLookup && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${itemLookup}`} docType="PRJ_BL" customParam="ActiveAll" enableMultiSelect onClose={(payload) => { const invType=itemLookup; setItemLookup(null); const selected=payload?.records || []; setState((old) => ({ ...old, detailRowsGL: [], detailRows: [...old.detailRows, ...selected.filter((item) => !old.detailRows.some((r) => r.invType===invType && r.itemNo===item.itemCode)).map((item,i) => ({ ...blankRow(old.detailRows.length+i+1,invType), itemNo:item.itemCode || "", itemDesc:item.itemName || item.itemDesc || "", uomCode:item.uomCode || "", qtyHand:formatNumber(item.qtyHand || 0,6), unitCost:formatNumber(item.unitCost || 0,6), whCode:old.whCode, locCode:old.locCode }))] })); }} onCancel={() => setItemLookup(null)} />}
+    {itemLookupIndex !== null && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${state.detailRows[itemLookupIndex]?.invType || "FG"}`} docType={DOC_TYPE} customParam="ActiveAll" enableMultiSelect={false} onClose={(payload) => { const rowIndex=itemLookupIndex; setItemLookupIndex(null); const item=payload?.records?.[0]; if (!item || rowIndex === null) return; setState((old) => ({ ...old, detailRowsGL: [], detailRows:old.detailRows.map((row,index) => index===rowIndex ? { ...row,itemNo:item.itemCode || "",itemDesc:item.itemName || item.itemDesc || "",uomCode:item.uomCode || "",qtyHand:formatNumber(item.qtyHand || 0,decQty),unitCost:formatNumber(item.unitCost || 0,6),quantity:formatNumber(0,decQty),amount:"0.00",whCode:row.whCode || old.whCode,locCode:row.locCode || old.locCode } : row) })); }} onCancel={() => setItemLookupIndex(null)} />}
+    {itemLookup && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${itemLookup}`} docType={DOC_TYPE} customParam="ActiveAll" enableMultiSelect onClose={(payload) => { const invType=itemLookup; setItemLookup(null); const selected=payload?.records || []; setState((old) => ({ ...old, detailRowsGL: [], detailRows: [...old.detailRows, ...selected.filter((item) => !old.detailRows.some((r) => r.invType===invType && r.itemNo===item.itemCode)).map((item,i) => ({ ...blankRow(old.detailRows.length+i+1,invType,decQty), itemNo:item.itemCode || "", itemDesc:item.itemName || item.itemDesc || "", uomCode:item.uomCode || "", qtyHand:formatNumber(item.qtyHand || 0,decQty), unitCost:formatNumber(item.unitCost || 0,6), whCode:old.whCode, locCode:old.locCode }))] })); }} onCancel={() => setItemLookup(null)} />}
+    <GlobalLookupModalv1 isOpen={boqLookupOpen} data={boqLookupRows} endpoint={boqLookupColumns} title={`Select BOQ Items - ${state.projCode}`} btnCaption="Get Selected BOQ Items" onClose={applyBoqItems} onCancel={() => setBoqLookupOpen(false)} preferenceKey={`${DOC_TYPE}_BOQ_Items`} exportFileName={`${state.projCode}_BOQ_Items`} />
     {pickingIndex !== null && <SearchGlobalItemPickingModal isOpen transaction={{sourceDocType:DOC_TYPE,sourceDocTypeName:"Project Material Backload",sourceDocNo:state.documentNo,sourceLineNo:state.detailRows[pickingIndex]?.lineNo,groupId:state.detailRows[pickingIndex]?.groupId,customerCode:state.custCode,customerName:state.custName,itemCode:state.detailRows[pickingIndex]?.itemNo,itemName:state.detailRows[pickingIndex]?.itemDesc,requestedQty:parseFormattedNumber(state.detailRows[pickingIndex]?.requestQty)}} stockRows={pickingStockRows} existingAllocations={existingAllocations} onClose={()=>setPickingIndex(null)} onConfirm={saveAllocation}/>} 
   </div>;
 };

@@ -966,6 +966,54 @@ export async function useHandleDownloadExcelPRDReport(params) {
   }
 }
 
+export async function useHandlePrintPRJReport(params) {
+  try {
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      customerCode: params.customerCode || params.custCode,
+      projectCode: params.projectCode || params.projCode,
+      rcCode: params.rcCode || params.departmentCode,
+      reportName: formName,
+      sprocMode: responseDocRpt?.sprocMode || params.mode || "",
+      sprocName: responseDocRpt?.sprocName || "",
+      export: "N",
+      userCode: params.userCode || getCachedUserCode(),
+    };
+
+    const pdfBlob = await postPdfRequest("/printPRJReport", payload);
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    openPdfPreview(pdfBlob);
+  } catch (error) {
+    showPrintError(error);
+  }
+}
+
+export async function useHandleDownloadExcelPRJReport(params) {
+  return await postRequest("getPRJReport", {
+    PARAMS: JSON.stringify({
+      mode: params.mode,
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      customerCode: params.customerCode || params.custCode,
+      projectCode: params.projectCode || params.projCode,
+      rcCode: params.rcCode || params.departmentCode,
+      userCode: params.userCode || getCachedUserCode(),
+    }),
+  });
+}
+
 
 export async function useHandleDownloadExcelBIRReport(params) {
   const { branchCode, sCutOff, eCutOff, userName, mode } = params;

@@ -40,20 +40,20 @@ const DOC_TYPE = "PRJ_MR";
 const COMPONENT_KEY = "ProjectMaterialRequisition";
 const DETAILS_ROUTE = "/page/ProjectMaterialRequisition";
 
-const emptyDetailRow = (lineNo) => ({
+const emptyDetailRow = (lineNo, decQty = 2) => ({
   lineNo,
   groupId: "",
   invType: "FG",
   itemNo: "",
   itemDesc: "",
   uomCode: "",
-  qtyHand: "0.000000",
-  quantity: "0.000000",
+  qtyHand: formatNumber(0, decQty),
+  quantity: formatNumber(0, decQty),
   unitCost: "0.00",
   amount: "0.00",
   specs: "",
-  isQty: "0.000000",
-  boqBal: "0.000000",
+  isQty: formatNumber(0, decQty),
+  boqBal: formatNumber(0, decQty),
   boqLineNo: "",
 });
 
@@ -72,7 +72,8 @@ const parseProcedureResult = (response) => {
 const ProjectMaterialRequisition = () => {
   const location = useLocation();
   const loadedFromUrlRef = useRef(false);
-  const { currentUserRow, getAllTopHSDocRow } = useAuth();
+  const { currentUserRow, companyInfo, getAllTopHSDocRow } = useAuth();
+  const decQty = Number(companyInfo?.itemDecqtyFG ?? 2);
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
   const documentTitle = `${hsDoc?.docName || "Project Material Requisition"} Transaction`;
 
@@ -309,15 +310,15 @@ const ProjectMaterialRequisition = () => {
           joRef: data.joRef || "",
           remarks: data.particular || "",
           detailRows: (data.dt1 || []).map((row, index) => ({
-            ...emptyDetailRow(index + 1),
+            ...emptyDetailRow(index + 1, decQty),
             ...row,
             lineNo: row.lineNo || index + 1,
-            qtyHand: formatNumber(row.qtyHand || 0, 6),
-            quantity: formatNumber(row.quantity || 0, 6),
+            qtyHand: formatNumber(row.qtyHand || 0, decQty),
+            quantity: formatNumber(row.quantity || 0, decQty),
             unitCost: formatNumber(row.unitCost || 0, 2),
             amount: formatNumber(row.amount || 0, 2),
-            isQty: formatNumber(row.isQty || 0, 6),
-            boqBal: formatNumber(row.boqBal || 0, 6),
+            isQty: formatNumber(row.isQty || 0, decQty),
+            boqBal: formatNumber(row.boqBal || 0, decQty),
           })),
           isDocNoDisabled: true,
           isFetchDisabled: true,
@@ -402,20 +403,20 @@ const ProjectMaterialRequisition = () => {
             parseFormattedNumber(row.boqQty || 0) - parseFormattedNumber(row.mrQty || 0)
           );
           return {
-            ...emptyDetailRow(index + 1),
+            ...emptyDetailRow(index + 1, decQty),
             lineNo: index + 1,
             groupId: row.groupId || "",
             invType: row.invType || "",
             itemNo: row.itemNo || "",
             itemDesc: row.itemDesc || "",
             uomCode: row.uomCode || "",
-            qtyHand: formatNumber(row.qtyHand || 0, 6),
-            quantity: "0.000000",
+            qtyHand: formatNumber(row.qtyHand || 0, decQty),
+            quantity: formatNumber(0, decQty),
             unitCost: formatNumber(row.unitCost || 0, 2),
             amount: "0.00",
             specs: "",
-            isQty: formatNumber(row.isQty || 0, 6),
-            boqBal: formatNumber(boqBalance, 6),
+            isQty: formatNumber(row.isQty || 0, decQty),
+            boqBal: formatNumber(boqBalance, decQty),
             boqLineNo: row.lineNo || index + 1,
           };
         }),
@@ -965,7 +966,7 @@ const ProjectMaterialRequisition = () => {
                                   originalIndex,
                                   column.key,
                                   ["qtyHand", "isQty", "boqBal"].includes(column.key)
-                                    ? { readOnly: true, numeric: true, decimals: 6 }
+                                    ? { readOnly: true, numeric: true, decimals: decQty }
                                     : ["unitCost", "amount"].includes(column.key)
                                       ? { readOnly: true, numeric: true, decimals: 2 }
                                       : column.key === "boqLineNo"
@@ -973,7 +974,7 @@ const ProjectMaterialRequisition = () => {
                                         : ["invType", "itemNo", "itemDesc", "uomCode"].includes(column.key)
                                           ? { readOnly: true }
                                           : column.key === "quantity"
-                                            ? { numeric: true, decimals: 6 }
+                                            ? { numeric: true, decimals: decQty }
                                             : {}
                                 )}
                           </td>

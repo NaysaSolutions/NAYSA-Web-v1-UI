@@ -42,7 +42,7 @@ const DOC_TYPE = "PRJ_IS";
 const COMPONENT_KEY = "ProjectMaterialIssue";
 const DETAILS_ROUTE = "/page/ProjectMaterialIssue";
 
-const emptyDetailRow = (lineNo) => ({
+const emptyDetailRow = (lineNo, decQty = 2) => ({
   lineNo,
   groupId: "",
   mrId: "",
@@ -51,14 +51,14 @@ const emptyDetailRow = (lineNo) => ({
   itemNo: "",
   itemDesc: "",
   uomCode: "",
-  requestQty: "0.000000",
-  allocatedQty: "0.000000",
+  requestQty: formatNumber(0, decQty),
+  allocatedQty: formatNumber(0, decQty),
   allocationStatus: "F",
-  quantity: "0.000000",
+  quantity: formatNumber(0, decQty),
   unitCost: "0.00",
   amount: "0.00",
-  boqBal: "0.000000",
-  mrBalance: "0.000000",
+  boqBal: formatNumber(0, decQty),
+  mrBalance: formatNumber(0, decQty),
 });
 
 const parseProcedureResult = (response) => {
@@ -95,6 +95,7 @@ const ProjectMaterialIssue = () => {
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
   const documentTitle = `${hsDoc?.docName || "Project Material Issue Slip"} Transaction`;
   const glCurrDefault = companyInfo?.currCode || "PHP";
+  const decQty = Number(companyInfo?.itemDecqtyFG ?? 2);
 
   const [topTab, setTopTab] = useState("details");
   const [isLoading, setIsLoading] = useState(false);
@@ -410,17 +411,17 @@ const ProjectMaterialIssue = () => {
           joRef: data.miReference || "",
           remarks: data.particular || "",
           detailRows: (data.dt1 || []).map((row, index) => ({
-            ...emptyDetailRow(index + 1),
+            ...emptyDetailRow(index + 1, decQty),
             ...row,
             lineNo: row.lineNo || index + 1,
-            requestQty: formatNumber(row.requestQty ?? row.quantity ?? 0, 6),
-            allocatedQty: formatNumber(row.allocatedQty ?? row.quantity ?? 0, 6),
+            requestQty: formatNumber(row.requestQty ?? row.quantity ?? 0, decQty),
+            allocatedQty: formatNumber(row.allocatedQty ?? row.quantity ?? 0, decQty),
             allocationStatus: row.allocationStatus || "F",
-            quantity: formatNumber(row.quantity || 0, 6),
+            quantity: formatNumber(row.quantity || 0, decQty),
             unitCost: formatNumber(row.unitCost || 0, 2),
             amount: formatNumber(row.amount || 0, 2),
-            boqBal: formatNumber(row.boqBal || 0, 6),
-            mrBalance: formatNumber(row.mrBalance ?? row.requestQty ?? row.quantity ?? 0, 6),
+            boqBal: formatNumber(row.boqBal || 0, decQty),
+            mrBalance: formatNumber(row.mrBalance ?? row.requestQty ?? row.quantity ?? 0, decQty),
           })),
           detailRowsGL: (data.dt2 || []).map((row, index) => {
             const usesLegacyRequiredSl =
@@ -526,7 +527,7 @@ const ProjectMaterialIssue = () => {
         detailRows: (mr.dt1 || []).filter((row) => String(row.invType || "").toUpperCase() !== "SV").map((row, index) => {
           const mrBalance = Math.max(0, parseFormattedNumber(row.quantity || 0) - parseFormattedNumber(row.isQty || 0));
           return {
-            ...emptyDetailRow(index + 1),
+            ...emptyDetailRow(index + 1, decQty),
             lineNo: index + 1,
             groupId: row.groupId || "",
             mrId: mr.mrId || "",
@@ -535,14 +536,14 @@ const ProjectMaterialIssue = () => {
             itemNo: row.itemNo || "",
             itemDesc: row.itemDesc || "",
             uomCode: row.uomCode || "",
-            requestQty: formatNumber(mrBalance, 6),
-            allocatedQty: formatNumber(0, 6),
+            requestQty: formatNumber(mrBalance, decQty),
+            allocatedQty: formatNumber(0, decQty),
             allocationStatus: "F",
-            quantity: formatNumber(0, 6),
+            quantity: formatNumber(0, decQty),
             unitCost: formatNumber(0, 2),
             amount: formatNumber(0, 2),
-            boqBal: formatNumber(row.boqBal || 0, 6),
-            mrBalance: formatNumber(mrBalance, 6),
+            boqBal: formatNumber(row.boqBal || 0, decQty),
+            mrBalance: formatNumber(mrBalance, decQty),
           };
         }),
       });
@@ -688,8 +689,8 @@ const ProjectMaterialIssue = () => {
       const itemAmount = parseFormattedNumber(result.itemAmount || 0);
       const updatedRows = state.detailRows.map((item, index) => index === stockLookupIndex ? {
         ...item,
-        allocatedQty: formatNumber(allocatedQty, 6),
-        quantity: formatNumber(allocatedQty, 6),
+        allocatedQty: formatNumber(allocatedQty, decQty),
+        quantity: formatNumber(allocatedQty, decQty),
         allocationStatus: result.allocationStatus || "F",
         unitCost: formatNumber(allocatedQty > 0 ? itemAmount / allocatedQty : 0, 2),
         amount: formatNumber(itemAmount, 2),
@@ -790,8 +791,8 @@ const ProjectMaterialIssue = () => {
         const itemAmount = parseFormattedNumber(result.itemAmount || 0);
         updatedRows[index] = {
           ...row,
-          allocatedQty: formatNumber(allocatedQty, 6),
-          quantity: formatNumber(allocatedQty, 6),
+          allocatedQty: formatNumber(allocatedQty, decQty),
+          quantity: formatNumber(allocatedQty, decQty),
           allocationStatus: result.allocationStatus || "F",
           unitCost: formatNumber(allocatedQty > 0 ? itemAmount / allocatedQty : 0, 2),
           amount: formatNumber(itemAmount, 2),
@@ -1427,7 +1428,7 @@ const ProjectMaterialIssue = () => {
                                   <div className="flex items-center gap-1">
                                     <input
                                       type="text"
-                                      value={formatNumber(state.detailRows[originalIndex]?.allocatedQty || 0, 6)}
+                                      value={formatNumber(state.detailRows[originalIndex]?.allocatedQty || 0, decQty)}
                                       readOnly
                                       className="global-tran-td-inputclass-ui min-w-0 flex-1 border-0 bg-transparent text-right text-xs"
                                     />
@@ -1447,7 +1448,7 @@ const ProjectMaterialIssue = () => {
                                   originalIndex,
                                   column.key,
                                   ["requestQty", "allocatedQty", "boqBal", "mrBalance"].includes(column.key)
-                                    ? { readOnly: true, numeric: true, decimals: 6 }
+                                    ? { readOnly: true, numeric: true, decimals: decQty }
                                     : ["unitCost", "amount"].includes(column.key)
                                       ? { readOnly: true, numeric: true, decimals: 2 }
                                       : ["invType", "itemNo", "itemDesc", "uomCode"].includes(column.key)
@@ -1510,8 +1511,8 @@ const ProjectMaterialIssue = () => {
             </div>
             <div className="global-tran-tab-footer-total-main-div-ui grid grid-cols-2 gap-1">
               {[
-                ["Total Required Quantity", totalRequiredQuantity, 6],
-                ["Total Allocated Quantity", totalAllocatedQuantity, 6],
+                ["Total Required Quantity", totalRequiredQuantity, decQty],
+                ["Total Allocated Quantity", totalAllocatedQuantity, decQty],
                 ["Total Amount", totalAmount, 2],
               ].map(([label, amount, decimals]) => (
                 <Fragment key={label}>

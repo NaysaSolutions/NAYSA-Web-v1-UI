@@ -43,15 +43,15 @@ const DOC_TYPE = "PRJ_BQ";
 const COMPONENT_KEY = "ProjectBOQ";
 const DETAILS_ROUTE = "/page/ProjectBOQ";
 
-const emptyDetailRow = (lineNo) => ({
+const emptyDetailRow = (lineNo, decQty = 2) => ({
   lineNo,
   groupId: "",
   invType: "FG",
   itemNo: "",
   itemDesc: "",
   uomCode: "",
-  qtyHand: "0.000000",
-  boqQty: "0.000000",
+  qtyHand: formatNumber(0, decQty),
+  boqQty: formatNumber(0, decQty),
   unitCost: "0.00",
   amount: "0.00",
   markupRate: "0.00",
@@ -60,10 +60,10 @@ const emptyDetailRow = (lineNo) => ({
   vatCode: "",
   vatAmount: "0.00",
   grossAmount: "0.00",
-  mrQty: "0.000000",
-  isQty: "0.000000",
-  blQty: "0.000000",
-  prQty: "0.000000",
+  mrQty: formatNumber(0, decQty),
+  isQty: formatNumber(0, decQty),
+  blQty: formatNumber(0, decQty),
+  prQty: formatNumber(0, decQty),
 });
 
 const parseProcedureResult = (response) => {
@@ -81,7 +81,8 @@ const parseProcedureResult = (response) => {
 const ProjectBOQ = () => {
   const location = useLocation();
   const loadedFromUrlRef = useRef(false);
-  const { currentUserRow, getAllTopHSDocRow, getAllTopVatRow } = useAuth();
+  const { currentUserRow, companyInfo, getAllTopHSDocRow, getAllTopVatRow } = useAuth();
+  const decQty = Number(companyInfo?.itemDecqtyFG ?? 2);
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
   const documentTitle = `${hsDoc?.docName || "Bill of Quantity"} Transaction`;
 
@@ -348,12 +349,12 @@ const ProjectBOQ = () => {
           joAmount: formatNumber(data.joAmount || 0, 2),
           remarks: data.particular || "",
           detailRows: (data.dt1 || []).map((row, index) => ({
-            ...emptyDetailRow(index + 1),
+            ...emptyDetailRow(index + 1, decQty),
             ...row,
             lineNo: row.lineNo || index + 1,
             uomCode: String(row.invType || "").toUpperCase() === "SV" ? (row.uomCode || "LOT") : (row.uomCode || ""),
-            qtyHand: formatNumber(row.qtyHand || 0, 6),
-            boqQty: formatNumber(row.boqQty || 0, 6),
+            qtyHand: formatNumber(row.qtyHand || 0, decQty),
+            boqQty: formatNumber(row.boqQty || 0, decQty),
             unitCost: formatNumber(row.unitCost || 0, 2),
             amount: formatNumber(row.amount || 0, 2),
             markupRate: formatNumber(row.markupRate || 0, 2),
@@ -402,7 +403,7 @@ const ProjectBOQ = () => {
           changed.itemNo = "";
           changed.itemDesc = "";
           changed.uomCode = String(value || "").toUpperCase() === "SV" ? "LOT" : "";
-          changed.qtyHand = formatNumber(0, 6);
+          changed.qtyHand = formatNumber(0, decQty);
           changed.unitCost = formatNumber(0, 2);
           changed.amount = formatNumber(0, 2);
           changed.markupAmount = formatNumber(0, 2);
@@ -448,7 +449,7 @@ const ProjectBOQ = () => {
     updateState({
       detailRows: [
         ...state.detailRows,
-        emptyDetailRow(state.detailRows.length + 1),
+        emptyDetailRow(state.detailRows.length + 1, decQty),
       ],
     });
   };
@@ -1059,11 +1060,11 @@ const ProjectBOQ = () => {
                                     : column.key === "vatCode"
                                       ? { vatLookup: true }
                                     : ["qtyHand", "amount", "markupAmount", "totalAmount", "vatAmount", "grossAmount", "mrQty", "isQty", "blQty", "prQty"].includes(column.key)
-                                      ? { readOnly: true, numeric: true, decimals: ["qtyHand", "mrQty", "isQty", "blQty", "prQty"].includes(column.key) ? 6 : 2 }
+                                  ? { readOnly: true, numeric: true, decimals: ["qtyHand", "mrQty", "isQty", "blQty", "prQty"].includes(column.key) ? decQty : 2 }
                                     : column.key === "uomCode"
                                       ? { readOnly: String(row.invType || "").toUpperCase() !== "SV" }
                                       : ["boqQty", "unitCost", "markupRate"].includes(column.key)
-                                        ? { numeric: true, decimals: column.key === "boqQty" ? 6 : 2 }
+                                    ? { numeric: true, decimals: column.key === "boqQty" ? decQty : 2 }
                                         : column.key === "invType"
                                           ? { select: [{ value: "FG", label: "FG" }, { value: "RM", label: "RM" }, { value: "MS", label: "MS" }, { value: "SV", label: "SV" }] }
                                           : {}
@@ -1091,7 +1092,7 @@ const ProjectBOQ = () => {
                                   rows.splice(
                                     originalIndex + 1,
                                     0,
-                                    emptyDetailRow(originalIndex + 2)
+                                    emptyDetailRow(originalIndex + 2, decQty)
                                   );
                                   updateState({
                                     detailRows: rows.map((item, index) => ({
@@ -1263,7 +1264,7 @@ const ProjectBOQ = () => {
                       itemNo: item.itemCode || "",
                       itemDesc: item.itemName || item.itemDesc || "",
                       uomCode: item.uomCode || "",
-                      qtyHand: formatNumber(item.qtyHand || 0, 6),
+                      qtyHand: formatNumber(item.qtyHand || 0, decQty),
                       unitCost: formatNumber(item.unitCost || 0, 2),
                     }
                   : row

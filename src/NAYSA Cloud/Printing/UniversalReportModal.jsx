@@ -47,6 +47,8 @@ import {
   useHandleDownloadExcelTaxReport,
   useHandlePrintSalesReport,
   useHandlePrintBUDReport,
+  useHandlePrintPRJReport,
+  useHandleDownloadExcelPRJReport,
   exportGenericHistoryExcel,
 } from "@/NAYSA Cloud/Global/report";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
@@ -71,6 +73,7 @@ import SearchFACateg from "@/NAYSA Cloud/Lookup/SearchFACateg.jsx";
 import SearchFAClass from "@/NAYSA Cloud/Lookup/SearchFAClass.jsx";
 import SearchFALoc from "@/NAYSA Cloud/Lookup/SearchFALoc.jsx";
 import SearchBudItemRef from "@/NAYSA Cloud/Lookup/SearchBudItemRef.jsx";
+import SearchProjectRef from "@/NAYSA Cloud/Lookup/SearchProjectRef.jsx";
 import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 import GlobalReportPreviewModal from "@/NAYSA Cloud/Printing/GlobalReportPreviewModal.jsx";
 
@@ -188,6 +191,19 @@ const FINANCIAL_MODULES = {
   },
 };
 
+const PROJECT_MODULES = {
+  PRJ: {
+    label: "Project",
+    lookup: null,
+    print: useHandlePrintPRJReport,
+    excel: useHandleDownloadExcelPRJReport,
+    hasProject: true,
+    hasCustomer: true,
+    hasSingleRc: true,
+    rcLabel: "Department/RC",
+  },
+};
+
 const DEFAULT_MODULE_OPTIONS = {
   hasExtra: false,
   hasCutoff: false,
@@ -200,6 +216,7 @@ const MODULE_DEFS = Object.fromEntries(
     ...AR_AND_SALES_MODULES,
     ...INVENTORY_MODULES,
     ...FINANCIAL_MODULES,
+    ...PROJECT_MODULES,
   }).map(([code, definition]) => [code, { ...DEFAULT_MODULE_OPTIONS, ...definition }]),
 );
 
@@ -287,6 +304,11 @@ const buildReportParams = ({ reportId, mode, filters, config, userCode }) => ({
   slCode: filters.sSlCode,
   rcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
   departmentCode: filters.rcCode,
+
+  // Project Accounting filters
+  customerCode: filters.custCode,
+  projectCode: filters.projCode,
+  projCode: filters.projCode,
 
   // Inventory / fixed asset filters
   itemCode: config.hasSales ? filters.itemCode : filters.sCode,
@@ -501,6 +523,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     salesCustomerModal: false,
     salesChainModal: false,
     salesItemModal: false,
+    projectModal: false,
     slModal: false,
     rcModal: false,
     warehouseModal: false,
@@ -541,6 +564,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     sRcCode: "", sRcName: "", eRcCode: "", eRcName: "",
     rcCode: "", rcName: "",
     custCode: "", custName: "",
+    projCode: "", projName: "",
     chainCustomer: "", chainCustomerName: "",
     itemCode: "", itemName: "",
     whCode: "", whName: "", locCode: "", locName: "",
@@ -754,7 +778,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     sCode: "", sName: "", eCode: "", eName: "",
     sSlCode: "", sSlName: "", eSlCode: "", eSlName: "",
     sRcCode: "", sRcName: "", eRcCode: "", eRcName: "",
-    rcCode: "", rcName: "", custCode: "", custName: "", chainCustomer: "", chainCustomerName: "", itemCode: "", itemName: "",
+    rcCode: "", rcName: "", custCode: "", custName: "", projCode: "", projName: "", chainCustomer: "", chainCustomerName: "", itemCode: "", itemName: "",
     whCode: "", whName: "", locCode: "", locName: "",
     categCode: "", categName: "", classCode: "", className: "", faCode: "", faName: "",
     sCutOff: "", sCutOffName: "", eCutOff: "", eCutOffName: "", reportType: "TEXT",
@@ -1137,8 +1161,24 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                           ring={ring} btnClass={btnCls} />
                       </>)}
 
+                      {/* Project Accounting */}
+                      {config.hasProject && (<>
+                        <LookupField label="Customer"
+                          value={filters.custName || filters.custCode}
+                          placeholder="Select Customer..."
+                          onOpen={() => updateUi({ salesCustomerModal: true })}
+                          onClear={() => updateFilters({ custCode: "", custName: "" })}
+                          ring={ring} btnClass={btnCls} />
+                        <LookupField label="Project"
+                          value={filters.projName || filters.projCode}
+                          placeholder="Select Project..."
+                          onOpen={() => updateUi({ projectModal: true })}
+                          onClear={() => updateFilters({ projCode: "", projName: "" })}
+                          ring={ring} btnClass={btnCls} />
+                      </>)}
+
                       {/* Main lookup: single or range */}
-                      {!config.hasCutoff && !config.hasInventory && !config.hasFA && !config.hasSales && !config.hasBudget && (
+                      {!config.hasCutoff && !config.hasInventory && !config.hasFA && !config.hasSales && !config.hasBudget && !config.hasProject && (
                         config.hasSingleMain ? (
                           <LookupField label={config.label}
                             value={filters.sName} placeholder={`Select ${config.label}…`}
@@ -1347,6 +1387,22 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
           onClose={p => {
             if (p) updateFilters({ custCode: p.custCode || "", custName: p.custName || "" });
             updateUi({ salesCustomerModal: false });
+          }}
+        />
+      )}
+
+      {config.hasProject && ui.projectModal && (
+        <SearchProjectRef
+          isOpen={ui.projectModal}
+          title="Select Project"
+          onClose={project => {
+            if (project) {
+              updateFilters({
+                projCode: project.projectCode || project.projCode || "",
+                projName: project.projectName || project.projName || "",
+              });
+            }
+            updateUi({ projectModal: false });
           }}
         />
       )}
