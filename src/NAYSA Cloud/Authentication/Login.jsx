@@ -197,6 +197,8 @@ export default function Login({ onSwitchToRegister }) {
     localStorage.getItem("companyCode") || ""
   );
 
+  const [companyDisplayName, setCompanyDisplayName] = useState("");
+  const [loadingCompanyName, setLoadingCompanyName] = useState(false);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isBioLoading, setIsBioLoading] = useState(false);
@@ -261,6 +263,33 @@ export default function Login({ onSwitchToRegister }) {
   useEffect(() => {
     if (companyCode) localStorage.setItem("companyCode", companyCode);
   }, [companyCode]);
+
+  // Retrieve the actual company name from the selected tenant's COMPANY table.
+  // The tenant header is explicit, so this request is independent of login state.
+  useEffect(() => {
+    let active = true;
+    setCompanyDisplayName("");
+    if (!companyCode) {
+      setLoadingCompanyName(false);
+      return () => { active = false; };
+    }
+
+    setLoadingCompanyName(true);
+    apiClient.get("/company-brand", {
+      headers: { "X-Company-DB": companyCode },
+    }).then(({ data }) => {
+      if (active) setCompanyDisplayName(String(data?.companyName || "").trim());
+    }).catch((error) => {
+      console.warn("Unable to load company name from COMPANY table:", error);
+      if (active) setCompanyDisplayName("");
+    }).finally(() => {
+      if (active) setLoadingCompanyName(false);
+    });
+
+    return () => { active = false; };
+  }, [companyCode]);
+
+
 
   function setBioAuthInProgress(value) {
     try {
@@ -617,7 +646,7 @@ export default function Login({ onSwitchToRegister }) {
         <div className="grid w-full grid-cols-1 items-center gap-8 lg:grid-cols-[1.08fr_.92fr]">
           <section className="hidden lg:block">
             <div className="mb-6 inline-flex items-center gap-3 rounded-full border border-white/50 bg-white/16 px-6 py-2.5 text-xs font-extrabold uppercase tracking-[0.28em] text-white shadow-xl backdrop-blur-md">
-              NAYSA-SOLUTIONS INCORPORATED
+              {loadingCompanyName ? "LOADING COMPANY..." : companyDisplayName || "COMPANY"}
             </div>
 
             <h1 className="whitespace-nowrap text-4xl font-black uppercase leading-none tracking-[0.06em] text-white drop-shadow-[0_5px_18px_rgba(0,0,0,.45)] xl:text-5xl 2xl:text-6xl">
