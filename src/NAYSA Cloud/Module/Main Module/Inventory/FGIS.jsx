@@ -89,7 +89,8 @@ import {
 const FGIS = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsGLRef = useRef([]);
-  const { user } = useAuth();
+  
+  const { companyInfo, user, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow } = useAuth();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -141,8 +142,8 @@ useEffect(() => {
       rr_date: new Date().toISOString().split("T")[0], // PR Date
     },
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
 
     tranType: "REG",
 
@@ -488,8 +489,8 @@ useEffect(() => {
 
     updateState({
       header: { rr_date: today },
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode||"",
+      branchName: currentUserRow?.branchName||"",
       cutoffCode: "",
       rcCode: "",
       rcName: "",
