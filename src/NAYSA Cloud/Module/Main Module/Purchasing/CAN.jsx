@@ -155,14 +155,14 @@ const statusText = (code, fallback = "") => {
   const value = String(code || "").trim().toUpperCase();
   const fallbackValue = String(fallback || "").trim().toUpperCase();
   const map = {
-    D: "DRAFT",
-    F: "FOR APPROVAL",
-    A: "APPROVED",
-    W: "AWARDED",
-    C: "CANCELLED",
-    X: "CANCELLED",
+    D: "Draft",
+    F: "For Approval",
+    A: "Approved",
+    W: "Awarded",
+    C: "Cancelled",
+    X: "Cancelled",
   };
-  return map[value] || map[fallbackValue] || fallbackValue || "DRAFT";
+  return map[value] || map[fallbackValue] || fallback || "Draft";
 };
 
 
@@ -312,6 +312,11 @@ export const CAN = () => {
     canStatus: "D",
     canStatusName: "Draft",
     canCancelled: false,
+    appStat: "NA",
+    appLevel: 0,
+    requiredAppLevel: 0,
+    nextApprovalLevel: 0,
+    approvalData: {},
 
     branchCode: currentUserRow?.branchCode || "",
     branchName: currentUserRow?.branchName || "",
@@ -342,7 +347,6 @@ export const CAN = () => {
     activeTab: "pr",
     activeSupplierIndex: 0,
     supplierActiveTabs: {},
-    showPrBreakdown: true,
     isLoading: false,
     showSpinner: false,
     showBranchModal: false,
@@ -365,6 +369,11 @@ export const CAN = () => {
     canStatus,
     canStatusName,
     canCancelled,
+    appStat,
+    appLevel,
+    requiredAppLevel,
+    nextApprovalLevel,
+    approvalData,
     branchCode,
     branchName,
     selectedSupplierCode,
@@ -382,7 +391,6 @@ export const CAN = () => {
     activeTab,
     activeSupplierIndex,
     supplierActiveTabs,
-    showPrBreakdown,
     isLoading,
     showSpinner,
     showBranchModal,
@@ -407,7 +415,22 @@ export const CAN = () => {
   const isFormDisabled = isLocked;
   const isDraft = normalizedCanStatus === "D" || normalizedDisplayStatus === "DRAFT";
   const hasDocument = Boolean(canId);
-  const hasPrBreakdownRows = detailRows.some((row) => normalizeRows(row.prBreakdown).length > 0);
+  const approvalEnabled = String(hsDoc?.docApp || "").toUpperCase() === "Y";
+  const currentApprovalStatus = String(appStat || "NA").trim().toUpperCase();
+  const showApprovalStatus = approvalEnabled && hasDocument && !canCancelled && normalizedDisplayStatus !== "CANCELLED";
+  const approvalStatus = (() => {
+    if (currentApprovalStatus === "C") return "Cancelled Transaction";
+    if (currentApprovalStatus === "R") return "Rejected Transaction";
+    if (currentApprovalStatus === "A") return "Approved Transaction";
+    if (currentApprovalStatus === "NA") return "Approval Not Required";
+    const pendingLevel = Number(nextApprovalLevel || 0) || Number(appLevel || 0) + 1;
+    return `Awaiting for L${pendingLevel} Approval`;
+  })();
+  const approvalStatusColor = currentApprovalStatus === "R"
+    ? "text-red-600"
+    : currentApprovalStatus === "A"
+      ? "text-blue-700"
+      : "text-slate-900";
   const statusTextColor =
     normalizedDisplayStatus === "CANCELLED"
       ? "text-red-600"
@@ -836,6 +859,11 @@ export const CAN = () => {
       canStatus: "D",
       canStatusName: "Draft",
       canCancelled: false,
+      appStat: "NA",
+      appLevel: 0,
+      requiredAppLevel: 0,
+      nextApprovalLevel: 0,
+      approvalData: {},
       branchCode: currentUserRow?.branchCode || "",
       branchName: currentUserRow?.branchName || currentUserRow?.BranchName || "",
       selectedSupplierCode: "",
@@ -851,7 +879,6 @@ export const CAN = () => {
       activeTab: "pr",
       activeSupplierIndex: 0,
       supplierActiveTabs: {},
-      showPrBreakdown: true,
       isLoading: false,
       showSpinner: false,
       showBranchModal: false,
@@ -972,6 +999,11 @@ export const CAN = () => {
         canStatus: data.canStatus || "D",
         canStatusName: data.canStatusName || statusText(data.canStatus),
         canCancelled: Boolean(data.canCancelled),
+        appStat: data.appStat || "NA",
+        appLevel: Number(data.appLevel || 0),
+        requiredAppLevel: Number(data.requiredAppLevel || 0),
+        nextApprovalLevel: Number(data.nextApprovalLevel || 0),
+        approvalData: data.approvalData || {},
         branchCode: data.branchCode || fetchBranchCode,
         selectedSupplierCode: awarded?.supplierCode || data.selectedSupplierCode || "",
         selectedSupplierName: awarded?.supplierName || data.selectedSupplierName || "",
@@ -2397,6 +2429,19 @@ export const CAN = () => {
       return;
     }
 
+    try {
+      await apiClient.post("/can/approval/validate-po-lines", { json_data: {
+        canId,
+        lineRows: selectedPORows.map((row) => ({ canDt1Id: row.canDt1Id })),
+      }});
+    } catch (error) {
+      useSwalErrorAlert(
+        "Generate Purchase Order",
+        errorMessage(error, "Only approved Canvass line items can be converted to Purchase Order."),
+      );
+      return;
+    }
+
     const result = await useSwalProceedConfirm(
       "Generate Purchase Order?",
       `Create ${generatedPOCount} Purchase Order${generatedPOCount > 1 ? "s" : ""} using the existing PO save endpoint?`,
@@ -2652,8 +2697,11 @@ export const CAN = () => {
   try {
     const data = await callCAN("upsert", buildPayload());
     const responseRow = Array.isArray(data) ? data[0] : data;
-    const savedCanId =responseRow?.canId ||  "";
-    const savedCanNo = responseRow?.canNo ||  "";
+    // Some approval-enabled re-saves return only "Success" after the database
+    // has already updated the existing transaction. Preserve the retrieved
+    // identity in that case; new transactions must still return a generated ID.
+    const savedCanId = responseRow?.canId || canId || "";
+    const savedCanNo = responseRow?.canNo || canNo || "";
 
     
     if (!savedCanId && !savedCanNo) {
@@ -2809,16 +2857,24 @@ export const CAN = () => {
         <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
       </div>
       <div className="global-tran-headerstat-div-ui">
-        <button
-          type="button"
-          onClick={() => hasDocument && updateState({ showApprovalStatusModal: true })}
-          className="rounded px-1 text-center transition-colors hover:bg-sky-50 hover:text-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
-          title="View Approval Status"
-          aria-label="View Approval Status"
-        >
+        {showApprovalStatus && (
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => updateState({ showApprovalStatusModal: true })}
+              className="global-tran-headerstat-text-ui mx-auto block cursor-pointer rounded px-1 text-center transition-colors hover:bg-sky-50 hover:text-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              title="View Approval Status"
+              aria-label="View Approval Status"
+            >
+              Approval Status
+            </button>
+            <h1 className={`global-tran-stat-text-ui text-center ${approvalStatusColor}`}>{approvalStatus}</h1>
+          </div>
+        )}
+        <div>
           <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-          <h1 className={`global-tran-stat-text-ui uppercase ${statusTextColor}`}>{displayStatus}</h1>
-        </button>
+          <h1 className={`global-tran-stat-text-ui ${statusTextColor}`}>{displayStatus}</h1>
+        </div>
       </div>
     </div>
   );
@@ -4299,16 +4355,9 @@ export const CAN = () => {
           <h2 className="text-sm font-bold text-slate-800">2. Consolidated Item Canvass</h2>
           <p className="text-xs text-slate-500">Set the quantity to include in this transaction.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => updateState({ showPrBreakdown: !showPrBreakdown })}
-            disabled={!hasPrBreakdownRows}
-            className={compactActionButtonClass}
-          >
-            <FontAwesomeIcon icon={faListCheck} />
-            <span>{showPrBreakdown ? "Hide Breakdown" : "Show Breakdown"}</span>
-          </button>
+        <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] font-medium text-blue-700">
+          <FontAwesomeIcon icon={faListCheck} />
+          <span>Click the arrow beside an item to view its source PR.</span>
         </div>
       </div>
 
@@ -4343,33 +4392,39 @@ export const CAN = () => {
                           renderCanCanvassCell(column.key, row, originalIndex)
                         )}
                       </tr>
-                      {showPrBreakdown && breakdown.length > 0 && (
-                        <tr className="bg-slate-50">
-                          <td colSpan={orderedCanCanvassColumns.length} className="px-8 py-2">
-                            <table className="w-full border-separate border-spacing-0 bg-white text-xs [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
-                              <thead className="global-tran-thead-div-ui">
+                      {expandedItemLn === row.canLn && breakdown.length > 0 && (
+                        <tr className="bg-blue-50/40">
+                          <td colSpan={orderedCanCanvassColumns.length} className="px-10 py-2.5">
+                            <div className="overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm">
+                              <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
+                                <span className="text-[11px] font-bold text-blue-800">Source PR Details</span>
+                                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700">{breakdown.length} source{breakdown.length > 1 ? "s" : ""}</span>
+                              </div>
+                            <table className="w-full border-separate border-spacing-0 text-[11px] [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-b [&_td]:border-slate-100">
+                              <thead className="bg-slate-50">
                                 <tr>
-                                  <th className="global-tran-th-ui">Source PR</th>
-                                  <th className="global-tran-th-ui">Department</th>
-                                  <th className="global-tran-th-ui">Requested By</th>
-                                  <th className="global-tran-th-ui">Required Date</th>
-                                  <th className="global-tran-th-ui text-right">Qty in PR</th>
-                                  <th className="global-tran-th-ui text-right">Included Qty</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">PR No.</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Department</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Requested By</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Required Date</th>
+                                  <th className="px-3 py-2 text-right font-semibold text-slate-600">PR Qty</th>
+                                  <th className="px-3 py-2 text-right font-semibold text-slate-600">Included</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {breakdown.map((b, bIndex) => (
-                                  <tr key={`${b.prId}-${b.prLn}-${bIndex}`} className="global-tran-tr-ui">
-                                    <td className="global-tran-td-ui">{b.prNo}</td>
-                                    <td className="global-tran-td-ui">{b.rcName || b.rcCode}</td>
-                                    <td className="global-tran-td-ui">{b.requestedBy}</td>
-                                    <td className="global-tran-td-ui">{safeDate(b.dateNeeded)}</td>
-                                    <td className="global-tran-td-ui text-right">{qty(b.qtyInPr, decQty)}</td>
-                                    <td className="global-tran-td-ui text-right font-bold">{qty(b.includedQty, decQty)}</td>
+                                  <tr key={`${b.prId}-${b.prLn}-${bIndex}`} className="last:[&_td]:border-b-0 hover:bg-slate-50">
+                                    <td className="px-3 py-2 font-semibold text-blue-700">{b.prNo}</td>
+                                    <td className="px-3 py-2">{b.rcName || b.rcCode}</td>
+                                    <td className="px-3 py-2">{b.requestedBy}</td>
+                                    <td className="px-3 py-2">{safeDate(b.dateNeeded)}</td>
+                                    <td className="px-3 py-2 text-right tabular-nums">{qty(b.qtyInPr, decQty)}</td>
+                                    <td className="px-3 py-2 text-right font-bold tabular-nums text-slate-800">{qty(b.includedQty, decQty)}</td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -4855,13 +4910,17 @@ export const CAN = () => {
         />
       )}
 
-      {showApprovalStatusModal && (
+      {approvalEnabled && showApprovalStatusModal && (
         <GlobalApprovalStatus
-          open={showApprovalStatusModal}
+          isOpen={showApprovalStatusModal}
           onClose={() => updateState({ showApprovalStatusModal: false })}
-          tranId={canId}
-          docCode={docType}
+          docType={docType}
           docNo={canNo}
+          docDate={canDate}
+          status={approvalStatus}
+          remarks={remarks}
+          maxAppLevel={requiredAppLevel}
+          data={approvalData}
         />
       )}
 

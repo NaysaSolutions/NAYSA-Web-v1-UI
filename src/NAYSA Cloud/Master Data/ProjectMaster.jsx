@@ -87,7 +87,7 @@ const ProjectMaster = () => {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (payload) => apiClient.post("/upsertProjectMaster", { json_data: payload }),
+    mutationFn: (payload) => apiClient.post("/upsertPRJMaster", { json_data: payload }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["projectMasterList"] });
       useSwalSuccessAlert("Saved", "Project Master saved successfully.");
@@ -115,7 +115,7 @@ const ProjectMaster = () => {
     };
     if (!form.projectId) {
       try {
-        const duplicate = parseCheckResult(await apiClient.post("/checkDuplicateProjectMaster", { json_data: payload }));
+        const duplicate = parseCheckResult(await apiClient.post("/checkDuplicatePRJMaster", { json_data: payload }));
         if (duplicate) {
           useSwalErrorAlert("Duplicate Record", `Project Code ${payload.projectCode} already exists.`);
           return;
@@ -131,7 +131,7 @@ const ProjectMaster = () => {
   const handleDelete = async () => {
     if (!form.projectCode) return;
     try {
-      const inUsed = parseCheckResult(await apiClient.post("/checkInUsedProjectMaster", { json_data: { projectId: form.projectId, projectCode: form.projectCode } }));
+      const inUsed = parseCheckResult(await apiClient.post("/checkInUsedPRJMaster", { json_data: { projectId: form.projectId, projectCode: form.projectCode } }));
       if (inUsed) {
         useSwalErrorAlert("Record In Use", `Project Code ${form.projectCode} is already in use and cannot be deleted.`);
         return;
@@ -143,7 +143,7 @@ const ProjectMaster = () => {
     const confirmation = await useSwalDeleteConfirm("Delete Project?", `Delete Project ${form.projectCode}?`);
     if (!confirmation?.isConfirmed) return;
     try {
-      await apiClient.post("/deleteProjectMaster", { json_data: { projectId: form.projectId, projectCode: form.projectCode } });
+      await apiClient.post("/deletePRJMaster", { json_data: { projectId: form.projectId, projectCode: form.projectCode } });
       await queryClient.invalidateQueries({ queryKey: ["projectMasterList"] });
       useSwalSuccessAlert("Deleted", "Project Master deleted successfully.");
       resetForm();

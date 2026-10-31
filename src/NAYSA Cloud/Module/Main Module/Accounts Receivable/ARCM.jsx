@@ -4,7 +4,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faFileInvoiceDollar } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faXmark, faPlus, faMinus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faFileInvoiceDollar } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -128,6 +128,7 @@ const ARCM = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const detailRowUpdateVersionRef = useRef([]);
   const openReferencesDropdownRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation(); 
@@ -1397,7 +1398,9 @@ useEffect(() => {
 
 
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
-    const updatedRows = [...detailRows];
+    const updateVersion = (detailRowUpdateVersionRef.current[index] || 0) + 1;
+    detailRowUpdateVersionRef.current[index] = updateVersion;
+    const updatedRows = [...(detailRowsRef.current || [])];
 
     updatedRows[index] = {
       ...updatedRows[index],
@@ -1480,8 +1483,10 @@ if (isARCM07 && (field === "vatCode" || field === "atcCode") || field === "appli
 }
 
 
+    if (detailRowUpdateVersionRef.current[index] !== updateVersion) return;
     updatedRows[index] = row;
-    updateState({ detailRows: updatedRows});
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows, ...(["vatCode", "atcCode"].includes(field) ? { detailRowsGL: [] } : {}) });
     updateTotals(updatedRows);
 };
 
@@ -2066,7 +2071,7 @@ const renderArcmDetailColumn = (columnKey, row, index) => {
   );
 
   const detailLookupCell = (field, onClick, options = {}) => (
-    <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />{!isReversal && !options.hideIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={onClick} />}</div></td>
+    <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui text-center ${options.onClear && row[field] ? "pr-12" : "pr-6"} cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />{!isReversal && !options.hideIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={onClick} />}{!isReversal && options.onClear && row[field] && <FontAwesomeIcon icon={faXmark} title={`Clear ${field === "vatCode" ? "VAT" : "ATC"} Code`} className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={options.onClear} />}</div></td>
   );
 
   const detailAmountInput = (field, options = {}) => (
@@ -2079,10 +2084,10 @@ const renderArcmDetailColumn = (columnKey, row, index) => {
     siDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`siDate-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.siDate || ""} readOnly={row.groupId !== null && row.groupId !== ""} onChange={(e) => handleDetailChange(index, "siDate", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("siDate"); } }} /></td>,
     siAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row.siAmount || ""} readOnly /></td>,
     appliedAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailAmountInput("appliedAmount", { readOnly: isReversal })}</td>,
-    vatCode: () => detailLookupCell("vatCode", () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" })),
+    vatCode: () => detailLookupCell("vatCode", () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" }), { onClear: () => handleDetailChange(index, "vatCode", { vatCode: "", vatName: "" }, true) }),
     vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly /></td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.vatAmount)) || ""} readOnly /></td>,
-    atcCode: () => detailLookupCell("atcCode", () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" })),
+    atcCode: () => detailLookupCell("atcCode", () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" }), { onClear: () => handleDetailChange(index, "atcCode", { atcCode: "", atcName: "" }, true) }),
     atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailTextInput("atcName", { readOnly: isFormDisabled })}</td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.atcAmount)) || ""} readOnly /></td>,
     currCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailTextInput("currCode", { readOnly: true, className: "text-center" })}</td>,

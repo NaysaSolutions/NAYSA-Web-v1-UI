@@ -69,7 +69,7 @@ const statusClass = (status = "") => {
 const projectStatusLabel = (status = "") => ({ N: "New", O: "On-Going", C: "Completed" }[String(status).toUpperCase()] || status || "New");
 const EmptyState = ({ text }) => <div className="flex min-h-40 flex-col items-center justify-center text-slate-400"><FontAwesomeIcon icon={faFolderOpen} className="mb-2 text-3xl text-slate-300" /><p className="text-xs font-medium">{text}</p></div>;
 
-const ProjectAccomplishment = () => {
+const PRJAC = () => {
   const { companyInfo } = useAuth();
   const quantityDecimals = Number.isFinite(Number(companyInfo?.itemDecqtyFG)) ? Number(companyInfo.itemDecqtyFG) : 2;
   const unitCostDecimals = Number.isFinite(Number(companyInfo?.itemDecUcostFG)) ? Number(companyInfo.itemDecUcostFG) : 6;
@@ -87,7 +87,7 @@ const ProjectAccomplishment = () => {
     setProject(selectedProject);
     setLoading(true);
     try {
-      const response = await postRequest("getProjectAccomplishmentTracker", { json_data: { projectCode: selectedProject.projectCode } });
+      const response = await postRequest("getPRJACTracker", { json_data: { projectCode: selectedProject.projectCode } });
       const raw = response?.data?.[0]?.result;
       const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
       const stages = Array.isArray(parsed?.stages)
@@ -159,4 +159,4 @@ const ProjectAccomplishment = () => {
   </div>;
 };
 
-export default ProjectAccomplishment;
+export default PRJAC;

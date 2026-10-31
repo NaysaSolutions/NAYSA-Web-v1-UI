@@ -24,6 +24,7 @@ import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 import MSMast_SetupTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_Setuptab.jsx";
 import MSMast_DataTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_DataTab.jsx";
 import MSMast_ReferenceCodeTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_ReferenceCodeTab.jsx";
+import { useItemApprovalVisibility } from "@/NAYSA Cloud/Global/ItemApprovalSetup.jsx";
 
 import {
     useSwalErrorAlert,
@@ -55,6 +56,8 @@ const emptyForm = {
     lastPurDate: "",
     lastPurPrice: "0.000000",
     allowOverRec: "N",
+    requireApproval: "N",
+    maxAppLevel: "0",
     qtyOnHand: "0.000",
     unitCost: "0.000000",
     registeredBy: "", registeredDate: "",
@@ -66,6 +69,7 @@ const MSMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
     const [isLoading, setIsLoading] = useState(false);
     const [generationMode, setGenerationMode] = useState("Manual");
+    const showItemApprovalSetup = useItemApprovalVisibility(["PR", "PO"]);
 
     const { user } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
@@ -334,6 +338,10 @@ const MSMast = () => {
                     lastPurDate: form.lastPurDate || null,
                     lastPurPrice: form.lastPurPrice || null,
                     unitCost: form.unitCost || null,
+                    requireApproval: showItemApprovalSetup ? (form.requireApproval || "N") : "N",
+                    maxAppLevel: showItemApprovalSetup && form.requireApproval === "Y"
+                        ? Number(form.maxAppLevel || 0)
+                        : 0,
                     userCode: userCode || null,
                     action: isNewRecord ? "add" : "edit",
                 },
@@ -637,6 +645,7 @@ const MSMast = () => {
                         onChangeForm={updateForm}
                         onLookupSelect={(itemCode) => fetchItemByCode(itemCode, false)}
                         onBlurItemCode={isReadOnly ? undefined : checkDuplicate}
+                        showItemApprovalSetup={showItemApprovalSetup}
                     />
                 )}
                 {activeTab === "master" && (

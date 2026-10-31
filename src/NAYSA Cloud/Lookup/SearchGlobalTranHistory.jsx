@@ -329,17 +329,17 @@ const AllTranHistory = (props) => {
   );
 
   const initialDates = useCallback(() => {
-    if (startDateProp && endDateProp) return [new Date(startDateProp), new Date(endDateProp)];
     if (navState.startDate && navState.endDate)
       return [new Date(navState.startDate), new Date(navState.endDate)];
-    return [startOfMonth(new Date()), endOfMonth(new Date())];
-  }, [startDateProp, endDateProp, navState.startDate, navState.endDate]);
+    const today = new Date();
+    return [subDays(today, 29), today];
+  }, [navState.startDate, navState.endDate]);
 
   const normalizeStatus = (v) => (v === "" ? "All" : v ?? "All");
 
   const [dateRangeType, setDateRangeType] = useState(
-    (startDateProp && endDateProp) || (navState.startDate && navState.endDate)
-      ? "Custom Range": "This Month"
+    navState.startDate && navState.endDate
+      ? "Custom Range": "Last 30 Days"
   );
 
   const [dates, setDates] = useState(initialDates());
@@ -456,7 +456,7 @@ const AllTranHistory = (props) => {
     if (snap) {
       hydratedFromCacheRef.current = true;
       setDates(snap.dates || initialDates());
-      setDateRangeType(snap.dateRangeType || "This Month");
+      setDateRangeType(snap.dateRangeType || "Last 30 Days");
 
       const desired =
         statusProp !== undefined
@@ -1254,9 +1254,9 @@ const AllTranHistory = (props) => {
   const handleResetUI = () => {
     hydratedFromCacheRef.current = false;
     const today = new Date();
-    const newDates = [startOfMonth(today), endOfMonth(today)];
+    const newDates = [subDays(today, 29), today];
 
-    setDateRangeType("This Month");
+    setDateRangeType("Last 30 Days");
     setDates(newDates);
     setSearchFields({});
     setStatus("All");

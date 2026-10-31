@@ -44,9 +44,9 @@ const SearchProjectJobOrderDetail = ({ isOpen, branchCode, projectCode, onClose 
   const hasActiveFilters = Object.values(filters).some(Boolean);
 
   const { data: rows = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["lookupOpenProjectJobOrderDetails", branchCode, projectCode],
+    queryKey: ["lookupOpenPRJJODetails", branchCode, projectCode],
     queryFn: async () => {
-      const response = await apiClient.get("/lookupOpenProjectJobOrderDetails", {
+      const response = await apiClient.get("/lookupOpenPRJJODetails", {
         params: { branchCode, projCode: projectCode },
       });
       const raw = response?.data?.data?.[0]?.result ?? "[]";

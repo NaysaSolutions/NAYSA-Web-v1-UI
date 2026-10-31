@@ -62,6 +62,8 @@ const HISTORY_BY_TYPE_ENDPOINT = "/historyPriceMatrix";
 const HISTORY_BY_ITEM_ENDPOINT = "/historyPriceMatrixperItem";
 
 const MATRIX_TYPE_OPTIONS = [
+  { value: "MANUAL", label: "Manual" },
+  { value: "OVERALL", label: "Overall" },
   { value: "PMCUST", label: "Per Customer" },
   { value: "PMAREA", label: "Per Area" },
   { value: "PMCHAIN", label: "Per Chain Customer" },
@@ -80,6 +82,22 @@ const HISTORY_TABS = [
 ];
 
 const MATRIX_TYPE_META = {
+  MANUAL: {
+    codeLabel: "Pricing Source",
+    nameLabel: "Description",
+    infoTitle: "Manual Pricing",
+    historyTitle: "Manual Pricing",
+    pageTitle: "Manual Pricing",
+    entityLabel: "pricing source",
+  },
+  OVERALL: {
+    codeLabel: "Pricing Source",
+    nameLabel: "Description",
+    infoTitle: "Overall Discount Pricing",
+    historyTitle: "Overall Discount Pricing",
+    pageTitle: "Overall Discount Pricing",
+    entityLabel: "pricing source",
+  },
   PMCUST: {
     codeLabel: "Customer Code",
     nameLabel: "Customer Name",
@@ -120,6 +138,7 @@ const DEFAULT_HEADER = {
   pmCode: "",
   pmName: "",
   effectivityDate: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -377,6 +396,7 @@ const mapHistoryRows = (rawRows = [], pmType = "PMCUST") =>
         item.discRate8 ?? item.disc_rate8 ?? 0,
 
       effectivityDate: item.effectivityDate || item.effectivity_date || "",
+      active: item.active || item.ACTIVE || "Y",
       registeredBy: item.registeredBy || item.registered_by || "",
       registeredDate: item.registeredDate || item.registered_date || "",
       updatedBy: item.updatedBy || item.updated_by || "",
@@ -439,15 +459,19 @@ export default function SalesPMCustomerItem() {
     Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
     8
   );
+  const isPolicyType = ["MANUAL", "OVERALL"].includes(
+    String(header.pmType || "").toUpperCase()
+  );
   const visiblePriceKeys = useMemo(
     () =>
       PRICE_KEYS.filter((key) => {
         if (key === "sellingPrice") return true;
+        if (isPolicyType) return false;
 
         const rateNo = Number(String(key).replace("discRate", ""));
         return rateNo <= discountLevel;
       }),
-    [discountLevel]
+    [discountLevel, isPolicyType]
   );
   const templateColumns = useMemo(
     () =>
@@ -517,7 +541,15 @@ export default function SalesPMCustomerItem() {
   };
 
   const resetMatrixForType = (pmType = "PMCUST") => {
-    setHeader({ ...DEFAULT_HEADER, pmType });
+    const isPolicy = ["MANUAL", "OVERALL"].includes(String(pmType).toUpperCase());
+    setHeader({
+      ...DEFAULT_HEADER,
+      pmType,
+      pmCode: isPolicy ? pmType : "",
+      pmName: isPolicy
+        ? `${pmType === "OVERALL" ? "Overall Discount" : "Manual"} Price Schedule`
+        : "",
+    });
     clearDetailTable();
   };
 
@@ -595,6 +627,7 @@ export default function SalesPMCustomerItem() {
         parsed?.lastUpdatedBy || parsed?.updatedBy || parsed?.updated_by || "",
       lastUpdatedDate:
         parsed?.lastUpdatedDate || parsed?.updatedDate || parsed?.updated_date || "",
+      active: parsed?.active || parsed?.ACTIVE || sourceHeader.active || "Y",
     };
   };
 
@@ -605,6 +638,7 @@ export default function SalesPMCustomerItem() {
       header.pmType,
       header.pmCode,
       header.effectivityDate,
+      header.active,
     ],
     enabled: false,
     queryFn: async () => fetchMatrix(header),
@@ -618,6 +652,7 @@ export default function SalesPMCustomerItem() {
           pmCode: header.pmCode,
           pmType: header.pmType,
           effectivityDate: header.effectivityDate,
+          active: header.active || "Y",
           userCode: currentUserRow?.userCode || "ADMIN",
           dt1: rows.map((row) => ({
             categName: row.categName,
@@ -681,6 +716,7 @@ export default function SalesPMCustomerItem() {
             registeredDate: savedRow.registeredDate || prev.registeredDate,
             lastUpdatedBy: savedRow.updatedBy || prev.lastUpdatedBy,
             lastUpdatedDate: savedRow.updatedDate || prev.lastUpdatedDate,
+            active: savedRow.active || prev.active || "Y",
           }));
         }
 
@@ -1019,6 +1055,7 @@ export default function SalesPMCustomerItem() {
         registeredDate: fetched.registeredDate || "",
         lastUpdatedBy: fetched.lastUpdatedBy || "",
         lastUpdatedDate: fetched.lastUpdatedDate || "",
+        active: fetched.active || "Y",
       }));
 
       setRows(fetched.rows || []);
@@ -1626,6 +1663,13 @@ export default function SalesPMCustomerItem() {
       width: 140,
     },
     {
+      key: "active",
+      label: "Active",
+      sortable: true,
+      width: 90,
+      render: (row) => (String(row?.active || "Y").toUpperCase() === "Y" ? "Yes" : "No"),
+    },
+    {
       key: "registeredBy",
       label: "Registered By",
       sortable: true,
@@ -1710,6 +1754,13 @@ const historyTypeColumns = useMemo(
       label: "Effectivity Date",
       sortable: true,
       width: 140,
+    },
+    {
+      key: "active",
+      label: "Active",
+      sortable: true,
+      width: 90,
+      render: (row) => (String(row?.active || "Y").toUpperCase() === "Y" ? "Yes" : "No"),
     },
     {
       key: "registeredBy",
@@ -2245,7 +2296,7 @@ const historyItemColumns = useMemo(
             </h3>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
             <FieldRenderer
               label="PM Type"
               type="select"
@@ -2262,7 +2313,8 @@ const historyItemColumns = useMemo(
               value={header.pmCode || ""}
               onLookup={openReferenceLookup}
               readOnly
-              required
+              required={!isPolicyType}
+              disabled={isPolicyType}
             />
 
             <FieldRenderer
@@ -2278,6 +2330,21 @@ const historyItemColumns = useMemo(
               (value) => setHeaderField("effectivityDate", value),
               "Effectivity Date"
             )}
+
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={header.active || "Y"}
+              onChange={(value) =>
+                setHeaderField("active", value?.target?.value ?? value ?? "Y")
+              }
+              options={[
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+              ]}
+              disabled={isPageLoading}
+              required
+            />
           </div>
         </div>
 

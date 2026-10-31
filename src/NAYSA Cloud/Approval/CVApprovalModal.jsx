@@ -5,7 +5,6 @@ import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import {
   useSwalProceedConfirm,
   useSwalErrorAlert,
-  useSwalInfoAlert,
   useSwalSuccessAlert
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
@@ -306,9 +305,9 @@ const CVApprovalModal = ({
     if (noApprovalAlertShownRef.current) return;
 
     noApprovalAlertShownRef.current = true;
-    useSwalInfoAlert(
+    useSwalErrorAlert(
       "CV Approval",
-      "There is no CV for approval available.",
+      "No transaction is available for approval.",
     );
     onClose?.();
   }, [onClose]);

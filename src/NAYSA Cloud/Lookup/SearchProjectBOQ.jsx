@@ -43,9 +43,9 @@ const SearchProjectBOQ = ({ isOpen, branchCode, onClose }) => {
   const hasActiveFilters = Object.values(filters).some(Boolean);
 
   const { data: rows = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["lookupOpenProjectBOQ", branchCode],
+    queryKey: ["lookupOpenPRJBOQ", branchCode],
     queryFn: async () => {
-      const response = await apiClient.get("/lookupOpenProjectBOQ", { params: { branchCode } });
+      const response = await apiClient.get("/lookupOpenPRJBOQ", { params: { branchCode } });
       const raw = response?.data?.data?.[0]?.result ?? "[]";
       return Array.isArray(raw) ? raw : JSON.parse(raw);
     },

@@ -40,8 +40,8 @@ import {
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 
 const DOC_TYPE = "PRJ_BQ";
-const COMPONENT_KEY = "ProjectBOQ";
-const DETAILS_ROUTE = "/page/ProjectBOQ";
+const COMPONENT_KEY = "PRJBOQ";
+const DETAILS_ROUTE = "/page/PRJBOQ";
 
 const emptyDetailRow = (lineNo, decQty = 2) => ({
   lineNo,
@@ -78,7 +78,7 @@ const parseProcedureResult = (response) => {
   }
 };
 
-const ProjectBOQ = () => {
+const PRJBOQ = () => {
   const location = useLocation();
   const loadedFromUrlRef = useRef(false);
   const { currentUserRow, companyInfo, getAllTopHSDocRow, getAllTopVatRow } = useAuth();
@@ -310,7 +310,7 @@ const ProjectBOQ = () => {
 
       setIsLoading(true);
       try {
-        const response = await apiClient.get("/getProjectBOQ", {
+        const response = await apiClient.get("/getPRJBOQ", {
           params: { boqNo: docNo || "", branchCode, direction },
         });
         const data = parseProcedureResult(response);
@@ -540,7 +540,7 @@ const ProjectBOQ = () => {
         dt2: [],
       };
 
-      const response = await apiClient.post("/upsertProjectBOQ", {
+      const response = await apiClient.post("/upsertPRJBOQ", {
         json_data: payload,
       });
       const result = response?.data?.data?.[0] || {};
@@ -607,7 +607,7 @@ const ProjectBOQ = () => {
 
     setIsLoading(true);
     try {
-      await apiClient.post("/cancelProjectBOQ", {
+      await apiClient.post("/cancelPRJBOQ", {
         userPassword: confirmation.password,
         userCode: currentUserRow?.userCode || "",
         json_data: {
@@ -1160,7 +1160,7 @@ const ProjectBOQ = () => {
         <AllTranHistory
           showHeader={false}
           isActive={topTab === "history"}
-          endpoint="/getProjectBOQHistory"
+          endpoint="/getPRJBOQHistory"
           cacheKey={`PRJ_BQ:${state.branchCode}:${state.startDate}:${state.endDate}`}
           activeTabKey="PRJ_BOQ_Summary"
           branchCode={state.branchCode}
@@ -1328,4 +1328,4 @@ const ProjectBOQ = () => {
   );
 };
 
-export default ProjectBOQ;
+export default PRJBOQ;

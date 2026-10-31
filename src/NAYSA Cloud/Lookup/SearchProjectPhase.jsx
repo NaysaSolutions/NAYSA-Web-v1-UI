@@ -41,8 +41,8 @@ const SearchProjectPhase = ({ isOpen, onClose, title = "Select Project Phase" })
   const debouncedFilters = useDebounce(filters, 300);
 
   const { data: phaseList = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["lookupProjectPhase"],
-    queryFn: async () => parseResult(await apiClient.get("/lookupProjectPhase")),
+    queryKey: ["lookupPRJPhaseRef"],
+    queryFn: async () => parseResult(await apiClient.get("/lookupPRJPhaseRef")),
     enabled: isOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: keepPreviousData,

@@ -8,8 +8,8 @@ import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
 import { useHandlePostTran } from "@/NAYSA Cloud/Global/procedure.js";
 import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-const ENDPOINT = "postingProjectMaterialIssue";
-const POSTING_DOC_CODE = "ProjectMaterialIssue";
+const ENDPOINT = "postingPRJMI";
+const POSTING_DOC_CODE = "PRJMI";
 
 const parsePostingRows = (response) => {
   const raw = response?.data?.data?.[0]?.result;
@@ -48,7 +48,7 @@ const fallbackColumns = [
   { key: "remarks", label: "Remarks", width: 240, renderType: "text" },
 ];
 
-const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
+const PostPRJMI = ({ isOpen, onClose, userCode }) => {
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -145,4 +145,4 @@ const PostProjectMaterialIssue = ({ isOpen, onClose, userCode }) => {
   );
 };
 
-export default PostProjectMaterialIssue;
+export default PostPRJMI;

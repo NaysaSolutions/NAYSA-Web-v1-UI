@@ -899,11 +899,10 @@
 
 
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faChevronDown,
   faInfoCircle,
   faPlus,
   faSave,
@@ -912,7 +911,7 @@ import {
   faTrashAlt,
   faUndo,
 } from "@fortawesome/free-solid-svg-icons";
-import { Info, Plus } from "lucide-react";
+import { Banknote, BriefcaseBusiness, CheckCircle2, DollarSign, Info, Layers3, ListChecks, Plus, ShieldCheck, X } from "lucide-react";
 
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
@@ -930,6 +929,9 @@ import {
   useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import ApprovalAmountMatrix from "./ApprovalAmountMatrix.jsx";
+import ApprovalPositionRules from "./ApprovalPositionRules.jsx";
+import ApprovalLevelSelect from "./ApprovalLevelSelect.jsx";
 
 const INITIAL_REG = {
   registeredBy: "",
@@ -967,6 +969,7 @@ const mapRCToDepartmentOption = (item) => ({
 export default function ApprovalMatrixModal() {
   const { user, getAllTopHSDocRow, refsLoaded } = useAuth();
   const [docType, setDocType] = useState("");
+  const [approvalScope, setApprovalScope] = useState("DOC");
   const [rows, setRows] = useState([]);
   const [registrationInfo, setRegistrationInfo] = useState(INITIAL_REG);
   const [departmentPicker, setDepartmentPicker] = useState({
@@ -980,6 +983,14 @@ export default function ApprovalMatrixModal() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
+  const [activeTab, setActiveTab] = useState("approvers");
+  const amountMatrixRef = useRef(null);
+  const positionRulesRef = useRef(null);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab]);
 
   const parseJsonResult = (rawData) => {
     if (Array.isArray(rawData)) return rawData;
@@ -1057,6 +1068,14 @@ export default function ApprovalMatrixModal() {
     );
   }, [docTypeOptions]);
 
+  useEffect(() => {
+    if (docType === "PR" && activeTab === "amounts") setActiveTab("approvers");
+  }, [activeTab, docType]);
+
+  useEffect(() => {
+    if (docType === "CV") setApprovalScope("DOC");
+  }, [docType]);
+
   const {
     data: rcDepartmentOptions = [],
     isLoading: isDepartmentLoading,
@@ -1102,7 +1121,13 @@ export default function ApprovalMatrixModal() {
           userName: item?.userName || "",
           position: item?.position || "",
           appLevel: item?.appLevel || "",
+          appScope: item?.appScope || "DOC",
           departments: splitDepartmentCodes(item?.departments || item?.rcCode || item?.rc_code),
+          registeredByName: item?.registeredByName || item?.registeredBy || "",
+          registeredDate: item?.registeredDate || "",
+          updatedByName:
+            item?.updatedByName || item?.lastUpdatedByName || item?.updatedBy || "",
+          updatedDate: item?.updatedDate || item?.lastUpdatedDate || "",
         }));
     },
     enabled: Boolean(docType),
@@ -1125,10 +1150,24 @@ export default function ApprovalMatrixModal() {
   useEffect(() => {
     if (approvalRows) {
       setRows(approvalRows);
+      setApprovalScope(
+        docType === "CV" ? "DOC" : approvalRows[0]?.appScope || "DOC"
+      );
+      const auditRow = approvalRows[0];
+      setRegistrationInfo(
+        auditRow
+          ? {
+              registeredByName: auditRow.registeredByName || "",
+              registeredDate: auditRow.registeredDate || "",
+              lastUpdatedByName: auditRow.updatedByName || "",
+              lastUpdatedDate: auditRow.updatedDate || "",
+            }
+          : INITIAL_REG
+      );
       setDepartmentPicker({ rowId: null, draft: [] });
       setInsertAfterRowId(null);
     }
-  }, [approvalRows]);
+  }, [approvalRows, docType]);
 
   const selectedDocTypeLabel = useMemo(
     () => docTypeOptions.find((type) => type.value === docType)?.label || docType,
@@ -1265,7 +1304,20 @@ export default function ApprovalMatrixModal() {
 
   const resetRows = () => {
     setRows(approvalRows || []);
-    setRegistrationInfo(INITIAL_REG);
+    setApprovalScope(
+      docType === "CV" ? "DOC" : approvalRows?.[0]?.appScope || "DOC"
+    );
+    const auditRow = approvalRows?.[0];
+    setRegistrationInfo(
+      auditRow
+        ? {
+            registeredByName: auditRow.registeredByName || "",
+            registeredDate: auditRow.registeredDate || "",
+            lastUpdatedByName: auditRow.updatedByName || "",
+            lastUpdatedDate: auditRow.updatedDate || "",
+          }
+        : INITIAL_REG
+    );
     setDepartmentPicker({ rowId: null, draft: [] });
     setInsertAfterRowId(null);
   };
@@ -1371,19 +1423,35 @@ const validateRows = () => {
       const payload = {
           json_data: {
             docCode: docType,
+            appScope: docType === "CV" ? "DOC" : approvalScope,
             userCode,
             dt1: payloadRows,
           },
         };
 
-        await apiClient.post("/upsertAllTranApproval", payload);
+      const { data: saveResult } = await apiClient.post(
+        "/upsertAllTranApproval",
+        payload
+      );
 
-      await refetchApprovalRows();
+      if (
+        saveResult?.status !== "success" ||
+        Number(saveResult?.persistedCount) !== payloadRows.length
+      ) {
+        throw new Error("Approval Matrix persistence verification failed.");
+      }
 
+      const refreshed = await refetchApprovalRows();
+      if ((refreshed?.data || []).length !== payloadRows.length) {
+        throw new Error("Saved approvers could not be retrieved from the database.");
+      }
+
+      const userName =
+        user?.USER_NAME || user?.userName || user?.FULL_NAME || userCode;
       setRegistrationInfo((prev) => ({
-        registeredBy: prev.registeredBy || userCode,
+        registeredByName: prev.registeredByName || userName,
         registeredDate: prev.registeredDate || now,
-        lastUpdatedBy: userCode,
+        lastUpdatedByName: userName,
         lastUpdatedDate: now,
       }));
 
@@ -1593,15 +1661,9 @@ const validateRows = () => {
         width: 120,
         render: (row) =>
           row.__insertRow ? "" : (
-          <input
-            type="number"
-            min="1"
-            max="4"
+          <ApprovalLevelSelect
             value={row.appLevel}
-            onChange={(event) =>
-              handleAppLevelChange(row.id, event.target.value)
-            }
-              className="h-7 w-full bg-transparent px-2 text-[11px] outline-none"
+            onChange={(appLevel) => handleAppLevelChange(row.id, appLevel)}
           />
         ),
       },
@@ -1683,6 +1745,165 @@ const validateRows = () => {
         }}
       />
 
+      {isOpenGuide && (
+        <div className="fixed inset-0 z-[1000001] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]">
+          <div className="max-h-[88vh] w-full max-w-[920px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-800">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white"><Info size={20} /></span>
+                <div>
+                  <h2 className="text-[16px] font-bold text-slate-900 dark:text-white">How Approval Works</h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-300">{docType === "PR" ? "PR approval follows the rules below." : "The program checks these approval steps in order."}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setOpenGuide(false)} className="rounded-md p-2 text-slate-500 hover:bg-white hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-white" title="Close"><X size={18} /></button>
+            </div>
+
+            <div className="max-h-[calc(88vh-74px)] overflow-y-auto p-5">
+              <div className="grid gap-3 lg:grid-cols-3">
+                {(docType === "PR" ? [
+                  {
+                    number: "1", icon: ListChecks, title: "Find the Approval Levels", subtitle: "Position Rules are checked first",
+                    items: [
+                      "When PR Position Rules exist, their highest active level is the maximum available approval level.",
+                      "Without Position Rules, the highest level in the Approver Matrix becomes the default maximum level.",
+                      "PR does not use the Amount Matrix because PR has no purchasing amount yet.",
+                    ], tone: "blue",
+                  },
+                  {
+                    number: "2", icon: Banknote, title: "Apply the Approval Scope", subtitle: "Document or Line Item approval",
+                    items: [
+                      "Document Approval applies to all PR items and bypasses item approval tags. The whole PR passes every level up to the document maximum.",
+                      "Line Item Approval checks only the items that require approval.",
+                      "All Items means every PR item must pass that level.",
+                      "Selected Items means only items tagged for that level in the item master must pass it.",
+                    ], tone: "violet",
+                  },
+                  {
+                    number: "3", icon: ShieldCheck, title: "Complete Each Item", subtitle: "Each line stops at its own required level",
+                    items: [
+                      "An item becomes Approved as soon as it completes its own maximum required level.",
+                      "Example: the PR maximum is Level 4, but Item A requires only Level 2. Item A is Approved after Levels 1 and 2 and will not continue to Levels 3 and 4.",
+                      "An item with no required approval is marked Approval Not Required.",
+                      "The whole PR is Approved when every required item is approved; non-required items do not block completion.",
+                    ], tone: "emerald",
+                  },
+                ] : ["PO", "JO", "CV"].includes(docType) ? [
+                  {
+                    number: "1", icon: ListChecks, title: "Choose the Approval Scope", subtitle: docType === "CV" ? "CV uses Document Approval only" : `${docType} supports Document or Line Item approval`,
+                    items: [
+                      docType === "CV" ? "CV Approval Scope is fixed to Document Approval." : "Document Approval approves the whole transaction; Line Item Approval approves each detail line.",
+                      docType === "CV" ? "CV has no line-item approval." : "A disapproved line keeps its amount but is excluded from printing.",
+                      docType === "CV" ? "The whole CV follows one cumulative approval path." : "The document completes when no required line is pending and at least one line is approved.",
+                      "Approver Matrix identifies the users assigned to each approval level.",
+                    ], tone: "blue",
+                  },
+                  {
+                    number: "2", icon: Banknote, title: `Check the ${docType} Amount`, subtitle: "The Amount Matrix sets the final level",
+                    items: [
+                      `The basis is the net ${docType} amount after discount, not the gross amount.`,
+                      `When an amount range matches, its Required Final Level becomes the ${docType} maximum approval level.`,
+                      `Example: Net ${docType} Amount 1 to 10,000 with Level 3 requires Level 1, then Level 2, then Level 3.`,
+                      `Example: Net ${docType} Amount 10,001 and above with Level 4 requires Levels 1, 2, 3, and 4.`,
+                      "Separate amount ranges for the lower levels are not needed because approval is cumulative.",
+                    ], tone: "violet",
+                  },
+                  {
+                    number: "3", icon: ShieldCheck, title: "Approve in Sequence", subtitle: "No approval level can be skipped",
+                    items: [
+                      "Only the assigned user for the next required level may approve.",
+                      "Position Rules, when configured, restrict which user positions may approve each level.",
+                      `The ${docType} becomes Approved immediately after its required final level is completed.`,
+                      `A ${docType} requiring Level 3 does not continue to Level 4.`,
+                      "Without an Amount Matrix, Position Rules set the maximum level; without Position Rules, the Approver Matrix maximum is used.",
+                    ], tone: "emerald",
+                  },
+                ] : [
+                  {
+                    number: "1",
+                    icon: ListChecks,
+                    title: "Who Will Approve?",
+                    subtitle: "The Approver Matrix is checked first",
+                    items: [
+                      "The program looks for users assigned to approve this document.",
+                      "It checks if approval is for the whole document or per item.",
+                      "It checks each user's approval level and Department/RC.",
+                      "The highest level in this setup is the last possible approval level.",
+                    ],
+                    tone: "blue",
+                  },
+                  {
+                    number: "2",
+                    icon: Banknote,
+                    title: "How Many Approvals Are Needed?",
+                    subtitle: "The program finds the required final level",
+                    items: [
+                      "When an Amount Matrix matches, its Required Level becomes the final approval level.",
+                      "Example: Amount 1 to 10,000 with Required Level 3 checks Levels 1, 2, and 3. You do not need separate amount rows for Levels 1 and 2.",
+                      "A checked level is required only when its Position Rule applies. All Items always applies; Selected Items applies only to tagged items. A level that does not apply is skipped.",
+                      "For line approval, Position Rules decide whether a level covers All Items or Selected Items.",
+                      "All Items means every existing and newly added line must pass that approval level.",
+                      "Selected Items means only items marked Require Approval in the item or job setup pass that level.",
+                      "When several items need approval, the highest required item level becomes the document's required level.",
+                    ],
+                    tone: "violet",
+                  },
+                  {
+                    number: "3",
+                    icon: ShieldCheck,
+                    title: "Can This User Approve?",
+                    subtitle: "The program checks the current user",
+                    items: [
+                      "The user can approve only the next required level. A level marked not applicable is skipped automatically.",
+                      "The user must be listed at that level in the Approver Matrix.",
+                      "The user's assigned Department/RC must be allowed.",
+                      "If positions are assigned in Position Rules, the user's position must be included.",
+                      "A blank Position Assign means any position may approve at that level.",
+                    ],
+                    tone: "emerald",
+                  },
+                ]).map((step) => {
+                  const StepIcon = step.icon;
+                  const toneClass = step.tone === "blue"
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : step.tone === "violet"
+                      ? "border-violet-200 bg-violet-50 text-violet-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700";
+                  return (
+                    <section key={step.number} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                      <div className="mb-3 flex items-start gap-3">
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${toneClass}`}><StepIcon size={17} /></span>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Step {step.number}</div>
+                          <h3 className="text-[13px] font-bold text-slate-800 dark:text-white">{step.title}</h3>
+                          <p className="text-[10px] text-slate-500">{step.subtitle}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {step.items.map((item) => <div key={item} className="flex gap-2 text-[11px] leading-5 text-slate-600 dark:text-slate-300"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" /> <span>{item}</span></div>)}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/60 dark:bg-amber-950/20">
+                <h3 className="mb-2 text-[12px] font-bold text-amber-900 dark:text-amber-300">What happens when a setup is blank?</h3>
+                <div className="grid gap-x-5 gap-y-2 text-[11px] leading-5 text-amber-900/80 dark:text-amber-200/80 md:grid-cols-2">
+                  <div><b>No Approver Matrix:</b> the document does not need approval.</div>
+                  {docType !== "PR" && <div><b>No Amount Matrix:</b> the maximum level from the approver or position setup is used.</div>}
+                  {docType === "PR" && <div><b>PR Amount Matrix:</b> not applicable and is hidden because PR has no purchasing amount.</div>}
+                  <div><b>No Position Rules:</b> any assigned approver at the correct level and Department/RC may approve.</div>
+                  <div><b>Rejected or cancelled:</b> the approval process stops for that document or item.</div>
+                  <div><b>Blank Position Assign:</b> all positions are allowed for that approval level.</div>
+                  <div><b>Selected Items:</b> only items marked Require Approval need approval.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
           <div className="w-full md:w-auto md:justify-start flex">
@@ -1691,22 +1912,74 @@ const validateRows = () => {
             </h1>
           </div>
 
-          <div />
+          <div className="flex w-full justify-center">
+            <div className="flex flex-nowrap overflow-x-auto border-b border-blue-300 no-scrollbar dark:border-gray-700">
+              {[
+                { id: "approvers", label: "Approver Matrix", icon: Layers3 },
+                ...(docType === "PR" ? [] : [{ id: "amounts", label: "Amount Matrix", icon: DollarSign }]),
+                { id: "positions", label: "Position Rules", icon: BriefcaseBusiness },
+              ].map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border-b-2 px-3 py-1 text-[10px] font-bold transition-all sm:px-4 sm:py-2 sm:text-[13px] ${
+                      activeTab === tab.id
+                        ? "border-blue-700 bg-blue-50/50 text-blue-700"
+                        : "border-transparent text-gray-500 hover:text-blue-500"
+                    }`}
+                  >
+                    <TabIcon size={15} />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="w-full md:w-auto flex md:justify-end">
             <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2 flex-wrap">
               <button
                 type="button"
-                onClick={() => handleInsertUser(null)}
+                onClick={() =>
+                  activeTab === "approvers"
+                    ? handleInsertUser(null)
+                    : activeTab === "positions"
+                      ? positionRulesRef.current?.add()
+                      : amountMatrixRef.current?.add()
+                }
                 className="flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all"
               >
                 <Plus size={16} />
                 <span className="sm:inline ml-1">Add</span>
               </button>
 
+              {activeTab !== "approvers" && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    activeTab === "positions"
+                      ? positionRulesRef.current?.clearSetup()
+                      : amountMatrixRef.current?.clearSetup()
+                  }
+                  className="flex h-7 w-20 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 sm:h-8 sm:w-auto sm:px-4"
+                >
+                  <FontAwesomeIcon icon={faTrashAlt} className="text-[12px]" />
+                  <span className="ml-1 sm:inline">Clear</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={() =>
+                  activeTab === "approvers"
+                    ? handleSave()
+                    : activeTab === "positions"
+                      ? positionRulesRef.current?.save()
+                      : amountMatrixRef.current?.save()
+                }
                 className="flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all"
               >
                 <FontAwesomeIcon icon={faSave} className="text-[12px]" />
@@ -1715,7 +1988,13 @@ const validateRows = () => {
 
               <button
                 type="button"
-                onClick={resetRows}
+                onClick={() =>
+                  activeTab === "approvers"
+                    ? resetRows()
+                    : activeTab === "positions"
+                      ? positionRulesRef.current?.reset()
+                      : amountMatrixRef.current?.reset()
+                }
                 className="flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all"
               >
                 <FontAwesomeIcon icon={faUndo} className="text-[12px]" />
@@ -1725,27 +2004,14 @@ const validateRows = () => {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setOpenGuide((value) => !value)}
+                  onClick={() => setOpenGuide(true)}
                   className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
                 >
                   <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
                   <span className="sm:inline ml-1 text-[11px] font-medium">
                     Info
                   </span>
-                  <FontAwesomeIcon
-                    icon={faChevronDown}
-                    className="hidden sm:inline text-[10px] opacity-80"
-                  />
                 </button>
-
-                {isOpenGuide && (
-                  <div className="absolute right-0 mt-2 w-64 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
-                    <div className="px-4 py-3 text-[12px] text-slate-600 dark:text-slate-200">
-                      Add approvers from the user lookup, then edit approver's
-                      level directly in the table.
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1753,12 +2019,34 @@ const validateRows = () => {
       </div>
 
       <div className="mt-40 sm:mt-24">
+        <div className={activeTab === "amounts" ? "block" : "hidden"}>
+          <ApprovalAmountMatrix
+            ref={amountMatrixRef}
+            docType={docType}
+            docTypeOptions={docTypeOptions}
+            onDocTypeChange={setDocType}
+            approvalScope={approvalScope}
+          />
+        </div>
+
+        <div className={activeTab === "positions" ? "block" : "hidden"}>
+          <ApprovalPositionRules
+            ref={positionRulesRef}
+            docType={docType}
+            docTypeOptions={docTypeOptions}
+            onDocTypeChange={setDocType}
+            approvalScope={approvalScope}
+            onScopeChange={setApprovalScope}
+          />
+        </div>
+
+        <div className={activeTab === "approvers" ? "block" : "hidden"}>
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-stretch">
           <div className="flex-1 rounded-lg border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <h3 className="mb-4 border-b pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
               Document Setup
             </h3>
-            <div className="max-w-[420px]">
+            <div className="grid gap-3 md:grid-cols-2">
               <FieldRenderer
                 label="Document Code"
                 required
@@ -1766,6 +2054,22 @@ const validateRows = () => {
                 value={docType}
                 options={docTypeOptions}
                 onChange={setDocType}
+              />
+              <FieldRenderer
+                label="Approval Scope"
+                required
+                type="select"
+                value={docType === "CV" ? "DOC" : approvalScope}
+                options={
+                  docType === "CV"
+                    ? [{ value: "DOC", label: "Document Approval" }]
+                    : [
+                        { value: "DOC", label: "Document Approval" },
+                        { value: "LINE", label: "Line Item Approval" },
+                      ]
+                }
+                onChange={setApprovalScope}
+                disabled={docType === "CV"}
               />
             </div>
           </div>
@@ -1787,6 +2091,7 @@ const validateRows = () => {
               isFetching={isFetching || isApprovalFetching}
               onRefresh={handleRefresh}
             />
+        </div>
         </div>
   
       </div>

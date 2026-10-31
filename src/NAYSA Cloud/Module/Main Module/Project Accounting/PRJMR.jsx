@@ -37,8 +37,8 @@ import {
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 
 const DOC_TYPE = "PRJ_MR";
-const COMPONENT_KEY = "ProjectMaterialRequisition";
-const DETAILS_ROUTE = "/page/ProjectMaterialRequisition";
+const COMPONENT_KEY = "PRJMR";
+const DETAILS_ROUTE = "/page/PRJMR";
 
 const emptyDetailRow = (lineNo, decQty = 2) => ({
   lineNo,
@@ -69,7 +69,7 @@ const parseProcedureResult = (response) => {
   }
 };
 
-const ProjectMaterialRequisition = () => {
+const PRJMR = () => {
   const location = useLocation();
   const loadedFromUrlRef = useRef(false);
   const { currentUserRow, companyInfo, getAllTopHSDocRow } = useAuth();
@@ -271,7 +271,7 @@ const ProjectMaterialRequisition = () => {
 
       setIsLoading(true);
       try {
-        const response = await apiClient.get("/getProjectMaterialRequisition", {
+        const response = await apiClient.get("/getPRJMR", {
           params: { mrNo: docNo || "", branchCode, direction },
         });
         const data = parseProcedureResult(response);
@@ -370,7 +370,7 @@ const ProjectMaterialRequisition = () => {
     if (!boqNo || !state.branchCode) return;
     setIsLoading(true);
     try {
-      const response = await apiClient.get("/getProjectBOQ", {
+      const response = await apiClient.get("/getPRJBOQ", {
         params: { boqNo, branchCode: state.branchCode, direction: "" },
       });
       const boq = parseProcedureResult(response);
@@ -519,7 +519,7 @@ const ProjectMaterialRequisition = () => {
         dt2: [],
       };
 
-      const response = await apiClient.post("/upsertProjectMaterialRequisition", {
+      const response = await apiClient.post("/upsertPRJMR", {
         json_data: payload,
       });
       const result = response?.data?.data?.[0] || {};
@@ -586,7 +586,7 @@ const ProjectMaterialRequisition = () => {
 
     setIsLoading(true);
     try {
-      await apiClient.post("/cancelProjectMaterialRequisition", {
+      await apiClient.post("/cancelPRJMR", {
         userPassword: confirmation.password,
         userCode: currentUserRow?.userCode || "",
         json_data: {
@@ -1023,7 +1023,7 @@ const ProjectMaterialRequisition = () => {
         <AllTranHistory
           showHeader={false}
           isActive={topTab === "history"}
-          endpoint="/getProjectMaterialRequisitionHistory"
+          endpoint="/getPRJMRHistory"
           cacheKey={`PRJ_MR:${state.branchCode}:${state.startDate}:${state.endDate}`}
           activeTabKey="PRJ_MR_Summary"
           branchCode={state.branchCode}
@@ -1099,6 +1099,6 @@ const ProjectMaterialRequisition = () => {
   );
 };
 
-export default ProjectMaterialRequisition;
+export default PRJMR;
 
 

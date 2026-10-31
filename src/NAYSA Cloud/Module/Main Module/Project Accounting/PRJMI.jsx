@@ -39,8 +39,8 @@ import {
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 
 const DOC_TYPE = "PRJ_IS";
-const COMPONENT_KEY = "ProjectMaterialIssue";
-const DETAILS_ROUTE = "/page/ProjectMaterialIssue";
+const COMPONENT_KEY = "PRJMI";
+const DETAILS_ROUTE = "/page/PRJMI";
 
 const emptyDetailRow = (lineNo, decQty = 2) => ({
   lineNo,
@@ -88,7 +88,7 @@ const formatGlReferenceDate = (value) => {
   return useformatToDatev2(rawValue);
 };
 
-const ProjectMaterialIssue = () => {
+const PRJMI = () => {
   const location = useLocation();
   const loadedFromUrlRef = useRef(false);
   const { currentUserRow, companyInfo, getAllTopHSDocRow } = useAuth();
@@ -371,7 +371,7 @@ const ProjectMaterialIssue = () => {
 
       setIsLoading(true);
       try {
-        const response = await apiClient.get("/getProjectMaterialIssue", {
+        const response = await apiClient.get("/getPRJMI", {
           params: { isNo: docNo || "", branchCode, direction },
         });
         const data = parseProcedureResult(response);
@@ -497,7 +497,7 @@ const ProjectMaterialIssue = () => {
     if (!mrNo || !state.branchCode) return;
     setIsLoading(true);
     try {
-      const response = await apiClient.get("/getProjectMaterialRequisition", {
+      const response = await apiClient.get("/getPRJMR", {
         params: { mrNo, branchCode: state.branchCode, direction: "" },
       });
       const mr = parseProcedureResult(response);
@@ -565,7 +565,7 @@ const ProjectMaterialIssue = () => {
 
     setIsLoading(true);
     try {
-      const response = await apiClient.post("/getProjectMaterialIssueOpenStock", {
+      const response = await apiClient.post("/getPRJMIOpenStock", {
         json_data: {
           isId: state.documentID,
           isNo: state.documentNo,
@@ -642,7 +642,7 @@ const ProjectMaterialIssue = () => {
   const autoGenerateAndSave = async (detailRows) => {
     let glRows = [];
     if (detailRows.some((row) => parseFormattedNumber(row.allocatedQty || 0) > 0)) {
-      const glResponse = await apiClient.post("/generateProjectMaterialIssueEntries", {
+      const glResponse = await apiClient.post("/generatePRJMIEntries", {
         json_data: {
           isId: state.documentID,
           isDate: state.documentDate,
@@ -655,7 +655,7 @@ const ProjectMaterialIssue = () => {
       if (glRows[0]?.errorCount) throw new Error(glRows[0].errorMsg || "Unable to generate General Ledger entries.");
     }
 
-    const saveResponse = await apiClient.post("/upsertProjectMaterialIssue", {
+    const saveResponse = await apiClient.post("/upsertPRJMI", {
       json_data: buildSavePayload(detailRows, glRows),
     });
     const saveResult = saveResponse?.data?.data?.[0] || {};
@@ -669,7 +669,7 @@ const ProjectMaterialIssue = () => {
     const row = state.detailRows[stockLookupIndex];
     setIsLoading(true);
     try {
-      const response = await apiClient.post("/saveProjectMaterialIssueAllocation", {
+      const response = await apiClient.post("/savePRJMIAllocation", {
         json_data: {
           isId: state.documentID,
           isNo: state.documentNo,
@@ -755,7 +755,7 @@ const ProjectMaterialIssue = () => {
 
         let allocations = [];
         if (!isRelease) {
-          const stockResponse = await apiClient.post("/getProjectMaterialIssueOpenStock", {
+          const stockResponse = await apiClient.post("/getPRJMIOpenStock", {
             json_data: {
               isId: state.documentID,
               isNo: state.documentNo,
@@ -771,7 +771,7 @@ const ProjectMaterialIssue = () => {
           allocations = buildAutoAllocations(stockResult.stockRows || [], row.requestQty, row);
         }
 
-        const allocationResponse = await apiClient.post("/saveProjectMaterialIssueAllocation", {
+        const allocationResponse = await apiClient.post("/savePRJMIAllocation", {
           json_data: {
             isId: state.documentID,
             isNo: state.documentNo,
@@ -826,7 +826,7 @@ const ProjectMaterialIssue = () => {
 
       try {
         setIsLoading(true);
-        await apiClient.post("/saveProjectMaterialIssueAllocation", {
+        await apiClient.post("/savePRJMIAllocation", {
           json_data: {
             isId: state.documentID,
             isNo: state.documentNo,
@@ -873,7 +873,7 @@ const ProjectMaterialIssue = () => {
 
     setIsLoading(true);
     try {
-      const response = await apiClient.post("/generateProjectMaterialIssueEntries", {
+      const response = await apiClient.post("/generatePRJMIEntries", {
         json_data: {
           isId: state.documentID,
           isDate: state.documentDate,
@@ -950,7 +950,7 @@ const ProjectMaterialIssue = () => {
       let glRows = state.detailRowsGL;
 
       if (hasAllocation) {
-        const glResponse = await apiClient.post("/generateProjectMaterialIssueEntries", {
+        const glResponse = await apiClient.post("/generatePRJMIEntries", {
           json_data: {
             isId: state.documentID,
             isDate: state.documentDate,
@@ -975,7 +975,7 @@ const ProjectMaterialIssue = () => {
         updateState({ detailRowsGL: glRows });
       }
 
-      const response = await apiClient.post("/upsertProjectMaterialIssue", {
+      const response = await apiClient.post("/upsertPRJMI", {
         json_data: buildSavePayload(state.detailRows, glRows),
       });
       const result = response?.data?.data?.[0] || {};
@@ -1042,7 +1042,7 @@ const ProjectMaterialIssue = () => {
 
     setIsLoading(true);
     try {
-      await apiClient.post("/cancelProjectMaterialIssue", {
+      await apiClient.post("/cancelPRJMI", {
         userPassword: confirmation.password,
         userCode: currentUserRow?.userCode || "",
         json_data: {
@@ -1583,7 +1583,7 @@ const ProjectMaterialIssue = () => {
         <AllTranHistory
           showHeader={false}
           isActive={topTab === "history"}
-          endpoint="/getProjectMaterialIssueHistory"
+          endpoint="/getPRJMIHistory"
           cacheKey={`PRJ_IS:${state.branchCode}:${state.startDate}:${state.endDate}`}
           activeTabKey="PRJ_IS_Summary"
           branchCode={state.branchCode}
@@ -1682,7 +1682,7 @@ const ProjectMaterialIssue = () => {
   );
 };
 
-export default ProjectMaterialIssue;
+export default PRJMI;
 
 
 

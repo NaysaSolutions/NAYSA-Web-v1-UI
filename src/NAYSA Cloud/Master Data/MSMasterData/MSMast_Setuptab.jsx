@@ -7,6 +7,7 @@ import SearchMSInvCateg from "@/NAYSA Cloud/Lookup/SearchMSInvCateg.jsx";
 import SearchMSInvClass from "@/NAYSA Cloud/Lookup/SearchMSInvClass.jsx";
 import SearchUOM from "@/NAYSA Cloud/Lookup/SearchUOM.jsx";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
+import { ItemApprovalSetup } from "@/NAYSA Cloud/Global/ItemApprovalSetup.jsx";
 
 const SectionHeader = ({ title }) => (
   <div className="mb-3">
@@ -81,6 +82,16 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    id: "approval",
+    label: "Approval Setup",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 1.5l5 2v3.8c0 3.1-2.1 5.8-5 7.2-2.9-1.4-5-4.1-5-7.2V3.5l5-2z" />
+        <path d="M5.5 8l1.5 1.5L10.8 6" />
+      </svg>
+    ),
+  },
 ];
 
 const MSMast_SetupTab = ({
@@ -91,6 +102,7 @@ const MSMast_SetupTab = ({
   onChangeForm,
   onLookupSelect,
   onBlurItemCode,
+  showItemApprovalSetup = false,
 }) => {
   const isReadOnly = !isEditing;
   const isNewRecord = form.__isNew;
@@ -111,6 +123,12 @@ const MSMast_SetupTab = ({
   const [activeTab, setActiveTab] = useState("stockcard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [tblFieldArray, setTblFieldArray] = useState([]);
+
+  useEffect(() => {
+    if (!showItemApprovalSetup && activeTab === "approval") {
+      setActiveTab("stockcard");
+    }
+  }, [showItemApprovalSetup, activeTab]);
 
   useEffect(() => {
     const run = async () => {
@@ -336,7 +354,7 @@ const MSMast_SetupTab = ({
               </button>
 
               <div className="flex flex-row md:flex-col gap-2 md:gap-1 p-2 flex-1 overflow-x-auto">
-                {TABS.map((tab) => (
+                {TABS.filter((tab) => tab.id !== "approval" || showItemApprovalSetup).map((tab) => (
                   <div key={tab.id} className="relative group flex-shrink-0 md:flex-shrink">
                     <button
                       type="button"
@@ -407,6 +425,18 @@ const MSMast_SetupTab = ({
                       readOnly={isReadOnly}
                       disabled={isDisabled}
                     />
+                  </div>
+                </>
+              )}
+
+              {activeTab === "approval" && showItemApprovalSetup && (
+                <>
+                  <SectionHeader title="ITEM DETAIL APPROVAL" />
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-4">
+                    <ItemApprovalSetup form={form} onChange={onChangeForm} disabled={isDisabled} />
+                    <p className="mt-3 text-[11px] text-slate-500">
+                      This setting applies to this MS item when PR or PO uses Item Detail or Both approval.
+                    </p>
                   </div>
                 </>
               )}

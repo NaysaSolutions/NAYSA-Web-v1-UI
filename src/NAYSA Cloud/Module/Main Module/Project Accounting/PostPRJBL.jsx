@@ -36,12 +36,12 @@ const fallbackColumns = [
   { key: "totalAmount", label: "Total Amount", width: 140, classNames: "text-right", renderType: "number", renderFormat: "2" },
 ];
 
-const PostProjectMaterialBackload = ({
+const PostPRJBL = ({
   isOpen,
   onClose,
   userCode,
-  endpoint = "postingProjectMaterialBackloadIncoming",
-  postingDocCode = "ProjectMaterialBackloadIncoming",
+  endpoint = "postingPRJBLI",
+  postingDocCode = "PRJBLI",
   transactionType = "I",
   transactionPath = "/prj/transaction/project-material-backload-incoming",
 }) => {
@@ -134,4 +134,4 @@ const PostProjectMaterialBackload = ({
   );
 };
 
-export default PostProjectMaterialBackload;
+export default PostPRJBL;

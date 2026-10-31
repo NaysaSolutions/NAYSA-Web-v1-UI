@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faXmark, faPlus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -126,6 +126,7 @@ const CV = () => {
    const loadedFromUrlRef = useRef(false);
    const detailRowsRef = useRef([]);
    const detailRowsGLRef = useRef([]);
+   const detailRowUpdateVersionRef = useRef([]);
    const navigate = useNavigate();
    const location = useLocation(); 
    const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
@@ -285,6 +286,7 @@ const CV = () => {
     showApprovalStatusModal:false,
     showAllTranDocNo:false,
     appLevel:0,
+    appStat:"NA",
     detailRowsApp:[],
    });
 
@@ -305,6 +307,7 @@ const CV = () => {
   userCode,
   noReprints,
   appLevel,
+  appStat,
 
   // Tabs & loading
   activeTab,
@@ -440,20 +443,23 @@ const isCashPayment = selectedPayTypeCode.includes("CV02") || selectedPayTypeNam
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const maxApprovalLevel = Number(currentUserRow?.cvMaxAppLevel || 0);
   const currentApprovalLevel = Number(appLevel || 0);
+  const currentApprovalStatus = String(appStat || "NA").trim().toUpperCase();
   const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED", "CLOSED"];
   const showApprovalStatus =
     Boolean(documentID) &&
-    maxApprovalLevel > 0 &&
     !approvalStatusHiddenStatuses.includes(String(displayStatus || "").trim().toUpperCase());
   const approvalStatus = (() => {
     if (!showApprovalStatus) return "";
-    if (currentApprovalLevel === -1) return "Disapproved Transaction";
-    if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
+    if (currentApprovalStatus === "C") return "Cancelled Transaction";
+    if (currentApprovalStatus === "R") return "Rejected Transaction";
+    if (currentApprovalStatus === "A") return "Approved Transaction";
+    if (currentApprovalStatus === "NA") return "Approval Not Required";
     return `Awaiting for L${currentApprovalLevel + 1} Approval`;
   })();
-  const approvalStatusColor = currentApprovalLevel === -1
+  const approvalStatusColor = currentApprovalStatus === "R"
     ? "text-rose-500 dark:text-rose-400 animate-pulse"
     : statusColor;
+  const isApprovalComplete = ["A", "NA"].includes(currentApprovalStatus);
   const isApprovalLocked = currentApprovalLevel > 0 && currentApprovalLevel <= maxApprovalLevel;
   const isTransactionOpen = ["", "O", "OPEN"].includes(
     String(displayStatus || "").trim().toUpperCase(),
@@ -868,6 +874,7 @@ useEffect(() => {
         detailRowsGL:[],
         documentStatus:"",
         appLevel:0,
+        appStat:"NA",
         detailRowsApp:[],
         showApprovalStatusModal:false,
         
@@ -1041,6 +1048,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     updateState({
       documentStatus: data.cvStatus,
       appLevel: data.appLevel || 0,
+      appStat: data.appStat || "NA",
       detailRowsApp: retrievedApprovalRows,
       status: data.docStatus,
       noReprints: data.noReprints,
@@ -1681,6 +1689,7 @@ const handleCopy = async () => {
                   documentDate:useGetCurrentDayV2(), 
                   noReprints:"0",
                   appLevel:0,
+                  appStat:"NA",
                   detailRowsApp:[],
                   showApprovalStatusModal:false,
                   isDocNoDisabled:false,
@@ -1829,7 +1838,7 @@ const recomputeCvDetailRowAmounts = async (
   const netOfVat = +(invoiceBalance - vatAmount).toFixed(2);
   const atcAmount = isWithoutAPV02 || preserveApvAmounts
     ? 0
-    : (forceTaxRecalculation || changedField === "atcCode"
+    : (forceTaxRecalculation || ["vatCode", "vatName", "vatClear", "atcCode"].includes(changedField)
       ? (row.atcCode ? await useTopATCAmount(row.atcCode, netOfVat) : 0)
       : (parseFormattedNumber(row.atcAmount || 0) || 0));
   const amountDue = withAPV === "Y"
@@ -1906,6 +1915,8 @@ const recalculateAllCvDetailRows = async (options = {}) => {
 
 
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
+    const updateVersion = (detailRowUpdateVersionRef.current[index] || 0) + 1;
+    detailRowUpdateVersionRef.current[index] = updateVersion;
     const updatedRows = [...(detailRowsRef.current || [])];
     const originalRow = { ...updatedRows[index] };
 
@@ -2052,10 +2063,17 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
 
 
+    // A newer edit (for example, clearing VAT/ATC while an amount calculation
+    // is still running) must win over this older async operation.
+    if (detailRowUpdateVersionRef.current[index] !== updateVersion) return;
+
     updatedRows[index] = row;
 
     const hasChanges = JSON.stringify(originalRow) !== JSON.stringify(row);
 
+    // Keep async detail operations on the latest rows immediately. Waiting for
+    // the React effect here can let an older calculation restore cleared tax codes.
+    detailRowsRef.current = updatedRows;
     updateState({
       detailRows: updatedRows,
       ...(hasChanges ? { detailRowsGL: [] } : {}),
@@ -2777,37 +2795,13 @@ const checkDuplicateCheckNo = async (checkNo, docId = null) => {
 };
 
 const handleVatNameDoubleClick = async (index) => {
-  if (isFormDisabled) return;
-
-  const updatedRows = [...detailRows];
-  updatedRows[index] = {
-    ...updatedRows[index],
-    vatCode: "",
-    vatName: "",
-    vatAmount: "0.00",
-  };
-
-  await recomputeCvDetailRowAmounts(updatedRows[index], "vatClear");
-
-  updateState({ detailRows: updatedRows, detailRowsGL: [] });
-  updateTotals(updatedRows);
+  if (isFormDisabled || selectedWithAPV === "Y") return;
+  await handleDetailChange(index, "vatCode", { vatCode: "", vatName: "", acctCode: "" }, true);
 };
 
 const handleAtcNameDoubleClick = async (index) => {
-  if (isFormDisabled) return;
-
-  const updatedRows = [...detailRows];
-  updatedRows[index] = {
-    ...updatedRows[index],
-    atcCode: "",
-    atcName: "",
-    atcAmount: "0.00",
-  };
-
-  await recomputeCvDetailRowAmounts(updatedRows[index], "atcCode");
-
-  updateState({ detailRows: updatedRows, detailRowsGL: [] });
-  updateTotals(updatedRows);
+  if (isFormDisabled || selectedWithAPV === "Y") return;
+  await handleDetailChange(index, "atcCode", { atcCode: "", atcName: "" }, true);
 };
 
 const renderCvDetailCell = (columnKey, row, index) => {
@@ -2904,7 +2898,7 @@ const renderCvDetailCell = (columnKey, row, index) => {
         <input
           type="text"
           id={`${field}-${index}`}
-          className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+          className={`w-full global-tran-td-inputclass-ui text-center ${options.onClear && row[field] ? "pr-12" : "pr-6"} cursor-pointer`}
           value={row[field] || ""}
           readOnly
           onKeyDown={(e) => {
@@ -2915,6 +2909,9 @@ const renderCvDetailCell = (columnKey, row, index) => {
         />
         {!isFormDisabled && !options.hideIcon && (
           <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={lookupHandlers[field]} />
+        )}
+        {!isFormDisabled && !options.hideIcon && options.onClear && row[field] && (
+          <FontAwesomeIcon icon={faXmark} title={`Clear ${field === "vatCode" ? "VAT" : "ATC"} Code`} className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={options.onClear} />
         )}
       </div>
     </td>
@@ -2939,13 +2936,13 @@ const renderCvDetailCell = (columnKey, row, index) => {
     vatAcct: () => lookupInput("vatAcct"),
     rcCode: () => lookupInput("rcCode", { hideIcon: selectedWithAPV === "Y" }),
     slCode: () => lookupInput("slCode"),
-    vatCode: () => lookupInput("vatCode"),
-    atcCode: () => lookupInput("atcCode"),
+    vatCode: () => lookupInput("vatCode", { hideIcon: selectedWithAPV === "Y", onClear: () => handleVatNameDoubleClick(index) }),
+    atcCode: () => lookupInput("atcCode", { hideIcon: selectedWithAPV === "Y", onClear: () => handleAtcNameDoubleClick(index) }),
     rcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcName", { readOnly: true })}</td>,
     slName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slName", { readOnly: true })}</td>,
-    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("vatName", { readOnly: true, onDoubleClick: () => handleVatNameDoubleClick(index) })}</td>,
+    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("vatName", { readOnly: true, onDoubleClick: selectedWithAPV !== "Y" ? () => handleVatNameDoubleClick(index) : undefined })}</td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("vatAmount", { readOnly: true })}</td>,
-    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("atcName", { readOnly: true, onDoubleClick: () => handleAtcNameDoubleClick(index) })}</td>,
+    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("atcName", { readOnly: true, onDoubleClick: selectedWithAPV !== "Y" ? () => handleAtcNameDoubleClick(index) : undefined })}</td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("atcAmount", { disabled: isFormDisabled })}</td>,
     amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("amountDue", { readOnly: true })}</td>,
   };
@@ -3036,7 +3033,7 @@ const renderCvGlCell = (columnKey, row, index) => {
               activeTopTab={topTab} 
               showActions={topTab === "details"} 
               showBIRForm={true}      
-              showNotify={hsDoc?.docApp === "Y" && approvalStatus !== "Approved Transaction"}
+              showNotify={hsDoc?.docApp === "Y" && !isApprovalComplete}
               isViewDocument={isViewDocument}
               onDetails={() => setTopTab("details")}
               onHistory={() => setTopTab("history")}
@@ -3045,7 +3042,7 @@ const renderCvGlCell = (columnKey, row, index) => {
               isSaveDisabled={state.isSaveDisabled || isFormDisabled || detailRows.length === 0}
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
-              isNotifyDisabled={!documentID || displayStatus === "Cancelled" || approvalStatus === "Approved Transaction"}
+              isNotifyDisabled={!documentID || displayStatus === "Cancelled" || isApprovalComplete}
               isPrintDisabled={!documentID || displayStatus === "Cancelled"}
               isPrintBIRDisabled={
                 !documentID ||

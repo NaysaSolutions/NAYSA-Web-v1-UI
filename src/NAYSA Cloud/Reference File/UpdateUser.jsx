@@ -6,6 +6,7 @@ import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import RCLookupModal from "@/NAYSA Cloud/Lookup/SearchRCMast";
+import PositionLookupModal from "@/NAYSA Cloud/Lookup/SearchPositionRef";
 import UserRoleModal from "@/NAYSA Cloud/Lookup/SetUserRole";
 import LoginPassPolicy from "@/NAYSA Cloud/Lookup/LoginPassPolicy";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
@@ -86,6 +87,8 @@ const UpdateUser = () => {
   const [showLoginPolicyModal, setShowLoginPolicyModal] = useState(false);
   const [policy, setPolicy] = useState(null);
   const [position, setPosition] = useState("");
+  const [posCode, setPosCode] = useState("");
+  const [positionModalOpen, setPositionModalOpen] = useState(false);
   const [emailAdd, setEmailAdd] = useState("");
   const [viewCostamt, setViewCostamt] = useState("N");
   const [editUprice, setEditUprice] = useState("N");
@@ -482,6 +485,7 @@ const UpdateUser = () => {
     setRcCode("");
     setRcName("");
     setPosition("");
+    setPosCode("");
     setEmailAdd("");
     setActive("Yes");
     setViewCostamt("N");
@@ -516,6 +520,7 @@ const UpdateUser = () => {
         editUprice: editUprice || "N",
         active: active === "Yes" ? "Y" : active === "Pending" ? "P" : "N",
         position: position ? position.trim() : "",
+        posCode,
         doneBy: currentUserCode, 
       },
     };
@@ -591,6 +596,7 @@ const UpdateUser = () => {
     setRcCode(userData.rcCode || "");
     setRcName(userData.rcName || "");
     setPosition(userData.position || "");
+    setPosCode(userData.posCode || "");
     setEmailAdd(userData.emailAdd || "");
     setActive(
       userData.active === "Y" ? "Yes" : userData.active === "P" ? "Pending" : "No"
@@ -1011,6 +1017,17 @@ const UpdateUser = () => {
         <RCLookupModal isOpen={rcModalOpen} onClose={handleCloseRCModal} />
       )}
 
+      <PositionLookupModal
+        isOpen={positionModalOpen}
+        onClose={(selected) => {
+          setPositionModalOpen(false);
+          if (selected) {
+            setPosCode(selected.posCode || "");
+            setPosition(selected.posName || "");
+          }
+        }}
+      />
+
       {showUserRoleModal && selectedUser && (
         <UserRoleModal
           isOpen={showUserRoleModal}
@@ -1239,9 +1256,12 @@ const UpdateUser = () => {
                 id="position"
                 name="position"
                 label="Position"
+                type="lookup"
                 value={position}
-                onChange={(v) => setPosition(v ?? "")}
+                onChange={() => {}}
+                onLookup={() => setPositionModalOpen(true)}
                 disabled={!isEditing}
+                readOnly
                 maxLength={100}
               />
 

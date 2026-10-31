@@ -37,8 +37,8 @@ import {
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 
 const DOC_TYPE = "PRJ_JO";
-const COMPONENT_KEY = "ProjectJobOrder";
-const DETAILS_ROUTE = "/page/ProjectJobOrder";
+const COMPONENT_KEY = "PRJJO";
+const DETAILS_ROUTE = "/page/PRJJO";
 
 const emptyDetailRow = (
   lineNo,
@@ -73,7 +73,7 @@ const parseProcedureResult = (response) => {
   }
 };
 
-const ProjectJobOrder = () => {
+const PRJJO = () => {
   const location = useLocation();
   const loadedFromUrlRef = useRef(false);
   const { currentUserRow, companyInfo, getAllTopHSDocRow } = useAuth();
@@ -311,7 +311,7 @@ const ProjectJobOrder = () => {
 
       setIsLoading(true);
       try {
-        const response = await apiClient.get("/getProjectJobOrder", {
+        const response = await apiClient.get("/getPRJJO", {
           params: { joNo: docNo || "", branchCode, direction },
         });
         const data = parseProcedureResult(response);
@@ -496,7 +496,7 @@ const ProjectJobOrder = () => {
         dt2: [],
       };
 
-      const response = await apiClient.post("/upsertProjectJobOrder", {
+      const response = await apiClient.post("/upsertPRJJO", {
         json_data: payload,
       });
       const result = response?.data?.data?.[0] || {};
@@ -563,7 +563,7 @@ const ProjectJobOrder = () => {
 
     setIsLoading(true);
     try {
-      await apiClient.post("/cancelProjectJobOrder", {
+      await apiClient.post("/cancelPRJJO", {
         userPassword: confirmation.password,
         userCode: currentUserRow?.userCode || "",
         json_data: {
@@ -1082,7 +1082,7 @@ const ProjectJobOrder = () => {
         <AllTranHistory
           showHeader={false}
           isActive={topTab === "history"}
-          endpoint="/getProjectJobOrderHistory"
+          endpoint="/getPRJJOHistory"
           cacheKey={`PRJ_JO:${state.branchCode}:${state.startDate}:${state.endDate}`}
           activeTabKey="PRJ_JO_Summary"
           branchCode={state.branchCode}
@@ -1189,4 +1189,4 @@ const ProjectJobOrder = () => {
   );
 };
 
-export default ProjectJobOrder;
+export default PRJJO;

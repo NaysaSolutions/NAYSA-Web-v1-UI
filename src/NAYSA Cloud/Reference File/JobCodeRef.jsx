@@ -43,6 +43,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import { ItemApprovalSetup, useItemApprovalVisibility } from "@/NAYSA Cloud/Global/ItemApprovalSetup.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 
 const INITIAL_FORM = {
@@ -52,6 +53,8 @@ const INITIAL_FORM = {
   acctCode: "",
   acctName: "",
   active: "Y",
+  requireApproval: "N",
+  maxAppLevel: "0",
 };
 
 const INITIAL_REG = {
@@ -62,6 +65,7 @@ const INITIAL_REG = {
 };
 
 const JobCodeRef = () => {
+  const showItemApprovalSetup = useItemApprovalVisibility(["JO"]);
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const docType = "JobCodeRef";
@@ -539,6 +543,12 @@ const JobCodeRef = () => {
             />
           </div>
         </div>
+        {showItemApprovalSetup && (
+          <div className="w-full lg:w-[320px] bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg border self-start">
+            <h3 className="text-sm font-semibold text-blue-700 mb-4">Approval Setup</h3>
+            <ItemApprovalSetup form={formData} onChange={updateForm} disabled={!isEditing} />
+          </div>
+        )}
         <div className="w-full lg:w-[320px]">
           <RegistrationInfo layout="stacked" data={registrationInfo} />
         </div>

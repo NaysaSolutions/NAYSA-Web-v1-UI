@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import {
   Check,
   CheckCircle2,
@@ -74,6 +76,12 @@ const buildApprovalLevels = (data) =>
     const comment = getDataValue(data, `app_note${level}`);
     const approverName = getDataValue(data, `user_app${level}`);
     const isApproved = Boolean(String(approvedDate || "").trim());
+    const requiredValue = getDataValue(data, `app_required${level}`);
+    const isRequired = requiredValue === "" || requiredValue === null || requiredValue === undefined
+      ? true
+      : ![false, 0, "0", "N", "NA"].includes(
+          typeof requiredValue === "string" ? requiredValue.trim().toUpperCase() : requiredValue,
+        );
 
     return {
       level,
@@ -81,6 +89,7 @@ const buildApprovalLevels = (data) =>
       approvedDate,
       comment,
       isApproved,
+      isRequired,
     };
   });
 
@@ -235,15 +244,64 @@ const GlobalApprovalStatus = ({
   remarks = "",
   maxAppLevel = 4,
   data = EMPTY_DATA,
+  tranId = "",
   closeOnBackdrop = true,
 }) => {
-  const documentLabel = formatDocLabel(docType);
-  const approvalLevels = useMemo(
-    () => buildApprovalLevels(data || EMPTY_DATA).slice(0, normalizeMaxAppLevel(maxAppLevel)),
-    [data, maxAppLevel],
+  const [transactionApproval, setTransactionApproval] = useState(null);
+  const [loadedTransactionKey, setLoadedTransactionKey] = useState("");
+  const transactionKey = `${String(docType).toUpperCase()}:${tranId}`;
+  const requiresFreshStatus = Boolean(
+    isOpen && tranId && ["PR", "PO", "JO"].includes(String(docType).toUpperCase()),
   );
 
+  useEffect(() => {
+    let active = true;
+    const loadStatus = async () => {
+      setTransactionApproval(null);
+      if (!isOpen || !tranId || !["PR", "PO", "JO"].includes(String(docType).toUpperCase())) {
+        setLoadedTransactionKey("");
+        return;
+      }
+      try {
+        const response = await apiClient.get("/transactionApprovalStatus", {
+          params: { docCode: String(docType).toUpperCase(), tranId },
+        });
+        if (active) setTransactionApproval(response?.data?.data || null);
+      } catch (error) {
+        console.error("Unable to load transaction approval status:", error);
+        if (active) setTransactionApproval(null);
+      } finally {
+        if (active) setLoadedTransactionKey(transactionKey);
+      }
+    };
+    loadStatus();
+    return () => { active = false; };
+  }, [isOpen, tranId, docType, transactionKey]);
+
+  const effectiveData = transactionApproval || data || EMPTY_DATA;
+  const effectiveMaxLevel = transactionApproval?.maxAppLevel ?? maxAppLevel;
+  const effectiveStatus = transactionApproval?.status || status;
+  const documentLabel = formatDocLabel(docType);
+  const approvalLevels = useMemo(
+    () => buildApprovalLevels(effectiveData)
+      .slice(0, normalizeMaxAppLevel(effectiveMaxLevel))
+      .filter((approval) => approval.isRequired),
+    [effectiveData, effectiveMaxLevel],
+  );
+  const normalizedOverallStatus = normalizeStatus(effectiveStatus);
+  const isOverallApproved =
+    normalizedOverallStatus.includes("approved") &&
+    !normalizedOverallStatus.includes("not required");
+  const hasDocumentApprovalActivity = approvalLevels.some(
+    (approval) => approval.isApproved,
+  );
+  const isCompletedByLineApproval =
+    isOverallApproved && !hasDocumentApprovalActivity;
+
   if (!isOpen) return null;
+  if (requiresFreshStatus && loadedTransactionKey !== transactionKey) {
+    return <LoadingSpinner />;
+  }
 
   const handleBackdropClick = () => {
     if (closeOnBackdrop) onClose?.();
@@ -321,7 +379,7 @@ const GlobalApprovalStatus = ({
                   Current Status
                 </p>
                 <div className="mt-0.5">
-                  <ApprovalStatusBadge status={status} />
+                  <ApprovalStatusBadge status={effectiveStatus} />
                 </div>
               </div>
             </div>
@@ -377,20 +435,42 @@ const GlobalApprovalStatus = ({
                 </div>
               </div>
 
-              {approvalLevels.map((approval, index) => (
-                <ApprovalLevelCard
-                  key={approval.level}
-                  approval={approval}
-                  isLast={index === approvalLevels.length - 1}
-                />
-              ))}
+              {isCompletedByLineApproval ? (
+                <div className="grid grid-cols-[38px_minmax(0,1fr)] gap-2.5 sm:grid-cols-[46px_minmax(0,1fr)]">
+                  <TimelineIcon isApproved />
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5 sm:p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold uppercase text-emerald-700">
+                          Line Item Approval
+                        </p>
+                        <p className="mt-0.5 text-[12px] font-semibold leading-5 text-slate-950">
+                          All required line items have completed approval.
+                        </p>
+                      </div>
+                      <span className="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                        <CheckCircle2 size={13} /> Approved
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                approvalLevels.map((approval, index) => (
+                  <ApprovalLevelCard
+                    key={approval.level}
+                    approval={approval}
+                    isLast={index === approvalLevels.length - 1}
+                  />
+                ))
+              )}
             </div>
 
             <div className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-slate-600">
               <Info size={14} className="mt-0.5 shrink-0" />
               <p className="min-w-0">
-                The approval process will continue until the final approval
-                level is completed.
+                {isCompletedByLineApproval
+                  ? "The required line-item approval process is complete."
+                  : "The approval process will continue until the final approval level is completed."}
               </p>
             </div>
           </div>

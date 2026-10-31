@@ -508,7 +508,7 @@ const CurrRef = () => {
       </div>
 
       {/* Main Content Layout: Left (Form) / Right (Table) on large screens */}
-      <div ref={formTopRef} className="mt-24 flex flex-col xl:flex-row gap-4 px-4 h-auto xl:h-[calc(100vh-130px)]">
+      <div ref={formTopRef} className="mt-24 flex flex-col xl:flex-row items-start gap-4 px-4 h-auto">
         
         {/* LEFT PANEL: Form & Registration Info */}
         <div className="w-full xl:w-[400px] flex flex-col gap-4 h-fit shrink-0">
@@ -560,7 +560,7 @@ const CurrRef = () => {
         </div>
 
         {/* RIGHT PANEL: Table */}
-        <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg overflow-hidden flex flex-col global-tran-table-main-div-ui mt-0">
+        <div className="w-full flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg overflow-hidden flex flex-col global-tran-table-main-div-ui mt-0">
           <SearchGlobalReferenceTable
             docType={docType}
             columns={columns}

@@ -4,7 +4,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faSpinner,faTrashAlt } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faXmark, faPlus, faMinus, faSpinner,faTrashAlt } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -2272,40 +2272,14 @@ const handleInvoiceNoCommit = (index, value) => {
   updateTotals(updatedRows);
 };
 
-const handleVatNameDoubleClick = (index) => {
+const handleVatNameDoubleClick = async (index) => {
   if (isFormDisabled) return;
-
-  const updatedRows = [...(detailRowsRef.current || [])];
-  updatedRows[index] = {
-    ...updatedRows[index],
-    vatCode: "",
-    vatName: "",
-    vatAmount: "0.00",
-  };
-
-  updateState({
-    detailRows: updatedRows,
-    detailRowsGL: [],
-  });
-  updateTotals(updatedRows);
+  await handleDetailChange(index, "vatCode", { vatCode: "", vatName: "" }, true);
 };
 
-const handleAtcNameDoubleClick = (index) => {
+const handleAtcNameDoubleClick = async (index) => {
   if (isFormDisabled) return;
-
-  const updatedRows = [...(detailRowsRef.current || [])];
-  updatedRows[index] = {
-    ...updatedRows[index],
-    atcCode: "",
-    atcName: "",
-    atcAmount: "0.00",
-  };
-
-  updateState({
-    detailRows: updatedRows,
-    detailRowsGL: [],
-  });
-  updateTotals(updatedRows);
+  await handleDetailChange(index, "atcCode", { atcCode: "", atcName: "" }, true);
 };
 
 // Detail table cell renderers.
@@ -2443,8 +2417,9 @@ const renderPcvDetailCell = (columnKey, row, index) => {
     vatCode: () => (
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
         <div className="flex items-center">
-          <input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />
+          <input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-12 cursor-pointer" value={row[columnKey] || ""} readOnly />
           {!isFormDisabled && !isReceivingDetail && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
+          {!isFormDisabled && !isReceivingDetail && row.vatCode && <FontAwesomeIcon icon={faXmark} title="Clear VAT Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleVatNameDoubleClick(index)} />}
         </div>
       </td>
     ),
@@ -2453,8 +2428,9 @@ const renderPcvDetailCell = (columnKey, row, index) => {
     atcCode: () => (
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
         <div className="flex items-center">
-          <input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />
+          <input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-12 cursor-pointer" value={row[columnKey] || ""} readOnly />
           {!isFormDisabled && !isReceivingDetail && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
+          {!isFormDisabled && !isReceivingDetail && row.atcCode && <FontAwesomeIcon icon={faXmark} title="Clear ATC Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleAtcNameDoubleClick(index)} />}
         </div>
       </td>
     ),

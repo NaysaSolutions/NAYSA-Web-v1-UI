@@ -237,6 +237,7 @@ const PO = () => {
     status: "O",
     originalDocStatus: "O",
     appLevel: 0,
+    appStat: "NA",
     currRate: "",
 
     WHcode: "",
@@ -363,6 +364,7 @@ const PO = () => {
     documentNo,
     status,
     appLevel,
+    appStat,
     originalDocStatus,
 
     activeTab,
@@ -851,23 +853,26 @@ const PO = () => {
   const statusColor = statusMap[displayStatus] || "";
   const maxApprovalLevel = Number(currentUserRow?.poMaxAppLevel || 0);
   const currentApprovalLevel = Number(appLevel ?? 0);
+  const currentApprovalStatus = String(appStat || "NA").trim().toUpperCase();
   const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED"];
   const showApprovalStatus =
     !!documentID &&
-    maxApprovalLevel > 0 &&
     !approvalStatusHiddenStatuses.includes(
       String(displayStatus || "").toUpperCase(),
     );
   const approvalStatus = (() => {
     if (!showApprovalStatus) return "";
-    if (currentApprovalLevel === -1) return "Disapproved Transaction";
-    if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
+    if (currentApprovalStatus === "C") return "Cancelled Transaction";
+    if (currentApprovalStatus === "R") return "Rejected Transaction";
+    if (currentApprovalStatus === "A") return "Approved Transaction";
+    if (currentApprovalStatus === "NA") return "Approval Not Required";
     return `Awaiting for L${currentApprovalLevel + 1} Approval`;
   })();
   const approvalStatusColor =
-    currentApprovalLevel === -1
+    currentApprovalStatus === "R"
       ? "text-rose-500 dark:text-rose-400 animate-pulse"
       : statusColor;
+  const isApprovalComplete = ["A", "NA"].includes(currentApprovalStatus);
   const isDocumentLocked =
     isViewDocumentUrl ||
     ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
@@ -1356,6 +1361,7 @@ const PO = () => {
       originalDocStatus: "O",
       noReprints: "0",
       appLevel: 0,
+      appStat: "NA",
       poCancelled: "",
       detailRows: [],
       detailRowsApp: [],
@@ -1718,6 +1724,7 @@ const PO = () => {
         status: getStatusCode(data.status),
         originalDocStatus: getStatusCode(data.status),
         appLevel: data.appLevel || 0,
+        appStat: data.appStat || "NA",
 
         documentID: data.poId || "",
         groupId: data.groupId || "",
@@ -3544,6 +3551,7 @@ const PO = () => {
         poCancelled: "",
         noReprints: "0",
         appLevel: 0,
+        appStat: "NA",
         sourcePrNo: "",
         detailRows: copiedDetailRows,
         detailRowsSummary: [],
@@ -4774,7 +4782,7 @@ const PO = () => {
           showActions={topTab === "details"}
           showNotify={
             (hsDoc?.docApp === "Y" || maxApprovalLevel > 0) &&
-            approvalStatus !== "Approved Transaction"
+            !isApprovalComplete
           }
           showBIRForm={false}
           showCopyForm={true}
@@ -4798,7 +4806,7 @@ const PO = () => {
           isNotifyDisabled={
             !documentID ||
             displayStatus === "CANCELLED" ||
-            approvalStatus === "Approved Transaction"
+            isApprovalComplete
           }
         />
       </div>
@@ -5875,6 +5883,7 @@ const PO = () => {
         remarks={remarks}
         maxAppLevel={maxApprovalLevel}
         data={detailRowsApp?.[0] || {}}
+        tranId={documentID}
       />
 
       {showSpinner && <LoadingSpinner />}

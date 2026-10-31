@@ -475,11 +475,25 @@ const SI = () => {
   ).toUpperCase();
 
   // Derived UI flags
-  const isOverallDiscountMode = salesDiscountMode === "OVERALL";
-  const isSellingPriceAndDiscountEditable = salesDiscountMode === "MANUAL";
+  const normalizedSiTranTypeForPricing = String(siTranType || "").toUpperCase();
+  const isDirectWithoutMatrix = normalizedSiTranTypeForPricing === "SI05";
+  const resolvedRowPricingMode = String(
+    (detailRows || []).find((row) =>
+      ["MANUAL", "OVERALL"].includes(
+        String(row?.pmType || "").trim().toUpperCase()
+      )
+    )?.pmType || ""
+  ).trim().toUpperCase();
+  const effectiveDiscountMode = isDirectWithoutMatrix
+    ? "MANUAL"
+    : salesDiscountMode === "PMTYPE"
+      ? (resolvedRowPricingMode || "PMTYPE")
+      : salesDiscountMode;
+  const isOverallDiscountMode = effectiveDiscountMode === "OVERALL";
+  const isSellingPriceAndDiscountEditable = effectiveDiscountMode === "MANUAL";
   const SI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
   const canEditHeaderDiscount =
-    isOverallDiscountMode &&
+    (isOverallDiscountMode || isSellingPriceAndDiscountEditable) &&
     !isFormDisabled &&
     !state.isSaveDisabled &&
     isOpenStatus &&
@@ -490,13 +504,15 @@ const SI = () => {
     Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
     8
   );
-  const showTotalDiscountColumn = !isOverallDiscountMode && discountLevel > 1;
+  const visibleDiscountLevel = isSellingPriceAndDiscountEditable ? 1 : discountLevel;
+  const showTotalDiscountColumn =
+    !isOverallDiscountMode && !isSellingPriceAndDiscountEditable && visibleDiscountLevel > 1;
   const visibleDiscountRateFields = isOverallDiscountMode
     ? []
-    : Array.from({ length: discountLevel }, (_, index) => `discRate${index + 1}`);
+    : Array.from({ length: visibleDiscountLevel }, (_, index) => `discRate${index + 1}`);
   const visibleDiscountAmountFields = isOverallDiscountMode
     ? ["discAmount1"]
-    : Array.from({ length: discountLevel }, (_, index) => `discAmount${index + 1}`);
+    : Array.from({ length: visibleDiscountLevel }, (_, index) => `discAmount${index + 1}`);
 
   const detailColumnDefs = [
     { key: "drId", label: "DR ID", width: 120 },
@@ -520,14 +536,14 @@ const SI = () => {
     { key: "grossAmount", label: "Gross Amount", width: 130 },
     ...visibleDiscountRateFields.map((field, index) => ({
       key: field,
-      label: discountLevel === 1 ? "Disc Rate" : `Disc Rate ${index + 1}`,
+      label: visibleDiscountLevel === 1 ? "Disc Rate" : `Disc Rate ${index + 1}`,
       width: 110,
     })),
     ...visibleDiscountAmountFields.map((field, index) => ({
       key: field,
       label: isOverallDiscountMode
         ? "Discount Amount"
-        : discountLevel === 1
+        : visibleDiscountLevel === 1
           ? "Disc Amount"
           : `Disc Amount ${index + 1}`,
       width: 120,
@@ -572,7 +588,7 @@ const SI = () => {
   const orderedDetailColumns = getOrderedSoDetailColumns(detailColumnDefs);
   const normalizedSiTranType = String(siTranType || "").toUpperCase();
   const isDirectSiType = normalizedSiTranType === "SI01";
-  const isPickingSiType = normalizedSiTranType === "SI02";
+  const isPickingSiType = ["SI02", "SI05"].includes(normalizedSiTranType);
   const canViewCostAmount =
     String(currentUserRow?.viewCostamt || "").toUpperCase() === "Y";
   const canUsePickingControls =
@@ -1132,11 +1148,22 @@ useEffect(() => {
 
 useEffect(() => {
     if (!refsLoaded) return;
-    const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+    const allTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+    const filteredTypes = allTypes.filter(
+      (type) =>
+        type.DROPDOWN_CODE !== "SI05" ||
+        salesDiscountMode === "PMTYPE" ||
+        String(siTranType || "").toUpperCase() === "SI05"
+    );
     const defaultSiType =
       filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
       filteredTypes[0]?.DROPDOWN_CODE ||
       "";
+    const currentSiType = String(siTranType || "").toUpperCase();
+    const isCurrentSiTypeValid = filteredTypes.some(
+      (type) => String(type.DROPDOWN_CODE || "").toUpperCase() === currentSiType
+    );
+    const nextSiType = isCurrentSiTypeValid ? siTranType : defaultSiType;
     const mapHeaderSiStatus = (value) => {
       const normalizedValue = String(value || "").toUpperCase();
       if (normalizedValue === "OPEN" || normalizedValue === "O") return "O";
@@ -1146,17 +1173,22 @@ useEffect(() => {
     };
     updateState({
       siTranTypeOptions: filteredTypes,
-      siTranType: defaultSiType,
+      // Keep the user's current selection. Default only when it is blank or
+      // no longer allowed by the company Sales Discount Mode.
+      siTranType: nextSiType,
       siStatusOptions: [{ DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" }, { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" }, { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" }],
       siStatus: mapHeaderSiStatus(state.siStatus),
     });
-}, [docType, refsLoaded]);
+}, [docType, refsLoaded, salesDiscountMode, siTranType]);
 
   const handleReset = () => {
       clearSoDetailSorting();
       setIsHeaderDiscountEditing(false);
       setHeaderDiscountDraft("");
-      const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+      const allTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+      const filteredTypes = allTypes.filter(
+        (type) => type.DROPDOWN_CODE !== "SI05" || salesDiscountMode === "PMTYPE"
+      );
       const defaultSiType =
         filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
         filteredTypes[0]?.DROPDOWN_CODE ||
@@ -2082,6 +2114,7 @@ const handleActivityOption = async (action) => {
         docDate,
         custCode,
         vatCode: headerVatCode,
+        pricingMode: isDirectWithoutMatrix ? "FG_MAST" : "",
         items: selectedRecords.map((item, index) => ({
           sequence: index + 1,
           itemCode: item?.itemCode || "",
@@ -2324,8 +2357,8 @@ const handleActivityOption = async (action) => {
 const cancelPickingAllocationForDeletedSIRow = async (row) => {
   const pickedQty = parseFormattedNumber(row?.quantityPicked || 0) || 0;
 
-  // Only SI02 has FG picking allocation.
-  if (String(siTranType || "").toUpperCase() !== "SI02") {
+  // SI02 and SI05 use the same FG picking/allocation flow.
+  if (!["SI02", "SI05"].includes(String(siTranType || "").toUpperCase())) {
     return true;
   }
 
@@ -4348,7 +4381,14 @@ const applyHeaderDiscount = async () => {
   const updatedRows = distributeVatAcrossDetailRows(recalculatedRows);
 
   detailRowsRef.current = updatedRows;
-  updateState({ detailRows: updatedRows });
+  detailRowsGLRef.current = [];
+  updateState({
+    detailRows: updatedRows,
+    // Header discount changes the accounting amounts. Existing GL entries
+    // must be regenerated from the updated SI details on the next save.
+    detailRowsGL: [],
+    ...getGLTotalsState([]),
+  });
   updateTotals(updatedRows);
   setHeaderDiscountDraft(formatNumber(discountAmount));
   setIsHeaderDiscountEditing(false);
@@ -5229,7 +5269,7 @@ return (
               disabled
             />
 
-            {isOverallDiscountMode ? (
+            {(isOverallDiscountMode || isSellingPriceAndDiscountEditable) ? (
               <div className="relative w-full [&_input]:!pl-[4.5rem]">
                 <FieldRenderer
                   id="totalDiscountAmount"

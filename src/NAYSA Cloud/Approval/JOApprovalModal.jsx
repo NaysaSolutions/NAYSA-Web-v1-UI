@@ -5,11 +5,12 @@ import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import {
   useSwalProceedConfirm,
   useSwalErrorAlert,
-  useSwalInfoAlert,
   useSwalSuccessAlert
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import GlobalApprovalModal from "@/NAYSA Cloud/Approval/GlobaApprovalModal.jsx";
+import LineItemApprovalModal from "@/NAYSA Cloud/Approval/LineItemApprovalModal.jsx";
+import { useApprovalScope } from "@/NAYSA Cloud/Global/ItemApprovalSetup.jsx";
 
 const ENDPOINT = "getJOApproval";
 const APPROVE_ENDPOINT = "approveJO";
@@ -218,6 +219,8 @@ const JOApprovalModal = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [lineApprovalRow, setLineApprovalRow] = useState(null);
+  const approvalScope = useApprovalScope("JO");
 
   const resolvedUserCode = userCode || currentUserRow?.userCode || "";
   const resolvedUserName = currentUserRow?.userName || "";
@@ -282,9 +285,9 @@ const JOApprovalModal = ({
     if (noApprovalAlertShownRef.current) return;
 
     noApprovalAlertShownRef.current = true;
-    useSwalInfoAlert(
+    useSwalErrorAlert(
       "JO Approval",
-      "There is no JO for approval available.",
+      "No transaction is available for approval.",
     );
     onClose?.();
   }, [onClose]);
@@ -594,6 +597,8 @@ const JOApprovalModal = ({
         isProcessing={isApproving}
         onViewDocument={onViewDocument}
         onViewAttachment={onViewAttachment}
+        onViewLineItems={approvalScope === "LINE" ? setLineApprovalRow : undefined}
+        showDocumentApprovalActions={approvalScope !== "LINE"}
         onReloadRecords={reloadApprovalRows}
         onRowApprove={handleApproveRows}
         onRowDisapprove={handleDisapproveRows}
@@ -602,6 +607,10 @@ const JOApprovalModal = ({
         onRejectSelected={handleDisapproveRows}
         onCommentSelected={handleCommentRows}
       />
+
+      <LineItemApprovalModal isOpen={Boolean(lineApprovalRow)} docCode="JO" documentRow={lineApprovalRow}
+        userCode={resolvedUserCode} onClose={() => setLineApprovalRow(null)}
+        onChanged={() => reloadApprovalRows({ showLoading: false })} />
 
       {isApproving && <LoadingSpinner />}
     </>

@@ -75,14 +75,14 @@ const TransferStockCardModal = ({ branchCode, whCode, invType, userCode, singleS
   return <GlobalLookupModalv1 isOpen data={rows} endpoint={columns} title={`${invType} Location Balance`} btnCaption="Get Selected Items" singleSelect={singleSelect} preferenceKey={`PRJ_TF_${invType}_LocationBalance`} onClose={onClose} onCancel={() => onClose(null)} />;
 };
 
-const ProjectMaterialTransfer = () => {
+const PRJMT = () => {
   const DOC_TYPE = "PRJ_TF";
   const DETAILS_ROUTE = "/prj/transaction/project-material-transfer";
   const api = {
-    load: "/getProjectMaterialTransfer",
-    upsert: "/upsertProjectMaterialTransfer",
-    history: "/getProjectMaterialTransferHistory",
-    entries: "/generateProjectMaterialTransferEntries",
+    load: "/getPRJMT",
+    upsert: "/upsertPRJMT",
+    history: "/getPRJMTHistory",
+    entries: "/generatePRJMTEntries",
   };
   const { currentUserRow, companyInfo, getAllTopHSDocRow } = useAuth();
   const glCurrDefault = companyInfo?.currCode || "PHP";
@@ -91,7 +91,7 @@ const ProjectMaterialTransfer = () => {
   const getCostDecimals = (invType) => Number(companyInfo?.[{ FG: "itemDecUcostFG", RM: "itemDecUcostRM", MS: "itemDecUcostMS" }[String(invType || "").toUpperCase()]] ?? 2);
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
   const documentTitle = `${hsDoc?.docName || "Project Material Transfer"} Transaction`;
-  const { pagePermission, isReadOnly, isFullAccess, canSave } = usePagePermission({ componentKey: "ProjectMaterialTransfer", menuName:documentTitle, debug:false });
+  const { pagePermission, isReadOnly, isFullAccess, canSave } = usePagePermission({ componentKey: "PRJMT", menuName:documentTitle, debug:false });
   const [topTab, setTopTab] = useState("details");
   const [loading, setLoading] = useState(false);
   const [docLookupOpen, setDocLookupOpen] = useState(false);
@@ -582,6 +582,6 @@ const ProjectMaterialTransfer = () => {
   </div>;
 };
 
-export default ProjectMaterialTransfer;
+export default PRJMT;
 
 

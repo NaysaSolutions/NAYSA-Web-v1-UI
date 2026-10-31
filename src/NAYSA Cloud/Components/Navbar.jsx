@@ -31,6 +31,7 @@ import {
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import apiClient, { getTenant } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { Link, useNavigate } from "react-router-dom";
+import NotificationBell from "./NotificationBell.jsx";
 
 const DEFAULT_AVATAR = "/3135715.png";
 const THEME_STORAGE_KEY = "theme";
@@ -1008,6 +1009,7 @@ const Navbar = ({
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
+            <NotificationBell userCode={user?.USER_CODE} />
             <motion.button
               whileTap={{ scale: 0.92 }}
               onClick={toggleDarkMode}

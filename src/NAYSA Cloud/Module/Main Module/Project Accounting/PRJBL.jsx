@@ -75,22 +75,22 @@ const StockModal = ({ request, endpoint, onClose }) => {
   );
 };
 
-const ProjectMaterialBackload = ({
+const PRJBL = ({
   docType = "PRJ_BLI",
   transactionType = "I",
   detailsRoute = "/prj/transaction/project-material-backload-incoming",
-  componentKey = "ProjectMaterialBackloadIncoming",
+  componentKey = "PRJBLI",
   endpoints = {},
 }) => {
   const DOC_TYPE = docType;
   const DETAILS_ROUTE = detailsRoute;
   const api = {
-    load: endpoints.load || "/getProjectMaterialBackloadIncoming",
-    upsert: endpoints.upsert || "/upsertProjectMaterialBackloadIncoming",
-    history: endpoints.history || "/getProjectMaterialBackloadIncomingHistory",
-    stock: endpoints.stock || "/getProjectMaterialBackloadOutgoingOpenStock",
-    allocation: endpoints.allocation || "/saveProjectMaterialBackloadOutgoingAllocation",
-    entries: endpoints.entries || "/generateProjectMaterialBackloadIncomingEntries",
+    load: endpoints.load || "/getPRJBLI",
+    upsert: endpoints.upsert || "/upsertPRJBLI",
+    history: endpoints.history || "/getPRJBLIHistory",
+    stock: endpoints.stock || "/getPRJBLOOpenStock",
+    allocation: endpoints.allocation || "/savePRJBLOAllocation",
+    entries: endpoints.entries || "/generatePRJBLIEntries",
   };
   const { currentUserRow, companyInfo, getAllTopHSDocRow } = useAuth();
   const glCurrDefault = companyInfo?.currCode || "PHP";
@@ -245,8 +245,8 @@ const ProjectMaterialBackload = ({
     setLoading(true);
     try {
       const [response, columns] = await Promise.all([
-        apiClient.post("/getProjectBackloadBOQDetails", { json_data: { branchCode: state.branchCode, projCode: state.projCode } }),
-        useSelectedHSColConfig("getProjectBackloadBOQDetails", currentUserRow?.userCode || ""),
+        apiClient.post("/getPRJBLBOQDetails", { json_data: { branchCode: state.branchCode, projCode: state.projCode } }),
+        useSelectedHSColConfig("getPRJBLBOQDetails", currentUserRow?.userCode || ""),
       ]);
       setBoqLookupRows(parseResult(response) || []);
       setBoqLookupColumns(Array.isArray(columns) ? columns : []);
@@ -654,4 +654,4 @@ const ProjectMaterialBackload = ({
   </div>;
 };
 
-export default ProjectMaterialBackload;
+export default PRJBL;

@@ -12,7 +12,7 @@ import { useSwalSuccessAlert, useSwalErrorAlert, useSwalProceedConfirm } from "@
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faFileLines, faChevronDown, faFileImport, faBox, faBriefcase, faCoins, faReceipt, faShip, faMoneyCheckDollar } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faXmark, faPlus, faTrashAlt, faFileLines, faChevronDown, faFileImport, faBox, faBriefcase, faCoins, faReceipt, faShip, faMoneyCheckDollar } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -448,14 +448,20 @@ const APV = () => {
       await handleAPTypeChange({ target: { value: targetApType } });
     }
     setReferenceInquiryOpen(true);
-    // The selected reference determines the APV payee, not the other way around.
-    const overrides = { inquiryMode: true, vendCode: "" };
+    // A selected payee limits the inquiry. When blank, show every open
+    // reference for the current branch and let the selected reference set it.
+    const selectedPayeeCode = String(vendCode || vendName?.vendCode || "").trim();
+    const overrides = {
+      inquiryMode: true,
+      vendCode: selectedPayeeCode,
+      branchCode: String(branchCode || assignedUserBranch.branchCode || "").trim(),
+    };
     if (referenceType === "RR") handleOpenReferenceRR(overrides);
     else if (referenceType === "JO") handleOpenReferenceJO(overrides);
     else if (referenceType === "RFP") handleOpenReferenceRFP(overrides);
     else if (referenceType === "PO") handleOpenReferencePOAdvance(overrides);
     else if (referenceType === "PCV") handleOpenReferencePCV(overrides);
-    else if (referenceType === "LC") handleOpenReferenceLCImportation(true);
+    else if (referenceType === "LC") handleOpenReferenceLCImportation(overrides);
   };
 
 
@@ -734,11 +740,14 @@ const APV = () => {
 
 
   const handleOpenReferencePOAdvance = async (overrides = {}) => {
+    const isInquiryMode = overrides.inquiryMode === true;
     setShowInvoiceAddDropdown(false);
-    if (!overrides.inquiryMode) setReferenceInquiryOpen(false);
+    if (!isInquiryMode) setReferenceInquiryOpen(false);
     const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
-    const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-    if (!lookupVendCode && !overrides.inquiryMode) {
+    const lookupBranchCode = String(
+      overrides.branchCode ?? branchCode ?? assignedUserBranch.branchCode ?? "",
+    ).trim();
+    if (!lookupVendCode && !isInquiryMode) {
       updateState({
         payeeModalOpen: true,
         modalContext: "openPOAdvance",
@@ -748,17 +757,47 @@ const APV = () => {
 
     try {
       updateState({ isLoading: true, showSpinner: true });
-      const rawRows = (
-        await fetchAPVReferenceSummary({
+      let responseRows;
+      if (isInquiryMode) {
+        const inquiryResponse = await postRequest("apv/advance-references", {
+          json_data: {
+            branchCode: lookupBranchCode,
+          },
+        });
+        responseRows = Array.isArray(inquiryResponse?.data)
+          ? inquiryResponse.data
+          : [];
+      } else {
+        responseRows = await fetchAPVReferenceSummary({
           apvtranType: "APV03",
           referenceType: "PO",
           branchCode: lookupBranchCode,
           vendCode: lookupVendCode,
-        })
-      ).filter((row) => {
+        });
+      }
+
+      // Keep the regular Add flow supplier-specific, but recover safely when
+      // an API/database collation or legacy supplier value prevents the first
+      // filtered request from returning its otherwise valid PO/JO advances.
+      if (!isInquiryMode && lookupVendCode && responseRows.length === 0) {
+        responseRows = await fetchAPVReferenceSummary({
+          apvtranType: "APV03",
+          referenceType: "PO",
+          branchCode: lookupBranchCode,
+          vendCode: "",
+        });
+      }
+
+      const rawRows = responseRows.filter((row) => {
         const rowBranchCode = String(row.branchCode ?? "").trim();
         const rowVendCode = String(row.vendCode ?? "").trim();
-        return (!lookupBranchCode || rowBranchCode === lookupBranchCode) && (!lookupVendCode || rowVendCode === lookupVendCode);
+        const matchesBranch =
+          !lookupBranchCode ||
+          rowBranchCode.toUpperCase() === lookupBranchCode.toUpperCase();
+        const matchesSupplier =
+          !lookupVendCode ||
+          rowVendCode.toUpperCase() === lookupVendCode.toUpperCase();
+        return matchesBranch && matchesSupplier;
       });
       const normalizedRows = rawRows.map((row, index) => ({
         ...row,
@@ -773,14 +812,18 @@ const APV = () => {
         vatCode: row.vatCode || "",
       }));
       if (normalizedRows.length === 0) {
-        useSwalErrorAlert("APV Advances Reference", "No PO or JO with advance payment terms found for this supplier.");
+        const supplierText = lookupVendCode ? ` ${lookupVendCode}` : "";
+        useSwalErrorAlert(
+          "APV Advances Reference",
+          `No PO or JO with an available advance balance was found for supplier${supplierText} in branch ${lookupBranchCode || "All"}.`,
+        );
         return;
       }
 
       updateState({
         globalLookupRow: normalizedRows,
         globalLookupHeader: openPOAPVLookupColumns,
-        globalLookupTitle: "Open PO / JO References",
+        globalLookupTitle: "Open PO / JO Advance References",
         globalLookupBtnCaption: "Get Selected PO / JO",
         showRRRefModal: true,
         modalContext: "openPOAdvance",
@@ -797,21 +840,33 @@ const APV = () => {
   };
 
 
-  const handleOpenReferenceLCImportation = async (inquiryMode = false) => {
+  const handleOpenReferenceLCImportation = async (options = false) => {
+    const inquiryMode = typeof options === "object" ? options.inquiryMode === true : options === true;
+    const lookupVendCode = String(
+      typeof options === "object" ? options.vendCode ?? vendCode ?? "" : vendCode ?? "",
+    ).trim();
     setShowInvoiceAddDropdown(false);
     if (!inquiryMode) setReferenceInquiryOpen(false);
-    const lookupBranchCode = String(branchCode || "").trim();
+    const lookupBranchCode = String(
+      typeof options === "object"
+        ? options.branchCode ?? branchCode ?? assignedUserBranch.branchCode ?? ""
+        : branchCode || "",
+    ).trim();
 
     try {
       updateState({
         isLoading: true,
         showSpinner: true,
       });
-      const rawRows = await fetchAPVReferenceSummary({
+      const responseRows = await fetchAPVReferenceSummary({
         apvtranType: "APV07",
         referenceType: "LC",
         branchCode: lookupBranchCode,
-        vendCode: "",
+        vendCode: lookupVendCode,
+      });
+      const rawRows = responseRows.filter((row) => {
+        const rowVendCode = String(row.vendCode ?? row.vendorCode ?? row.supplierCode ?? "").trim();
+        return !lookupVendCode || rowVendCode.toUpperCase() === lookupVendCode.toUpperCase();
       });
       if (!rawRows.length) {
         useSwalErrorAlert("LC Importation Reference", "No open LC Importation reference found.");
@@ -4383,29 +4438,15 @@ const APV = () => {
   };
 
 
-  const handleVatNameDoubleClick = (index) => {
-    const updatedRows = [...detailRows];
-    // Reset VAT related fields for this row
-    updatedRows[index] = {
-      ...updatedRows[index],
-      vatCode: "",
-      vatName: "",
-      vatAmount: "0.00",
-    };
-    updateInvoiceDetails(updatedRows);
+  const handleVatNameDoubleClick = async (index) => {
+    if (isFormDisabled || isLcSourcedImportationRow(detailRows[index])) return;
+    await handleDetailChange(index, "vatCode", { vatCode: "", vatName: "", acctCode: "" }, true);
   };
 
 
-  const handleAtcNameDoubleClick = (index) => {
-    const updatedRows = [...detailRows];
-    // Reset ATC related fields for this row
-    updatedRows[index] = {
-      ...updatedRows[index],
-      atcCode: "",
-      atcName: "",
-      atcAmount: "0.00",
-    };
-    updateInvoiceDetails(updatedRows);
+  const handleAtcNameDoubleClick = async (index) => {
+    if (isFormDisabled) return;
+    await handleDetailChange(index, "atcCode", { atcCode: "", atcName: "" }, true);
   };
 
 
@@ -5253,7 +5294,7 @@ const APV = () => {
                                   disabled={isFormDisabled}
                                 />
 
-                                {!isFormDisabled && (row.recRc === "Y" || row.rcCode === "REQ RC") && (
+                                {!isFormDisabled && (
                                   <FontAwesomeIcon
                                     icon={faMagnifyingGlass}
                                     className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -5463,9 +5504,9 @@ const APV = () => {
                                   className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
                                   value={row.rcCode || ""}
                                   readOnly
-                                  disabled={isFormDisabled || isLcSourcedImportationRow(row)}
+                                  disabled={isFormDisabled}
                                 />
-                                {!isFormDisabled && !isLcSourcedImportationRow(row) && (row.recRc === "Y" || row.rcCode === "REQ RC") && (
+                                {!isFormDisabled && (
                                   <FontAwesomeIcon
                                     icon={faMagnifyingGlass}
                                     className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -5530,7 +5571,7 @@ const APV = () => {
                               <div className="flex items-center">
                                 <input
                                   type="text"
-                                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-12 cursor-pointer"
                                   value={row.vatCode || ""}
                                   readOnly
                                   disabled={isFormDisabled || isLcSourcedImportationRow(row)}
@@ -5547,6 +5588,9 @@ const APV = () => {
                                       });
                                     }}
                                   />
+                                )}
+                                {!isFormDisabled && !isLcSourcedImportationRow(row) && row.vatCode && (
+                                  <FontAwesomeIcon icon={faXmark} title="Clear VAT Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleVatNameDoubleClick(index)} />
                                 )}
                               </div>
                             </td>
@@ -5578,7 +5622,7 @@ const APV = () => {
                               <div className="flex items-center">
                                 <input
                                   type="text"
-                                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-12 cursor-pointer"
                                   value={row.atcCode || ""}
                                   readOnly
                                 />
@@ -5594,6 +5638,9 @@ const APV = () => {
                                       });
                                     }}
                                   />
+                                )}
+                                {!isFormDisabled && row.atcCode && (
+                                  <FontAwesomeIcon icon={faXmark} title="Clear ATC Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleAtcNameDoubleClick(index)} />
                                 )}
                               </div>
                             </td>
@@ -5804,9 +5851,9 @@ const APV = () => {
                                       className="w-[120px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
                                       value={row.advAcct || ""}
                                       readOnly
-                                      disabled={isFormDisabled || row.autoAdv !== "N"}
+                                      disabled={isFormDisabled}
                                     />
-                                    {!isFormDisabled && row.autoAdv === "N" && (
+                                    {!isFormDisabled && (
                                       <FontAwesomeIcon
                                         icon={faMagnifyingGlass}
                                         className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"

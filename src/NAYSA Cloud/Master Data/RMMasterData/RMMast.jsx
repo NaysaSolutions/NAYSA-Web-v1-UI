@@ -32,6 +32,7 @@ import {
 
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
+import { useItemApprovalVisibility } from "@/NAYSA Cloud/Global/ItemApprovalSetup.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Empty form — mirrors rm_mast columns exactly (camelCase aliases from sproc)
@@ -94,6 +95,7 @@ const emptyForm = {
     stdDmCost:   "0.000000",            // std_dmcost
 
     barcode:     "",                    // barcode
+    requireApproval: "N", maxAppLevel: "0",
 
     // audit
     registeredBy:   "", registeredDate: "",
@@ -105,6 +107,7 @@ const emptyForm = {
 //  Component
 // ─────────────────────────────────────────────────────────────────────────────
 const RMMast = () => {
+    const showItemApprovalSetup = useItemApprovalVisibility(["PR", "PO"]);
     const [activeTab, setActiveTab]       = useState("setup");
     const [isLoading, setIsLoading]       = useState(false);
     const [generationMode, setGenerationMode] = useState("Manual");
@@ -388,6 +391,8 @@ const RMMast = () => {
                     stdOsCost:          form.stdOsCost       || null,
                     stdDmCost:          form.stdDmCost       || null,
                     barcode:            form.barcode         || null,
+                    requireApproval:    showItemApprovalSetup ? (form.requireApproval || "N") : "N",
+                    maxAppLevel:        showItemApprovalSetup && form.requireApproval === "Y" ? Number(form.maxAppLevel || 1) : 0,
                     userCode:           userCode             || null,
                     action:             isNewRecord ? "add" : "edit",
                 },
@@ -682,6 +687,7 @@ const RMMast = () => {
                         onChangeForm={updateForm}
                         onLookupSelect={(itemCode) => fetchItemByCode(itemCode, false)}
                         onBlurItemCode={isReadOnly ? undefined : checkDuplicate}
+                        showItemApprovalSetup={showItemApprovalSetup}
                     />
                 )}
 

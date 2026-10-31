@@ -4,7 +4,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faXmark, faPlus, faMinus, faTrashAlt, faFileImport, faSpinner, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -1152,7 +1152,7 @@ if ((field === "vatCode" || field === "atcCode") || field === "appliedAmount") {
 }
 
     updatedRows[index] = row;
-    updateState({ detailRows: updatedRows});
+    updateState({ detailRows: updatedRows, ...(["vatCode", "atcCode"].includes(field) ? { detailRowsGL: [] } : {}) });
     updateTotals(updatedRows);
 };
 
@@ -2069,7 +2069,7 @@ const handleCloseBranchModal = (selectedBranch) => {
               <div className="flex items-center">
                 <input
                   type="text"
-                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-12 cursor-pointer"
                   value={row.vatCode || ""}
                   readOnly
                 />
@@ -2083,6 +2083,9 @@ const handleCloseBranchModal = (selectedBranch) => {
                                   accountModalSource: "vatCode" }); 
                   }}
                 />)}
+                {!handleFieldBehavior("CWTReversal") && row.vatCode && (
+                  <FontAwesomeIcon icon={faXmark} title="Clear VAT Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleDetailChange(index, "vatCode", { vatCode: "", vatName: "" }, true)} />
+                )}
               </div>
             </td>
 
@@ -2108,7 +2111,7 @@ const handleCloseBranchModal = (selectedBranch) => {
               <div className="flex items-center">
                 <input
                   type="text"
-                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                  className="w-[100px] global-tran-td-inputclass-ui text-center pr-12 cursor-pointer"
                   value={row.atcCode || ""}
                   readOnly
                 />
@@ -2122,6 +2125,9 @@ const handleCloseBranchModal = (selectedBranch) => {
                                   accountModalSource: "atcCode" }); 
                   }}
                 />)}
+                {!handleFieldBehavior("CWTReversal") && row.atcCode && (
+                  <FontAwesomeIcon icon={faXmark} title="Clear ATC Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleDetailChange(index, "atcCode", { atcCode: "", atcName: "" }, true)} />
+                )}
               </div>
             </td>
 

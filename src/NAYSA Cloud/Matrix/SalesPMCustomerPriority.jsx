@@ -26,6 +26,8 @@ import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferen
 import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
 
 const MATRIX_TYPE_OPTIONS = [
+  { value: "MANUAL", label: "Manual" },
+  { value: "OVERALL", label: "Overall" },
   { value: "PMCUST", label: "Customer" },
   { value: "PMCHAIN", label: "Chain" },
   { value: "PMAREA", label: "Area" },
@@ -46,6 +48,26 @@ const EMPTY_RULE = {
 const getMatrixTypeLabel = (pmType) =>
   MATRIX_TYPE_OPTIONS.find((item) => item.value === pmType)?.label || pmType;
 
+const EXCLUSIVE_MATRIX_TYPES = new Set(["MANUAL", "OVERALL"]);
+
+const hasExclusiveMatrixRule = (activeRules = []) =>
+  activeRules.some((item) => EXCLUSIVE_MATRIX_TYPES.has(item.pmType));
+
+const getAvailableMatrixTypes = (activeRules = []) => {
+  if (hasExclusiveMatrixRule(activeRules)) return [];
+
+  const selectedTypes = new Set(activeRules.map((item) => item.pmType));
+  const hasStandardRule = activeRules.some(
+    (item) => !EXCLUSIVE_MATRIX_TYPES.has(item.pmType)
+  );
+
+  return MATRIX_TYPE_OPTIONS.filter(
+    (option) =>
+      !selectedTypes.has(option.value) &&
+      (!hasStandardRule || !EXCLUSIVE_MATRIX_TYPES.has(option.value))
+  );
+};
+
 const renderModalPortal = (children) =>
   typeof document === "undefined" ? children : createPortal(children, document.body);
 
@@ -56,9 +78,7 @@ const normalizeRules = (rules = []) =>
   }));
 
 const getFirstAvailablePmType = (activeRules = []) =>
-  MATRIX_TYPE_OPTIONS.find(
-    (option) => !activeRules.some((item) => item.pmType === option.value)
-  )?.value || "";
+  getAvailableMatrixTypes(activeRules)[0]?.value || "";
 
 const parseJsonArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -125,19 +145,13 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
   const [draggedGeneralRuleIndex, setDraggedGeneralRuleIndex] = useState(null);
 
   const availableMatrixTypeOptions = useMemo(() => {
-    const selectedTypes = new Set((rules || []).map((item) => item.pmType));
-    return MATRIX_TYPE_OPTIONS.filter(
-      (option) => !selectedTypes.has(option.value)
-    );
+    return getAvailableMatrixTypes(rules || []);
   }, [rules]);
 
   const hasAvailableMatrixTypes = availableMatrixTypeOptions.length > 0;
 
   const availableGeneralMatrixTypeOptions = useMemo(() => {
-    const selectedTypes = new Set((generalRules || []).map((item) => item.pmType));
-    return MATRIX_TYPE_OPTIONS.filter(
-      (option) => !selectedTypes.has(option.value)
-    );
+    return getAvailableMatrixTypes(generalRules || []);
   }, [generalRules]);
 
   const hasAvailableGeneralMatrixTypes =
@@ -495,6 +509,19 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
   const handleAddGeneralRule = () => {
     if (!generalNewRule.pmType) return;
 
+    if (
+      generalRules.length > 0 &&
+      (hasExclusiveMatrixRule(generalRules) ||
+        EXCLUSIVE_MATRIX_TYPES.has(generalNewRule.pmType))
+    ) {
+      Swal.fire({
+        icon: "info",
+        title: "Exclusive Pricing Mode",
+        text: "Manual or Overall must be used alone. Remove the existing rule first before selecting another pricing mode.",
+      });
+      return;
+    }
+
     const updatedRules = [
       ...generalRules,
       {
@@ -553,6 +580,19 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
         icon: "warning",
         title: "Incomplete Rule",
         text: "Please select a matrix type.",
+      });
+      return;
+    }
+
+    if (
+      rules.length > 0 &&
+      (hasExclusiveMatrixRule(rules) ||
+        EXCLUSIVE_MATRIX_TYPES.has(newRule.pmType))
+    ) {
+      Swal.fire({
+        icon: "info",
+        title: "Exclusive Pricing Mode",
+        text: "Manual or Overall must be used alone. Remove the existing rule first before selecting another pricing mode.",
       });
       return;
     }
@@ -1136,7 +1176,6 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
       {showCustomerLookup && (
         <CustomerMastLookupModal
           isOpen={showCustomerLookup}
-          customParam="ActiveNonChain"
           onClose={handleCustomerLookupSelect}
         />
       )}

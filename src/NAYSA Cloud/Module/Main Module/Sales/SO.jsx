@@ -391,9 +391,19 @@ const SO = () => {
   ).toUpperCase();
 
   // Derived UI flags
-  const isOverallDiscountMode = salesDiscountMode === "OVERALL";
-  const isDiscountEditable = salesDiscountMode === "MANUAL";
-  const isSellPriceOpenEditable = priceDiscountMode === "E" || salesDiscountMode === "MANUAL";
+  const resolvedRowPricingMode = String(
+    (detailRows || []).find((row) =>
+      ["MANUAL", "OVERALL"].includes(
+        String(row?.pmType || "").trim().toUpperCase()
+      )
+    )?.pmType || ""
+  ).trim().toUpperCase();
+  const effectiveDiscountMode = salesDiscountMode === "PMTYPE"
+    ? (resolvedRowPricingMode || "PMTYPE")
+    : salesDiscountMode;
+  const isOverallDiscountMode = effectiveDiscountMode === "OVERALL";
+  const isDiscountEditable = effectiveDiscountMode === "MANUAL";
+  const isSellPriceOpenEditable = priceDiscountMode === "E" || effectiveDiscountMode === "MANUAL";
   const SO_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
 
   // Discount configuration
@@ -409,9 +419,15 @@ const SO = () => {
     { length: discountLevel },
     (_, index) => `discAmount${index + 1}`
   );
-  const showTotalDiscountColumn = !isOverallDiscountMode && discountLevel > 1;
-  const visibleDiscountRateFields = isOverallDiscountMode ? [] : allDiscountRateFields;
-  const visibleDiscountAmountFields = isOverallDiscountMode ? [] : allDiscountAmountFields;
+  const visibleDiscountLevel = isDiscountEditable ? 1 : discountLevel;
+  const showTotalDiscountColumn =
+    !isOverallDiscountMode && !isDiscountEditable && visibleDiscountLevel > 1;
+  const visibleDiscountRateFields = isOverallDiscountMode
+    ? []
+    : allDiscountRateFields.slice(0, visibleDiscountLevel);
+  const visibleDiscountAmountFields = isOverallDiscountMode
+    ? []
+    : allDiscountAmountFields.slice(0, visibleDiscountLevel);
 
   const detailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -425,12 +441,12 @@ const SO = () => {
     { key: "grossAmount", label: "Gross Amount", width: 130 },
     ...visibleDiscountRateFields.map((field, index) => ({
       key: field,
-      label: discountLevel === 1 ? "Disc Rate" : `Disc Rate ${index + 1}`,
+      label: visibleDiscountLevel === 1 ? "Disc Rate" : `Disc Rate ${index + 1}`,
       width: 110,
     })),
     ...visibleDiscountAmountFields.map((field, index) => ({
       key: field,
-      label: discountLevel === 1 ? "Disc Amount" : `Disc Amount ${index + 1}`,
+      label: visibleDiscountLevel === 1 ? "Disc Amount" : `Disc Amount ${index + 1}`,
       width: 120,
     })),
     ...(showTotalDiscountColumn

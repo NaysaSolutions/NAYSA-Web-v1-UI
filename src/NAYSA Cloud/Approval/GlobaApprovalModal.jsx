@@ -15,10 +15,14 @@ import {
   useSwalProceedConfirm,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import {
+  Building2,
   CheckCircle2,
   Eye,
+  Files,
+  Layers3,
   Maximize2,
   MessageSquare,
+  ListChecks,
   Minimize2,
   Paperclip,
   RotateCcw,
@@ -45,7 +49,6 @@ const MIN_COLUMN_WIDTH = 80;
 const MAX_AUTO_COLUMN_WIDTH = 260;
 const MAX_MANUAL_COLUMN_WIDTH = 520;
 const CHAR_WIDTH = 7;
-const ACTION_COL_WIDTH = 184;
 const FROZEN_DETAIL_COLUMN_COUNT = 2;
 const MOBILE_DETAIL_LIMIT = 8;
 
@@ -314,6 +317,8 @@ const GlobalApprovalModal = forwardRef(
       onRowComment,
       onViewDocument,
       onViewAttachment,
+      onViewLineItems,
+      showDocumentApprovalActions = true,
       onApprove,
       onReject,
       onComment,
@@ -443,6 +448,9 @@ const GlobalApprovalModal = forwardRef(
         .filter(Boolean);
     }, [baseColumns, columnOrder]);
     const hasColumns = columns.length > 0;
+    const actionColumnWidth = showDocumentApprovalActions
+      ? Math.max(176, 34 + (3 + (onViewLineItems ? 1 : 0) + 2) * 32)
+      : 148;
 
     useEffect(() => {
       setLocalRows(Array.isArray(detailRows) ? detailRows : []);
@@ -464,19 +472,19 @@ const GlobalApprovalModal = forwardRef(
         columns.reduce(
           (totalWidth, column) =>
             totalWidth + (columnWidths[column.key] || MIN_COLUMN_WIDTH),
-          ACTION_COL_WIDTH,
+          actionColumnWidth,
         ),
-      [columns, columnWidths],
+      [actionColumnWidth, columns, columnWidths],
     );
     const frozenColumnLefts = useMemo(() => {
-      let left = ACTION_COL_WIDTH;
+      let left = actionColumnWidth;
 
       return columns.map((column) => {
         const currentLeft = left;
         left += columnWidths[column.key] || MIN_COLUMN_WIDTH;
         return currentLeft;
       });
-    }, [columns, columnWidths]);
+    }, [actionColumnWidth, columns, columnWidths]);
     const filteredRows = useMemo(() => {
       const quickNeedle = String(quickSearch || "").trim().toUpperCase();
       const nextRows = rows.filter((row) => {
@@ -863,6 +871,8 @@ const GlobalApprovalModal = forwardRef(
       });
     };
 
+    const handleViewLineItems = (row) => onViewLineItems?.(row);
+
     const handleDetailChange = (rowIndex, fieldName, value) => {
       setLocalRows((prevRows) => {
         const nextRows = prevRows.map((row, index) =>
@@ -975,8 +985,8 @@ const GlobalApprovalModal = forwardRef(
 
           <div className="flex flex-1 flex-col overflow-hidden px-2 py-2 md:px-4 md:py-3">
             <section className="mb-2 md:mb-4">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm md:grid-cols-[minmax(240px,1.35fr)_repeat(4,minmax(120px,1fr))] md:gap-4 md:rounded-xl md:px-4 md:py-3">
-                <div className="flex min-w-0 items-center gap-2 md:order-1 md:gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-[minmax(220px,1.2fr)_minmax(240px,1.35fr)_repeat(3,minmax(120px,.7fr))]">
+                <div className="col-span-2 flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 sm:col-span-3 lg:col-span-1">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-blue-50 text-blue-600 md:h-10 md:w-10">
                     {showApproverImage ? (
                       <img
@@ -994,46 +1004,54 @@ const GlobalApprovalModal = forwardRef(
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-[11px] font-bold text-slate-900 md:text-[13px]">
+                    <div className="truncate text-[12px] font-bold text-slate-900 md:text-[13px]">
                       {approverName || ""}
                     </div>
-                    <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       Approver
                     </div>
                   </div>
                 </div>
 
-                <div className="border-slate-200 text-right md:order-4 md:border-l md:pl-5">
-                  <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">{totalLabel}</div>
-                  <div className="text-[16px] font-bold leading-tight text-slate-900 md:text-[20px]">{statusCounts.total}</div>
-                </div>
-
-                <div className="border-slate-200 text-right md:order-5 md:border-l md:pl-5">
-                  <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">Selected</div>
-                  <div className="text-[16px] font-bold leading-tight text-blue-700 md:text-[20px]">{selectedRows.length}</div>
-                </div>
-
-                <div className="col-span-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:order-2 md:col-span-1 md:block md:border-l md:border-t-0 md:pl-5 md:pt-0">
+                <div className="col-span-2 flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 sm:col-span-3 lg:col-span-1">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                    <Building2 size={18} strokeWidth={1.9} />
+                  </div>
                   <div className="min-w-0">
-                    <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">Level</div>
-                    <div className="truncate text-[11px] font-bold text-slate-900 md:text-[12px]">
-                      {approvalLevel || ""}
-                    </div>
-                  </div>
-                  <div className="min-w-0 md:hidden">
-                    <div className="text-[9px] font-semibold text-slate-500">Department</div>
-                    <div className="truncate text-[11px] font-bold text-slate-900">
-                      {department || ""}
-                    </div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Department</div>
+                    <div className="truncate text-[12px] font-bold text-slate-900">{department || ""}</div>
                   </div>
                 </div>
 
-                <div className="hidden min-w-0 border-slate-200 md:order-3 md:block md:border-l md:pl-5">
-                  <div className="text-[11px] font-semibold text-slate-500">Department</div>
-                  <div className="truncate text-[12px] font-bold text-slate-900">
-                    {department || ""}
+                <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-blue-100 bg-white px-3 py-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <Layers3 size={18} strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Level</div>
+                    <div className="text-[17px] font-bold leading-none text-blue-700">{approvalLevel || ""}</div>
                   </div>
                 </div>
+
+                <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-violet-100 bg-white px-3 py-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+                    <Files size={18} strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[9px] font-semibold uppercase tracking-wide text-slate-400">{totalLabel}</div>
+                    <div className="text-[17px] font-bold leading-none text-violet-700">{statusCounts.total}</div>
+                  </div>
+                </div>
+
+                {showDocumentApprovalActions && <div className="col-span-2 flex min-w-0 items-center gap-2.5 rounded-lg border border-emerald-100 bg-white px-3 py-2.5 sm:col-span-1">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                    <ListChecks size={18} strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Selected</div>
+                    <div className="text-[17px] font-bold leading-none text-emerald-700">{selectedRows.length}</div>
+                  </div>
+                </div>}
               </div>
             </section>
 
@@ -1065,7 +1083,7 @@ const GlobalApprovalModal = forwardRef(
                   </button>
 
                   <div className="flex w-full items-center gap-1.5 md:ml-auto md:w-auto md:gap-2">
-                    <label className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 md:hidden">
+                    {showDocumentApprovalActions && <label className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 md:hidden">
                       <input
                         type="checkbox"
                         checked={allFilteredRowsSelected}
@@ -1074,9 +1092,9 @@ const GlobalApprovalModal = forwardRef(
                         className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
                       />
                       Select All
-                    </label>
+                    </label>}
 
-                    <button
+                    {showDocumentApprovalActions && <button
                       type="button"
                       onClick={handleApproveSelected}
                       disabled={isProcessing || !selectedRows.length}
@@ -1085,9 +1103,9 @@ const GlobalApprovalModal = forwardRef(
                       <CheckCircle2 size={13} strokeWidth={1.8} />
                       <span className="md:hidden">Approve All</span>
                       <span className="hidden md:inline">Approve Selected</span>
-                    </button>
+                    </button>}
 
-                    <button
+                    {showDocumentApprovalActions && <button
                       type="button"
                       onClick={handleRejectSelected}
                       disabled={isProcessing || !selectedRows.length}
@@ -1096,7 +1114,7 @@ const GlobalApprovalModal = forwardRef(
                       <XCircle size={13} strokeWidth={1.8} />
                       <span className="md:hidden">Disapprove All</span>
                       <span className="hidden md:inline">Disapprove Selected</span>
-                    </button>
+                    </button>}
                   </div>
                 </div>
               <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-slate-50 p-2 md:hidden">
@@ -1130,14 +1148,14 @@ const GlobalApprovalModal = forwardRef(
                           className="rounded-md border border-slate-200 bg-white p-2 shadow-sm"
                         >
                           <div className="flex items-start gap-2">
-                            <input
+                            {showDocumentApprovalActions && <input
                               type="checkbox"
                               checked={selected}
                               onChange={() => handleToggleRowSelection(row, selectionIndex)}
                               disabled={isProcessing}
                               className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
                               aria-label="Select row"
-                            />
+                            />}
 
                             <div className="min-w-0 flex-1">
                               <div className="text-[9px] font-semibold uppercase text-slate-500">
@@ -1183,8 +1201,8 @@ const GlobalApprovalModal = forwardRef(
                             </button>
                           )}
 
-                          <div className="mt-2 grid grid-cols-5 gap-1.5">
-                            <button
+                          <div className={`mt-2 grid ${onViewLineItems ? "grid-cols-6" : "grid-cols-5"} gap-1.5`}>
+                            {showDocumentApprovalActions && <button
                               type="button"
                               onClick={() => handleRowApprove(row)}
                               disabled={isProcessing}
@@ -1194,9 +1212,9 @@ const GlobalApprovalModal = forwardRef(
                             >
                               <CheckCircle2 size={13} strokeWidth={1.8} />
                               <span className="text-[8px] font-semibold leading-none">Approve</span>
-                            </button>
+                            </button>}
 
-                            <button
+                            {showDocumentApprovalActions && <button
                               type="button"
                               onClick={() => handleRowDisapprove(row)}
                               disabled={isProcessing}
@@ -1206,7 +1224,12 @@ const GlobalApprovalModal = forwardRef(
                             >
                               <XCircle size={13} strokeWidth={1.8} />
                               <span className="text-[8px] font-semibold leading-none">Disapprove</span>
-                            </button>
+                            </button>}
+
+                            {onViewLineItems && <button type="button" onClick={() => handleViewLineItems(row)} disabled={isProcessing}
+                              className="inline-flex h-9 flex-col items-center justify-center gap-0.5 rounded border border-violet-200 bg-violet-50 text-violet-700 disabled:opacity-40" title="Approve Line Items">
+                              <ListChecks size={13}/><span className="text-[8px] font-semibold leading-none">Items</span>
+                            </button>}
 
                             <button
                               type="button"
@@ -1266,7 +1289,7 @@ const GlobalApprovalModal = forwardRef(
                   }}
                 >
                   <colgroup>
-                    {hasColumns && <col style={{ width: ACTION_COL_WIDTH }} />}
+                    {hasColumns && <col style={{ width: actionColumnWidth }} />}
                     {columns.map((column) => (
                       <col
                         key={`width-${column.key}`}
@@ -1284,7 +1307,7 @@ const GlobalApprovalModal = forwardRef(
                           }}
                         >
                           <div className="flex h-full items-center justify-start gap-2">
-                            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                            {showDocumentApprovalActions && <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-bold text-slate-700">
                               <input
                                 type="checkbox"
                                 checked={allFilteredRowsSelected}
@@ -1293,8 +1316,8 @@ const GlobalApprovalModal = forwardRef(
                                 className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
                               />
                               Select All
-                            </label>
-                            <span className="text-slate-400">|</span>
+                            </label>}
+                            {showDocumentApprovalActions && <span className="text-slate-400">|</span>}
                             <span>Action</span>
                           </div>
                         </th>
@@ -1356,8 +1379,14 @@ const GlobalApprovalModal = forwardRef(
                             left: 0,
                           }}
                         >
-                          <div className="translate-x-1 truncate whitespace-nowrap text-center text-[8px] font-semibold leading-5 text-slate-600">
-                            Approve | Disapprove | View | Attachment | Note
+                          <div className="truncate whitespace-nowrap text-center text-[8px] font-semibold leading-5 text-slate-600">
+                            {[
+                              ...(showDocumentApprovalActions ? ["Approve", "Disapprove"] : []),
+                              ...(onViewLineItems ? ["Items"] : []),
+                              "View",
+                              "Attachment",
+                              "Note",
+                            ].join(" | ")}
                           </div>
                         </th>
                       )}
@@ -1414,17 +1443,17 @@ const GlobalApprovalModal = forwardRef(
                               left: 0,
                             }}
                           >
-                            <div className="grid grid-cols-[22px_repeat(5,28px)] items-center justify-center gap-1">
-                              <input
+                            <div className="flex items-center justify-center gap-1 whitespace-nowrap">
+                              {showDocumentApprovalActions && <input
                                 type="checkbox"
                                 checked={selectedRowKeys.has(rowKey)}
                                 onChange={() => handleToggleRowSelection(row, selectionIndex)}
                                 disabled={isProcessing}
                                 className="mx-auto h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
                                 aria-label="Select row"
-                              />
+                              />}
 
-                              <button
+                              {showDocumentApprovalActions && <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -1436,9 +1465,9 @@ const GlobalApprovalModal = forwardRef(
                                 aria-label="Approve"
                               >
                                 <CheckCircle2 size={15} strokeWidth={1.8} />
-                              </button>
+                              </button>}
 
-                              <button
+                              {showDocumentApprovalActions && <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -1450,7 +1479,12 @@ const GlobalApprovalModal = forwardRef(
                                 aria-label="Disapprove"
                               >
                                 <XCircle size={15} strokeWidth={1.8} />
-                              </button>
+                              </button>}
+
+                              {onViewLineItems && <button type="button" onClick={(event) => { event.stopPropagation(); handleViewLineItems(row); }} disabled={isProcessing}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-violet-200 bg-white text-violet-600 hover:bg-violet-50 disabled:opacity-40" title="Approve Line Items">
+                                <ListChecks size={15}/>
+                              </button>}
 
                               <button
                                 type="button"

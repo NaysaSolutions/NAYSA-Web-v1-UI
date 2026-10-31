@@ -35,9 +35,9 @@ const SearchProjectRef = ({ isOpen, onClose, title = "Select Open Project" }) =>
   const hasActiveFilters = Object.values(filters).some(Boolean);
 
   const { data: projects = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["lookupProjectMaster", "open"],
+    queryKey: ["lookupPRJMaster", "open"],
     queryFn: async () => {
-      const response = await apiClient.get("/lookupProjectMaster");
+      const response = await apiClient.get("/lookupPRJMaster");
       const raw = response?.data?.data?.[0]?.result ?? "[]";
       return Array.isArray(raw) ? raw : JSON.parse(raw);
     },

@@ -7,7 +7,7 @@ import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
 import { useHandlePostTran } from "@/NAYSA Cloud/Global/procedure.js";
 import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-const ENDPOINT = "postingProjectMaterialTransfer";
+const ENDPOINT = "postingPRJMT";
 const fallbackColumns = [
   { key: "branchCode", label: "Branch Code", width: 120, renderType: "text" },
   { key: "branchName", label: "Branch Name", width: 160, renderType: "text" },
@@ -31,7 +31,7 @@ const parseRows = (response) => {
   catch { return []; }
 };
 
-export default function PostProjectMaterialTransfer({ isOpen, onClose, userCode }) {
+export default function PostPRJMT({ isOpen, onClose, userCode }) {
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -60,7 +60,7 @@ export default function PostProjectMaterialTransfer({ isOpen, onClose, userCode 
   }, [isOpen, onClose, userCode]);
 
   const handlePost = async (selectedRows, password) => {
-    const result = await useHandlePostTran(selectedRows, password, "ProjectMaterialTransfer", userCode, setLoading, onClose);
+    const result = await useHandlePostTran(selectedRows, password, "PRJMT", userCode, setLoading, onClose);
     if (result?.success) window.dispatchEvent(new CustomEvent("project-transfer-finalized", { detail: { documentIds: selectedRows.map(r => r.groupId).filter(Boolean) } }));
   };
 

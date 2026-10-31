@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt, faSpinner, faFileImport, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faXmark, faPlus, faTrashAlt, faSpinner, faFileImport, faChevronDown, faBox } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -912,7 +912,7 @@ const APCM = () => {
     }
 
     updatedRows[index] = row;
-    updateState({ detailRows: updatedRows });
+    updateState({ detailRows: updatedRows, ...(["vatCode", "atcCode"].includes(field) ? { detailRowsGL: [] } : {}) });
     updateTotals(updatedRows);
   };
 
@@ -1395,16 +1395,18 @@ const APCM = () => {
                         </td>
                         <td className="global-tran-td-ui relative">
                           <div className="flex items-center">
-                            <input type="text" className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row.vatCode || ""} readOnly />
+                            <input type="text" className="w-[100px] global-tran-td-inputclass-ui text-center pr-12 cursor-pointer" value={row.vatCode || ""} readOnly />
                             {!handleFieldBehavior("CWTReversal") && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" })} />}
+                            {!handleFieldBehavior("CWTReversal") && row.vatCode && <FontAwesomeIcon icon={faXmark} title="Clear VAT Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleDetailChange(index, "vatCode", { vatCode: "", vatName: "" }, true)} />}
                           </div>
                         </td>
                         <td className="global-tran-td-ui"><input type="text" className="w-[200px] global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly /></td>
                         <td className="global-tran-td-ui"><input type="text" className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.vatAmount)) || ""} readOnly /></td>
                         <td className="global-tran-td-ui relative">
                           <div className="flex items-center">
-                            <input type="text" className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row.atcCode || ""} readOnly />
+                            <input type="text" className="w-[100px] global-tran-td-inputclass-ui text-center pr-12 cursor-pointer" value={row.atcCode || ""} readOnly />
                             {!handleFieldBehavior("CWTReversal") && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" })} />}
+                            {!handleFieldBehavior("CWTReversal") && row.atcCode && <FontAwesomeIcon icon={faXmark} title="Clear ATC Code" className="absolute right-8 text-[12px] text-slate-400 cursor-pointer hover:text-red-600" onClick={() => handleDetailChange(index, "atcCode", { atcCode: "", atcName: "" }, true)} />}
                           </div>
                         </td>
                         <td className="global-tran-td-ui"><input type="text" className="w-[200px] global-tran-td-inputclass-ui" value={row.atcName || ""} readOnly /></td>

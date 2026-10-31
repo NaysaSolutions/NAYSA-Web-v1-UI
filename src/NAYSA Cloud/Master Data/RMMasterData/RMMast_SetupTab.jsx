@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+import { ItemApprovalSetup } from "@/NAYSA Cloud/Global/ItemApprovalSetup.jsx";
 import { useFieldLenghtCheck, useGetFieldLength } from "@/NAYSA Cloud/Global/procedure";
 import SearchRMInvCateg from "@/NAYSA Cloud/Lookup/SearchRMInvCateg.jsx";
 import SearchRMInvClass from "@/NAYSA Cloud/Lookup/SearchRMInvClass.jsx";
@@ -88,6 +89,7 @@ const TABS = [
       </svg>
     ),
   },
+  { id: "approval", label: "Approval Setup", icon: <span>✓</span> },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,6 +103,7 @@ const RMMast_SetupTab = ({
   onChangeForm,
   onLookupSelect,
   onBlurItemCode,
+  showItemApprovalSetup = false,
 }) => {
   const isReadOnly = !isEditing;
   const isNewRecord = form.__isNew;
@@ -115,6 +118,7 @@ const RMMast_SetupTab = ({
   const [activeTab, setActiveTab] = useState("stockcard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [tblFieldArray, setTblFieldArray] = useState([]);
+  useEffect(() => { if (!showItemApprovalSetup && activeTab === "approval") setActiveTab("stockcard"); }, [showItemApprovalSetup, activeTab]);
 
   useEffect(() => {
     const run = async () => {
@@ -391,7 +395,7 @@ const RMMast_SetupTab = ({
               </button>
 
               <div className="flex flex-row md:flex-col gap-2 md:gap-1 p-2 flex-1 overflow-x-auto">
-                {TABS.map((tab) => (
+                {TABS.filter((tab) => tab.id !== "approval" || showItemApprovalSetup).map((tab) => (
                   <div key={tab.id} className="relative group flex-shrink-0 md:flex-shrink">
                     <button
                       type="button"
@@ -540,6 +544,9 @@ const RMMast_SetupTab = ({
                     />
                   </div>
                 </>
+              )}
+              {activeTab === "approval" && showItemApprovalSetup && (
+                <><SectionHeader title="ITEM APPROVAL" /><ItemApprovalSetup form={form} onChange={onChangeForm} disabled={isDisabled} /></>
               )}
 
             </div>

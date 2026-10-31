@@ -18,6 +18,7 @@ import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import SearchAttachment from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
+import { useItemApprovalVisibility } from "@/NAYSA Cloud/Global/ItemApprovalSetup.jsx";
 import FGMast_SetupTab from "./FGMast_SetupTab.jsx";
 import FGMast_DataTab from "./FGMast_DataTab.jsx";
 import FGMast_ReferenceCodeTab from "./FGMast_ReferenceCodeTab.jsx";
@@ -61,6 +62,7 @@ const emptyForm = {
     lastPurDate: "",
     lastPurPrice: "0.000000",
     allowOverRec: "N",
+    requireApproval: "N", maxAppLevel: "0",
     qtyOnHand: "0.000",
     unitCost: "0.000000",
 
@@ -83,6 +85,7 @@ const emptyForm = {
 };
 
 const FGMast = () => {
+    const showItemApprovalSetup = useItemApprovalVisibility(["PR", "PO"]);
     const [activeTab, setActiveTab] = useState("setup");
     const [isLoading, setIsLoading] = useState(false);
     const [generationMode, setGenerationMode] = useState("Manual");
@@ -335,6 +338,8 @@ const FGMast = () => {
             const payload = {
                 json_data: {
                     ...form,
+                    requireApproval: showItemApprovalSetup ? (form.requireApproval || "N") : "N",
+                    maxAppLevel: showItemApprovalSetup && form.requireApproval === "Y" ? Number(form.maxAppLevel || 1) : 0,
                     itemCode: isNewRecord && mode === "SYSTEM" ? "" : code,
                     action: selectedItemCode ? "edit" : "add",
                     userCode,
@@ -548,6 +553,7 @@ const FGMast = () => {
                         onChangeForm={updateForm}
                         onLookupSelect={(itemCode) => fetchItemByCode(itemCode, false)}
                         onBlurItemCode={isReadOnly || String(generationMode).toUpperCase() === "AUTO" ? undefined : checkDuplicate}
+                        showItemApprovalSetup={showItemApprovalSetup}
                     />
                 )}
                 {activeTab === "master" && (

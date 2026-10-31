@@ -180,6 +180,7 @@ const JO = () => {
     documentStatus: "",
     status: "",
     appLevel:0,
+    appStat:"NA",
     originalDocStatus:"O",
     documentDate:useGetCurrentDayV2(),  
     dateNeeded:useGetCurrentDayV2(),  
@@ -283,6 +284,7 @@ const JO = () => {
     documentDate,
     status,
     appLevel,
+    appStat,
     originalDocStatus,
     activeTab,
     isLoading,
@@ -420,21 +422,27 @@ const JO = () => {
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const maxApprovalLevel = Number(currentUserRow?.joMaxAppLevel || 0);
   const currentApprovalLevel = Number(appLevel ?? 0);
+  const currentApprovalStatus = String(appStat || "NA").trim().toUpperCase();
   const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED"];
+  const isDocumentApprovalEnabled =
+    String(hsDoc?.docApp || "").trim().toUpperCase() === "Y";
   const showApprovalStatus =
+    isDocumentApprovalEnabled &&
     !!documentID &&
-    maxApprovalLevel > 0 &&
     !approvalStatusHiddenStatuses.includes(String(displayStatus || "").toUpperCase());
   const approvalStatus = (() => {
     if (!showApprovalStatus) return "";
-    if (currentApprovalLevel === -1) return "Disapproved Transaction";
-    if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
+    if (currentApprovalStatus === "C") return "Cancelled Transaction";
+    if (currentApprovalStatus === "R") return "Rejected Transaction";
+    if (currentApprovalStatus === "A") return "Approved Transaction";
+    if (currentApprovalStatus === "NA") return "Approval Not Required";
     return `Awaiting for L${currentApprovalLevel + 1} Approval`;
   })();
   const approvalStatusColor =
-    currentApprovalLevel === -1
+    currentApprovalStatus === "R"
       ? "text-rose-500 dark:text-rose-400 animate-pulse"
       : statusColor;
+  const isApprovalComplete = ["A", "NA"].includes(currentApprovalStatus);
   const isDocumentLocked = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
@@ -624,6 +632,7 @@ useEffect(() => {
       isFetchDisabled: false,
       status: "",
       appLevel: 0,
+      appStat: "NA",
       originalDocStatus:"O",
       noReprints: "",
       joCancelled: "",
@@ -860,6 +869,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       documentStatus: data.joHStatus,
       status: data.joStatus,
       appLevel: data.appLevel,
+      appStat: data.appStat || "NA",
       originalDocStatus:data.joHStatus,
       documentID: data.joId,
       documentNo: data.joNo,
@@ -1367,6 +1377,7 @@ const handleCopy = async () => {
     isFetchDisabled: false,
     isFormDisabled: false,
     appLevel: 0,
+    appStat: "NA",
   });
 };
 
@@ -1923,7 +1934,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
 
           activeTopTab={topTab} 
           showActions={topTab === "details"} 
-          showNotify={(hsDoc?.docApp === "Y" || maxApprovalLevel > 0) && approvalStatus !== "Approved Transaction"}
+          showNotify={(hsDoc?.docApp === "Y" || maxApprovalLevel > 0) && !isApprovalComplete}
 
           showBIRForm={false}   
           showCopyForm ={true} 
@@ -1937,7 +1948,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
           isSaveDisabled={state.isSaveDisabled || isDocumentLocked ||  ((detailRows?.length || 0)=== 0)} 
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
-          isNotifyDisabled={!documentID || displayStatus === "CANCELLED" || approvalStatus === "Approved Transaction"}
+          isNotifyDisabled={!documentID || displayStatus === "CANCELLED" || isApprovalComplete}
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
@@ -2469,6 +2480,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
         remarks={remarks}
         maxAppLevel={currentUserRow?.joMaxAppLevel}
         data={detailRowsApp?.[0] || {}}
+        tranId={documentID}
       />
 
      
