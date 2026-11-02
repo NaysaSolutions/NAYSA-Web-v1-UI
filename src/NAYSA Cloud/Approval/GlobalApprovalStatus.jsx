@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   FileText,
+  History,
   Info,
   User,
   X,
@@ -75,7 +76,9 @@ const buildApprovalLevels = (data) =>
     const approvedDate = getDataValue(data, `app_date${level}`);
     const comment = getDataValue(data, `app_note${level}`);
     const approverName = getDataValue(data, `user_app${level}`);
-    const isApproved = Boolean(String(approvedDate || "").trim());
+    const action = String(getDataValue(data, `app_action${level}`) || "").trim().toUpperCase();
+    const isRejected = action === "R";
+    const isApproved = !isRejected && Boolean(String(approvedDate || "").trim());
     const requiredValue = getDataValue(data, `app_required${level}`);
     const isRequired = requiredValue === "" || requiredValue === null || requiredValue === undefined
       ? true
@@ -89,6 +92,7 @@ const buildApprovalLevels = (data) =>
       approvedDate,
       comment,
       isApproved,
+      isRejected,
       isRequired,
     };
   });
@@ -136,20 +140,23 @@ const ApprovalStatusBadge = ({ status }) => {
   );
 };
 
-const TimelineIcon = ({ isApproved }) => (
+const TimelineIcon = ({ isApproved, isRejected }) => (
   <div
     className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm sm:h-9 sm:w-9 ${
-      isApproved
+      isRejected
+        ? "bg-red-500 text-white"
+        : isApproved
         ? "bg-emerald-500 text-white"
         : "bg-slate-100 text-slate-500 ring-1 ring-slate-200"
     }`}
   >
-    {isApproved ? <Check size={17} strokeWidth={2.4} /> : <User size={16} />}
+    {isRejected ? <XCircle size={17} strokeWidth={2.4} /> : isApproved ? <Check size={17} strokeWidth={2.4} /> : <User size={16} />}
   </div>
 );
 
 const ApprovalLevelCard = ({ approval, isLast }) => {
   const isApproved = approval.isApproved;
+  const isRejected = approval.isRejected;
 
   return (
     <div className="relative grid grid-cols-[38px_minmax(0,1fr)] gap-2.5 sm:grid-cols-[46px_minmax(0,1fr)]">
@@ -161,11 +168,13 @@ const ApprovalLevelCard = ({ approval, isLast }) => {
         />
       )}
 
-      <TimelineIcon isApproved={isApproved} />
+      <TimelineIcon isApproved={isApproved} isRejected={isRejected} />
 
       <div
         className={`min-w-0 rounded-lg border p-2.5 sm:p-3 ${
-          isApproved
+          isRejected
+            ? "border-red-200 bg-red-50/70"
+            : isApproved
             ? "border-emerald-200 bg-emerald-50/70"
             : "border-slate-200 bg-white"
         }`}
@@ -180,13 +189,13 @@ const ApprovalLevelCard = ({ approval, isLast }) => {
               Level {approval.level}
             </p>
             <p className="mt-0.5 text-[12px] font-medium leading-5 text-slate-900">
-              {isApproved ? "Completed" : "For Approval"}
+              {isRejected ? "Rejected" : isApproved ? "Completed" : "For Approval"}
             </p>
           </div>
 
           <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-600">
-              {isApproved ? "Approved By" : "Approver"}
+              {isRejected ? "Rejected By" : isApproved ? "Approved By" : "Approver"}
             </p>
             <p className="mt-0.5 break-words text-[12px] font-semibold leading-5 text-slate-950">
               {valueOrDash(approval.approverName)}
@@ -195,7 +204,7 @@ const ApprovalLevelCard = ({ approval, isLast }) => {
 
           <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-600">
-              {isApproved ? "Date Approved" : "Date"}
+              {isRejected ? "Date Rejected" : isApproved ? "Date Approved" : "Date"}
             </p>
             <p className="mt-0.5 text-[12px] leading-5 text-slate-900">
               {formatDateTime(approval.approvedDate)}
@@ -213,23 +222,106 @@ const ApprovalLevelCard = ({ approval, isLast }) => {
           <div className="min-w-0 md:pt-6">
             <span
               className={`inline-flex min-h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase md:whitespace-nowrap ${
-                isApproved
+                isRejected
+                  ? "bg-red-100 text-red-700"
+                  : isApproved
                   ? "bg-emerald-100 text-emerald-700"
                   : "bg-slate-100 text-slate-600"
               }`}
             >
-              {isApproved ? (
+              {isRejected ? (
+                <XCircle size={13} />
+              ) : isApproved ? (
                 <CheckCircle2 size={13} />
               ) : (
                 <Clock3 size={13} />
               )}
               <span className="min-w-0 break-words md:break-normal">
-                {isApproved ? "Approved" : "Pending"}
+                {isRejected ? "Rejected" : isApproved ? "Approved" : "Pending"}
               </span>
             </span>
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+const movementActionLabel = (row) => {
+  const action = String(row?.action || "").toUpperCase();
+  if (action === "REQUESTED") return Number(row?.cycle || 1) > 1 ? "Requested Again" : "Requested for Approval";
+  if (action === "A" || action === "APPROVED") return "Approved";
+  if (action === "R" || action === "REJECTED") return "Rejected";
+  if (action === "COMMENTED") return "Comment Added";
+  return action || "Approval Activity";
+};
+
+const ApprovalMovement = ({ rows = [] }) => {
+  const cycles = useMemo(() => {
+    const grouped = new Map();
+    rows.forEach((row) => {
+      const cycle = Number(row?.cycle || 1);
+      if (!grouped.has(cycle)) grouped.set(cycle, []);
+      grouped.get(cycle).push(row);
+    });
+    return [...grouped.entries()].sort((a, b) => a[0] - b[0]);
+  }, [rows]);
+
+  if (!cycles.length) {
+    return (
+      <div className="flex min-h-52 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-center">
+        <History size={28} className="text-slate-300" />
+        <p className="mt-2 text-[12px] font-semibold text-slate-600">No approval movement recorded yet.</p>
+        <p className="text-[11px] text-slate-400">New requests and approval actions will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {cycles.map(([cycle, events]) => {
+        const approvedCount = events.filter((row) => ["A", "APPROVED"].includes(String(row?.action || "").toUpperCase())).length;
+        const rejectedCount = events.filter((row) => ["R", "REJECTED"].includes(String(row?.action || "").toUpperCase())).length;
+        const cycleStatus = rejectedCount > 0 ? "Rejected" : approvedCount > 0 ? "Approved" : "In Progress";
+        return (
+        <section key={cycle} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-3 py-2">
+            <div>
+              <p className="text-[12px] font-black text-slate-800">Approval Cycle {cycle}</p>
+              <p className="text-[10px] text-slate-500">
+                {approvedCount} approved{rejectedCount > 0 ? ` · ${rejectedCount} rejected` : ""}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${rejectedCount > 0 ? "bg-red-100 text-red-700" : approvedCount > 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{cycleStatus}</span>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Cycle {cycle}</span>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {events.map((row, index) => {
+              const rejected = ["R", "REJECTED"].includes(String(row?.action || "").toUpperCase());
+              const requested = String(row?.action || "").toUpperCase() === "REQUESTED";
+              return (
+                <div key={`${row?.source}-${row?.trailId}-${index}`} className="grid gap-2 px-3 py-2.5 sm:grid-cols-[32px_170px_minmax(0,1fr)_145px] sm:items-start">
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-full ${rejected ? "bg-red-100 text-red-600" : requested ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600"}`}>
+                    {rejected ? <XCircle size={15} /> : requested ? <FileText size={14} /> : <CheckCircle2 size={15} />}
+                  </div>
+                  <div>
+                    <p className={`text-[11px] font-black ${rejected ? "text-red-700" : requested ? "text-blue-700" : "text-emerald-700"}`}>{movementActionLabel(row)}</p>
+                    <p className="text-[10px] text-slate-500">{row?.source === "LINE" ? `Line ${valueOrDash(row?.lineNo)} · Level ${valueOrDash(row?.level)}` : row?.level > 0 ? `Document · Level ${row.level}` : "Document"}</p>
+                  </div>
+                  <div className="min-w-0">
+                    {row?.source === "LINE" && <p className="truncate text-[11px] font-semibold text-slate-800">{valueOrDash(row?.itemCode)} · {valueOrDash(row?.itemName)}</p>}
+                    <p className="text-[11px] text-slate-600">{valueOrDash(row?.userName || row?.userCode)}</p>
+                    {row?.remarks && <p className="mt-0.5 text-[10px] italic text-slate-500">{row.remarks}</p>}
+                  </div>
+                  <p className="text-[10px] text-slate-500 sm:text-right">{formatDateTime(row?.actionDate)}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      );})}
     </div>
   );
 };
@@ -248,17 +340,18 @@ const GlobalApprovalStatus = ({
   closeOnBackdrop = true,
 }) => {
   const [transactionApproval, setTransactionApproval] = useState(null);
+  const [activeTab, setActiveTab] = useState("current");
   const [loadedTransactionKey, setLoadedTransactionKey] = useState("");
   const transactionKey = `${String(docType).toUpperCase()}:${tranId}`;
   const requiresFreshStatus = Boolean(
-    isOpen && tranId && ["PR", "PO", "JO"].includes(String(docType).toUpperCase()),
+    isOpen && tranId && ["PR", "PO", "JO", "CV"].includes(String(docType).toUpperCase()),
   );
 
   useEffect(() => {
     let active = true;
     const loadStatus = async () => {
       setTransactionApproval(null);
-      if (!isOpen || !tranId || !["PR", "PO", "JO"].includes(String(docType).toUpperCase())) {
+      if (!isOpen || !tranId || !["PR", "PO", "JO", "CV"].includes(String(docType).toUpperCase())) {
         setLoadedTransactionKey("");
         return;
       }
@@ -277,6 +370,10 @@ const GlobalApprovalStatus = ({
     loadStatus();
     return () => { active = false; };
   }, [isOpen, tranId, docType, transactionKey]);
+
+  useEffect(() => {
+    if (isOpen) setActiveTab("current");
+  }, [isOpen, transactionKey]);
 
   const effectiveData = transactionApproval || data || EMPTY_DATA;
   const effectiveMaxLevel = transactionApproval?.maxAppLevel ?? maxAppLevel;
@@ -344,7 +441,19 @@ const GlobalApprovalStatus = ({
           </button>
         </header>
 
+        <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2">
+          <div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+          <button type="button" onClick={() => setActiveTab("current")} className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-bold transition ${activeTab === "current" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-900"}`}>
+            <CheckCircle2 size={14} /> Current Status
+          </button>
+          <button type="button" onClick={() => setActiveTab("movement")} className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-bold transition ${activeTab === "movement" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-900"}`}>
+            <History size={14} /> Approval Movement
+          </button>
+          </div>
+        </div>
+
         <div className="min-h-0 overflow-y-auto overflow-x-hidden bg-slate-50 px-2.5 py-2.5 sm:px-3 sm:py-3">
+          {activeTab === "current" ? <>
           <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:p-3">
             <div className="grid min-w-0 gap-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(170px,1fr)]">
               <div className="min-w-0">
@@ -452,6 +561,20 @@ const GlobalApprovalStatus = ({
                         <CheckCircle2 size={13} /> Approved
                       </span>
                     </div>
+                    <div className="mt-2.5 grid gap-2 border-t border-emerald-200/80 pt-2.5 sm:grid-cols-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-slate-500">Approved By</p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-900">{valueOrDash(effectiveData?.lastApproval?.approvedBy)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-slate-500">Last Approval</p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-900">{formatDateTime(effectiveData?.lastApproval?.approvedDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-slate-500">Approval Cycle</p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-900">Cycle {effectiveData?.lastApproval?.cycle || 1} · {effectiveData?.lastApproval?.approvedLineCount || 0} item(s)</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -474,6 +597,7 @@ const GlobalApprovalStatus = ({
               </p>
             </div>
           </div>
+          </> : <ApprovalMovement rows={effectiveData?.approvalMovement || []} />}
         </div>
       </section>
     </div>

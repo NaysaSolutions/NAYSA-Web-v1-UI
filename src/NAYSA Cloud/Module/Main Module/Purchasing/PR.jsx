@@ -411,6 +411,16 @@ const resolveDecimalPlaces = (...values) => {
   const maxApprovalLevel = Number(currentUserRow?.prMaxAppLevel || 0);
   const currentApprovalLevel = Number(appLevel ?? 0);
   const currentApprovalStatus = String(appStat || "NA").trim().toUpperCase();
+  const hasApprovedApprovalLine = detailRows.some(
+    (row) =>
+      String(row?.appStat || "").trim().toUpperCase() === "A" ||
+      Number(row?.appLevel || 0) > 0,
+  );
+  const hasPendingApprovalLine = detailRows.some(
+    (row) => String(row?.appStat || "").trim().toUpperCase() === "P",
+  );
+  const isPartiallyApproved =
+    currentApprovalStatus === "P" && hasApprovedApprovalLine && hasPendingApprovalLine;
   const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED" ];
   const showApprovalStatus =
     !!documentID &&
@@ -421,6 +431,7 @@ const resolveDecimalPlaces = (...values) => {
     if (currentApprovalStatus === "R") return "Rejected Transaction";
     if (currentApprovalStatus === "A") return "Approved Transaction";
     if (currentApprovalStatus === "NA") return "Approval Not Required";
+    if (isPartiallyApproved) return "Partially Approved";
     return `Awaiting for L${currentApprovalLevel + 1} Approval`;
   })();
   const approvalStatusColor =
@@ -2138,7 +2149,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isDocumentLocked || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
+    prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isDocumentLocked || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option><option value="R">Rejected</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
     invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option><option value="VE">VE</option></>}</select></td>,
     serviceCode: () => lookupCell("serviceCode", () => updateState({ showJobCodesModal: true, selectedRowIndex: index }), { hideIcon: isFormDisabled || row.prStatus !== "O" }),
     serviceName: () => modalTextCell("serviceName", "Scope of Work", "Enter scope of work..."),

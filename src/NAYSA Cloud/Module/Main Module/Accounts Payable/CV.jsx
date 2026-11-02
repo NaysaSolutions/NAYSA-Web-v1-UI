@@ -4013,6 +4013,7 @@ const renderCvGlCell = (columnKey, row, index) => {
   remarks={remarks}
   maxAppLevel={currentUserRow?.cvMaxAppLevel}
   data={state.detailRowsApp?.[0] || {}}
+  tranId={documentID}
 />
 
 
