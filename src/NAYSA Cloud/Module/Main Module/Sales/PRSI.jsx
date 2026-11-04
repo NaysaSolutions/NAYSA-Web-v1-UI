@@ -33,6 +33,10 @@ import {
   useTopForexRate as getTopForexRate,
 } from "@/NAYSA Cloud/Global/top1RefTable.js";
 import { useHandlePrint as printDocument } from "@/NAYSA Cloud/Global/report.js";
+import {
+  useFieldLenghtCheck,
+  useGetFieldLength,
+} from "@/NAYSA Cloud/Global/procedure.js";
 
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
 import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
@@ -234,6 +238,19 @@ const PRSI = () => {
   const [showDocumentLookup, setShowDocumentLookup] = useState(false);
   const [fromDate] = useState(monthsAgo(3));
   const [toDate] = useState(currentDate());
+  const [tblFieldArray, setTblFieldArray] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    useFieldLenghtCheck("PRSI_HD")
+      .then((columns) => {
+        if (active) setTblFieldArray(columns || []);
+      })
+      .catch((error) => console.error("Unable to load PRSI field controls:", error));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -821,30 +838,30 @@ const PRSI = () => {
                   />
                 </div>
               </div>
-              <FieldRenderer id="refDocNo" label="Reference Document No." type="text" value={form.refDocNo} disabled={!isEditable} onChange={(value) => updateForm({ refDocNo: value })} />
-              <FieldRenderer id="moisture" label="Moisture" type="text" value={form.moisture} disabled={!isEditable} onChange={(value) => updateForm({ moisture: value })} />
-              <FieldRenderer id="moep" label="MOEP" type="text" value={form.moep} disabled={!isEditable} onChange={(value) => updateForm({ moep: value })} />
+              <FieldRenderer id="refDocNo" label="Reference Document No." type="text" value={form.refDocNo} disabled={!isEditable} onChange={(value) => updateForm({ refDocNo: value })} maxLength={useGetFieldLength(tblFieldArray, "REFDOC_NO")} />
+              <FieldRenderer id="moisture" label="Moisture" type="text" value={form.moisture} disabled={!isEditable} onChange={(value) => updateForm({ moisture: value })} maxLength={useGetFieldLength(tblFieldArray, "MOISTURE")} />
+              <FieldRenderer id="moep" label="MOEP" type="text" value={form.moep} disabled={!isEditable} onChange={(value) => updateForm({ moep: value })} maxLength={useGetFieldLength(tblFieldArray, "MOEP")} />
             
             
-              <FieldRenderer id="fe" label="FE" type="text" value={form.fe} disabled={!isEditable} onChange={(value) => updateForm({ fe: value })} />
+              <FieldRenderer id="fe" label="FE" type="text" value={form.fe} disabled={!isEditable} onChange={(value) => updateForm({ fe: value })} maxLength={useGetFieldLength(tblFieldArray, "FE")} />
             </div>
 
             <div className="global-tran-textbox-group-div-ui">
-              <FieldRenderer id="vesselName" label="Vessel Name" type="text" value={form.vesselName} disabled={!isEditable} onChange={(value) => updateForm({ vesselName: value })} />
-              <FieldRenderer id="shipmentNo" label="Shipment No." type="text" value={form.shipmentNo} disabled={!isEditable} onChange={(value) => updateForm({ shipmentNo: value })} />
+              <FieldRenderer id="vesselName" label="Vessel Name" type="text" value={form.vesselName} disabled={!isEditable} onChange={(value) => updateForm({ vesselName: value })} maxLength={useGetFieldLength(tblFieldArray, "VESSEL_NAME")} />
+              <FieldRenderer id="shipmentNo" label="Shipment No." type="text" value={form.shipmentNo} disabled={!isEditable} onChange={(value) => updateForm({ shipmentNo: value })} maxLength={useGetFieldLength(tblFieldArray, "SHIPMENT_NO")} />
               <DateField id="shipmentDate" label="Shipment Date" value={form.shipmentDate} disabled={!isEditable} updateForm={updateForm} />
-              <FieldRenderer id="contractRef" label="Contract Reference" type="text" value={form.contractRef} disabled={!isEditable} onChange={(value) => updateForm({ contractRef: value })} />
+              <FieldRenderer id="contractRef" label="Contract Reference" type="text" value={form.contractRef} disabled={!isEditable} onChange={(value) => updateForm({ contractRef: value })} maxLength={useGetFieldLength(tblFieldArray, "CONTRACT_REF")} />
               <DateField id="contractDate" label="Contract Date" value={form.contractDate} disabled={!isEditable} updateForm={updateForm} />
-              <FieldRenderer id="nContent" label="N Content" type="text" value={form.nContent} disabled={!isEditable} onChange={(value) => updateForm({ nContent: value })} />
+              <FieldRenderer id="nContent" label="N Content" type="text" value={form.nContent} disabled={!isEditable} onChange={(value) => updateForm({ nContent: value })} maxLength={useGetFieldLength(tblFieldArray, "NCONTENT")} />
             </div>
 
             <div className="global-tran-textbox-group-div-ui">
               <FieldRenderer id="actName" label="Responsibility Center" required type="lookup" value={form.actName || form.actCode} disabled={!isEditable} readOnly onLookup={() => setRcModalOpen(true)} />
-              <FieldRenderer id="blNo" label="Bill of Lading No." type="text" value={form.blNo} disabled={!isEditable} onChange={(value) => updateForm({ blNo: value })} />
+              <FieldRenderer id="blNo" label="Bill of Lading No." type="text" value={form.blNo} disabled={!isEditable} onChange={(value) => updateForm({ blNo: value })} maxLength={useGetFieldLength(tblFieldArray, "BL_NO")} />
               <DateField id="blDate" label="Bill of Lading Date" value={form.blDate} disabled={!isEditable} updateForm={updateForm} />
-              <FieldRenderer id="transportMode" label="Transport Mode" type="text" value={form.transportMode} disabled={!isEditable} onChange={(value) => updateForm({ transportMode: value })} />
-              <FieldRenderer id="loadingPeriod" label="Loading Period" type="text" value={form.loadingPeriod} disabled={!isEditable} onChange={(value) => updateForm({ loadingPeriod: value })} />
-              <FieldRenderer id="otp" label="OTP" type="text" value={form.otp} disabled={!isEditable} onChange={(value) => updateForm({ otp: value })} />
+              <FieldRenderer id="transportMode" label="Transport Mode" type="text" value={form.transportMode} disabled={!isEditable} onChange={(value) => updateForm({ transportMode: value })} maxLength={useGetFieldLength(tblFieldArray, "TRANSPORT_MODE")} />
+              <FieldRenderer id="loadingPeriod" label="Loading Period" type="text" value={form.loadingPeriod} disabled={!isEditable} onChange={(value) => updateForm({ loadingPeriod: value })} maxLength={useGetFieldLength(tblFieldArray, "LOADING_PERIOD")} />
+              <FieldRenderer id="otp" label="OTP" type="text" value={form.otp} disabled={!isEditable} onChange={(value) => updateForm({ otp: value })} maxLength={useGetFieldLength(tblFieldArray, "OTP")} />
             </div>
           </div>
 

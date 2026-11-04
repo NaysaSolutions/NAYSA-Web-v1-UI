@@ -58,9 +58,9 @@ const ProjectMaster = () => {
 
   const { pagePermission, isReadOnly, isFullAccess, canAdd, canEdit, canSave, canDelete } = usePagePermission({ componentKey: "ProjectMaster", menuName: "Project Master" });
 
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({ queryKey: ["projectMasterList"], queryFn: async () => parseResult(await apiClient.get("/projectMaster")), staleTime: 0 });
-  const { data: activities = [] } = useQuery({ queryKey: ["projectActivityList"], queryFn: async () => parseResult(await apiClient.get("/projectActivity")), staleTime: 0 });
-  const { data: sites = [] } = useQuery({ queryKey: ["projectSiteList"], queryFn: async () => parseResult(await apiClient.get("/projectSite")), staleTime: 0 });
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({ queryKey: ["projectMasterList"], queryFn: async () => parseResult(await apiClient.get("/prjMaster")), staleTime: 0 });
+  const { data: activities = [] } = useQuery({ queryKey: ["projectActivityList"], queryFn: async () => parseResult(await apiClient.get("/prjActivityRef")), staleTime: 0 });
+  const { data: sites = [] } = useQuery({ queryKey: ["projectSiteList"], queryFn: async () => parseResult(await apiClient.get("/prjSiteRef")), staleTime: 0 });
   const { data: projectTypeOptions = [] } = useQuery({
     queryKey: ["projectMasterDropdown", "PROJECT_TYPE"],
     queryFn: async () => parseDropdownOptions(await apiClient.post("/getHSDropdown", { json_data: { dropdownColumn: "PROJECT_TYPE", docCode: "PRJMST" } })),

@@ -329,7 +329,8 @@ const POApprovalModal = ({
       setRows([]);
       useSwalErrorAlert(
         "PO Approval",
-        error?.response?.data?.message ||
+        error?.response?.data?.details ||
+          error?.response?.data?.message ||
           error?.message ||
           "Unable to reload PO approval detail.",
       );
@@ -384,7 +385,8 @@ const POApprovalModal = ({
         console.error("Approve PO failed:", error);
         useSwalErrorAlert(
           "PO Approval",
-          error?.response?.data?.message ||
+          error?.response?.data?.details ||
+            error?.response?.data?.message ||
             error?.message ||
             "Unable to approve selected PO transaction.",
         );
@@ -432,7 +434,8 @@ const POApprovalModal = ({
         console.error("Disapprove PO failed:", error);
         useSwalErrorAlert(
           "PO Approval",
-          error?.response?.data?.message ||
+          error?.response?.data?.details ||
+            error?.response?.data?.message ||
             error?.message ||
             "Unable to disapprove selected PO transaction.",
         );
@@ -480,7 +483,8 @@ const POApprovalModal = ({
         console.error("Apply PO approver note failed:", error);
         useSwalErrorAlert(
           "PO Approval",
-          error?.response?.data?.message ||
+          error?.response?.data?.details ||
+            error?.response?.data?.message ||
             error?.message ||
             "Unable to apply approver's note to selected PO transaction.",
         );
@@ -543,7 +547,8 @@ const POApprovalModal = ({
           setIsInitialLoadComplete(true);
           useSwalErrorAlert(
             "PO Approval",
-            error?.response?.data?.message ||
+            error?.response?.data?.details ||
+              error?.response?.data?.message ||
               error?.message ||
               "Unable to load PO approval detail.",
           );

@@ -35,7 +35,7 @@ import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 const TABS = {
   activity: {
     title: "Project Activity",
-    listEndpoint: "/projectActivity",
+    listEndpoint: "/prjActivityRef",
     saveEndpoint: "/upsertPRJActivityRef",
     deleteEndpoint: "/deletePRJActivityRef",
     checkDuplicateEndpoint: "/checkDuplicatePRJActivityRef",
@@ -49,7 +49,7 @@ const TABS = {
   },
   phase: {
     title: "Project Phase",
-    listEndpoint: "/projectPhase",
+    listEndpoint: "/prjPhaseRef",
     saveEndpoint: "/upsertPRJPhaseRef",
     deleteEndpoint: "/deletePRJPhaseRef",
     checkDuplicateEndpoint: "/checkDuplicatePRJPhaseRef",
@@ -63,7 +63,7 @@ const TABS = {
   },
   site: {
     title: "Project Site",
-    listEndpoint: "/projectSite",
+    listEndpoint: "/prjSiteRef",
     saveEndpoint: "/upsertPRJSiteRef",
     deleteEndpoint: "/deletePRJSiteRef",
     checkDuplicateEndpoint: "/checkDuplicatePRJSiteRef",

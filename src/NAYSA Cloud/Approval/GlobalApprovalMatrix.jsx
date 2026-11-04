@@ -1246,7 +1246,7 @@ export default function ApprovalMatrixModal() {
       return;
     }
 
-    const nextLevel = 0;
+    const nextLevel = "";
 
     const nextRow = {
       id: getNextId(rows),

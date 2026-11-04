@@ -84,6 +84,9 @@ export const useGenerateGLEntries = async (docCode, glData, options = {}) => {
           
 
             if (returnedErrorMsg && returnedErrorCount > 0) {
+                if (options.returnValidationError) {
+                    return { glEntries: [], invoiceDetails: [], validationError: returnedErrorMsg };
+                }
                 if (returnedErrorMsg.includes("Unbalanced")) {
                     const tDebit = glData.dt2.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
                     const tCredit = glData.dt2.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);

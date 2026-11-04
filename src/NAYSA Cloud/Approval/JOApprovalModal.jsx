@@ -329,7 +329,8 @@ const JOApprovalModal = ({
       setRows([]);
       useSwalErrorAlert(
         "JO Approval",
-        error?.response?.data?.message ||
+        error?.response?.data?.details ||
+          error?.response?.data?.message ||
           error?.message ||
           "Unable to reload JO approval detail.",
       );
@@ -385,7 +386,8 @@ const JOApprovalModal = ({
         console.error("Approve JO failed:", error);
         useSwalErrorAlert(
           "JO Approval",
-          error?.response?.data?.message ||
+          error?.response?.data?.details ||
+            error?.response?.data?.message ||
             error?.message ||
             "Unable to approve selected JO transaction.",
         );
@@ -434,7 +436,8 @@ const JOApprovalModal = ({
         console.error("Disapprove JO failed:", error);
         useSwalErrorAlert(
           "JO Approval",
-          error?.response?.data?.message ||
+          error?.response?.data?.details ||
+            error?.response?.data?.message ||
             error?.message ||
             "Unable to disapprove selected JO transaction.",
         );
@@ -483,7 +486,8 @@ const JOApprovalModal = ({
         console.error("Apply JO approver note failed:", error);
         useSwalErrorAlert(
           "JO Approval",
-          error?.response?.data?.message ||
+          error?.response?.data?.details ||
+            error?.response?.data?.message ||
             error?.message ||
             "Unable to apply approver's note to selected JO transaction.",
         );
@@ -546,7 +550,8 @@ const JOApprovalModal = ({
           setIsInitialLoadComplete(true);
           useSwalErrorAlert(
             "JO Approval",
-            error?.response?.data?.message ||
+            error?.response?.data?.details ||
+              error?.response?.data?.message ||
               error?.message ||
               "Unable to load JO approval detail.",
           );

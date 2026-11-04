@@ -95,6 +95,27 @@ import Header from '@/NAYSA Cloud/Components/Header';
 const showDiscountError = useSwalErrorAlert;
 const showDiscountConfirm = useSwalProceedConfirm;
 
+const createEmptyProvisionalInfo = () => ({
+  prsiId: "",
+  vesselName: "",
+  shipmentNo: "",
+  shipmentDate: "",
+  contractRef: "",
+  contractDate: "",
+  moisture: "",
+  fe: "",
+  nContent: "",
+  blNo: "",
+  blDate: "",
+  loadingPeriod: "",
+  transportMode: "",
+  otp: "",
+  moep: "",
+  refDocNo: "",
+  actCode: "",
+  actName: "",
+});
+
 // Allocate whole cents so the last item receives any rounding difference.
 const allocateDiscountCents = (grossAmounts, discountAmount) => {
   const capacities = grossAmounts.map((amount) =>
@@ -227,6 +248,7 @@ const SI = () => {
 
     //Other Header Info
     tblFieldArray :[],
+    prsiInfo: createEmptyProvisionalInfo(),
     siStatus: "O",
     siTranType: "",
     siTranTypeOptions: [],
@@ -282,6 +304,13 @@ const SI = () => {
   const updateState = (updates) => {
       setState(prev => ({ ...prev, ...updates }));
     };
+
+  const updateProvisionalInfo = (updates) => {
+    setState((previous) => ({
+      ...previous,
+      prsiInfo: { ...previous.prsiInfo, ...updates },
+    }));
+  };
 
   const {
   // Document info
@@ -345,6 +374,7 @@ const SI = () => {
 
   // Transaction details
   tblFieldArray,
+  prsiInfo,
   detailRows,
   detailRowsGL,
   openDRSI_Data_Summary,
@@ -490,6 +520,13 @@ const SI = () => {
       ? (resolvedRowPricingMode || "PMTYPE")
       : salesDiscountMode;
   const isOverallDiscountMode = effectiveDiscountMode === "OVERALL";
+  const isProvisionalSI = String(siTranType || "").toUpperCase() === "SI04";
+
+  useEffect(() => {
+    if (!isProvisionalSI && activeTab === "provisional") {
+      updateState({ activeTab: "basic" });
+    }
+  }, [activeTab, isProvisionalSI]);
   const isSellingPriceAndDiscountEditable = effectiveDiscountMode === "MANUAL";
   const SI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
   const canEditHeaderDiscount =
@@ -1230,6 +1267,7 @@ useEffect(() => {
       documentID: "",
       detailRows: [],
       detailRowsGL: [],
+      prsiInfo: createEmptyProvisionalInfo(),
       openDRSI_Data_Summary: [],
       openDRSI_Col_Summary: [],
       ...getGLTotalsState([]),
@@ -1260,7 +1298,7 @@ useEffect(() => {
 
         try {
           const hdtblcol_result = await useFieldLenghtCheck(
-            "si_hd,si_dt1,'si_dt2"
+            "SI_HD,SI_DT1,SI_DT2,SI_PRSI"
           );
 
           if (hdtblcol_result) {
@@ -1385,6 +1423,19 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
           : String(data.siStatus || "O"),
       detailRows: retrievedDetailRows,
       detailRowsGL: formattedGLRows,
+      prsiInfo: {
+        ...createEmptyProvisionalInfo(),
+        ...(data.prsiInfo || {}),
+        shipmentDate: data.prsiInfo?.shipmentDate
+          ? useformatToDatev2(data.prsiInfo.shipmentDate)
+          : "",
+        contractDate: data.prsiInfo?.contractDate
+          ? useformatToDatev2(data.prsiInfo.contractDate)
+          : "",
+        blDate: data.prsiInfo?.blDate
+          ? useformatToDatev2(data.prsiInfo.blDate)
+          : "",
+      },
       isDocNoDisabled: true,
       isFetchDisabled: true,
     });
@@ -1481,6 +1532,7 @@ const handleActivityOption = async (action) => {
         customerPoDate,
         siTranType,
         siStatus,
+        prsiInfo,
         detailRows,
         detailRowsGL,
       } = state;
@@ -1516,6 +1568,9 @@ const handleActivityOption = async (action) => {
         salesRepCode,
         salesRepName,
         soStatus: siStatus || 'O',
+        prsiInfo: String(siTranType || "").toUpperCase() === "SI04"
+          ? prsiInfo
+          : null,
         dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
           pickStat: row.siStat || "F",
@@ -2982,6 +3037,23 @@ const handlePrint = async () => {
       const rawResult = response?.data?.[0]?.result;
       const selectedRecords = rawResult ? JSON.parse(rawResult).map(normalizeOpenDRLookupRow) : [];
 
+      const prsiHeaderResponse = await apiClient.get("/getPRSI", {
+        params: {
+          json_data: JSON.stringify({
+            json_data: {
+              prsiId,
+              prsiNo: selectedPRSI?.prsiNo || selectedPRSI?.docNo || "",
+              branchCode,
+              direction: "",
+            },
+          }),
+        },
+      });
+      const rawHeader = prsiHeaderResponse?.data?.data?.[0]?.result;
+      const prsiHeader = typeof rawHeader === "string"
+        ? JSON.parse(rawHeader || "null")
+        : rawHeader;
+
       if (!selectedRecords.length) {
         useSwalErrorAlert("Open PRSI", "No item details were returned for the selected PRSI.");
         return;
@@ -3001,6 +3073,28 @@ const handlePrint = async () => {
       setTopTab("details");
       updateState({
         ...headerUpdates,
+        activeTab: "provisional",
+        prsiInfo: {
+          ...createEmptyProvisionalInfo(),
+          prsiId: prsiHeader?.prsiId || prsiId,
+          vesselName: prsiHeader?.vesselName || "",
+          shipmentNo: prsiHeader?.shipmentNo || "",
+          shipmentDate: prsiHeader?.shipmentDate ? useformatToDatev2(prsiHeader.shipmentDate) : "",
+          contractRef: prsiHeader?.contractRef || "",
+          contractDate: prsiHeader?.contractDate ? useformatToDatev2(prsiHeader.contractDate) : "",
+          moisture: prsiHeader?.moisture || "",
+          fe: prsiHeader?.fe || "",
+          nContent: prsiHeader?.nContent || "",
+          blNo: prsiHeader?.blNo || "",
+          blDate: prsiHeader?.blDate ? useformatToDatev2(prsiHeader.blDate) : "",
+          loadingPeriod: prsiHeader?.loadingPeriod || "",
+          transportMode: prsiHeader?.transportMode || "",
+          otp: prsiHeader?.otp || "",
+          moep: prsiHeader?.moep || "",
+          refDocNo: prsiHeader?.refDocNo || "",
+          actCode: prsiHeader?.actCode || "",
+          actName: prsiHeader?.actName || "",
+        },
         showOpenDRModal: false,
         openDRSI_Data_Summary: [],
         openDRSI_Col_Summary: [],
@@ -3500,6 +3594,21 @@ const handleSaveAndPrint = async (documentID) => {
   };
 
 const handleCloseRcModal = async (selectedRc) => {
+  if (modalContext === "provisionalRC") {
+    if (selectedRc) {
+      updateProvisionalInfo({
+        actCode: selectedRc.rcCode || "",
+        actName: selectedRc.rcName || "",
+      });
+    }
+    updateState({
+      showRcModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    return;
+  }
+
   if (modalContext === "headerRc" && selectedRc) {
     updateState({
       rcCode: selectedRc.rcCode || "",
@@ -4908,6 +5017,19 @@ return (
           >
             Basic Information
           </button>
+          {isProvisionalSI && (
+            <button
+              type="button"
+              className={`global-tran-tab-padding-ui ${
+                activeTab === "provisional"
+                  ? "global-tran-tab-text_active-ui"
+                  : "global-tran-tab-text_inactive-ui"
+              }`}
+              onClick={() => updateState({ activeTab: "provisional" })}
+            >
+              Provisional Info
+            </button>
+          )}
           {!isFormDisabled && (
             <div ref={addTypeDropdownRef} className="relative ml-auto mb-1">
               <button
@@ -4942,7 +5064,7 @@ return (
         </div>
 
         {/* SI Header Form Section - Main Grid Container */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="so_hd">
+        <div className={`${activeTab === "basic" ? "grid" : "hidden"} grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative`} id="so_hd">
 
           <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="global-tran-textbox-group-div-ui">
@@ -5398,6 +5520,50 @@ return (
             />
           </div>
         </div>
+
+        {isProvisionalSI && (
+          <div className={`${activeTab === "provisional" ? "grid" : "hidden"} grid-cols-1 gap-4 rounded-lg md:grid-cols-2 lg:grid-cols-3`} id="si_prsi">
+            <div className="global-tran-textbox-group-div-ui">
+              <FieldRenderer id="prsiRefDocNo" label="Reference Document No." type="text" value={prsiInfo?.refDocNo || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ refDocNo: value })} maxLength={useGetFieldLength(tblFieldArray, "REFDOC_NO")} />
+              <FieldRenderer id="prsiMoisture" label="Moisture" type="text" value={prsiInfo?.moisture || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ moisture: value })} maxLength={useGetFieldLength(tblFieldArray, "MOISTURE")} />
+              <FieldRenderer id="prsiMoep" label="MOEP" type="text" value={prsiInfo?.moep || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ moep: value })} maxLength={useGetFieldLength(tblFieldArray, "MOEP")} />
+              <FieldRenderer id="prsiFe" label="FE" type="text" value={prsiInfo?.fe || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ fe: value })} maxLength={useGetFieldLength(tblFieldArray, "FE")} />
+              <FieldRenderer id="prsiNContent" label="N Content" type="text" value={prsiInfo?.nContent || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ nContent: value })} maxLength={useGetFieldLength(tblFieldArray, "NCONTENT")} />
+            </div>
+
+            <div className="global-tran-textbox-group-div-ui">
+              <FieldRenderer id="prsiVesselName" label="Vessel Name" type="text" value={prsiInfo?.vesselName || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ vesselName: value })} maxLength={useGetFieldLength(tblFieldArray, "VESSEL_NAME")} />
+              <FieldRenderer id="prsiShipmentNo" label="Shipment No." type="text" value={prsiInfo?.shipmentNo || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ shipmentNo: value })} maxLength={useGetFieldLength(tblFieldArray, "SHIPMENT_NO")} />
+              <div className="relative w-full">
+                <div className={`flex items-stretch global-ref-textbox-ui ${isFormDisabled ? "global-ref-textbox-disabled" : "global-ref-textbox-enabled"}`}>
+                  <DateFormatInput id="shipmentDate" value={prsiInfo?.shipmentDate || ""} disabled={isFormDisabled} updateState={updateProvisionalInfo} className="peer flex-grow border-none bg-transparent px-3 focus:outline-none" />
+                </div>
+                <label htmlFor="shipmentDate" className="global-ref-floating-label">Shipment Date</label>
+              </div>
+              <FieldRenderer id="prsiContractRef" label="Contract Reference" type="text" value={prsiInfo?.contractRef || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ contractRef: value })} maxLength={useGetFieldLength(tblFieldArray, "CONTRACT_REF")} />
+              <div className="relative w-full">
+                <div className={`flex items-stretch global-ref-textbox-ui ${isFormDisabled ? "global-ref-textbox-disabled" : "global-ref-textbox-enabled"}`}>
+                  <DateFormatInput id="contractDate" value={prsiInfo?.contractDate || ""} disabled={isFormDisabled} updateState={updateProvisionalInfo} className="peer flex-grow border-none bg-transparent px-3 focus:outline-none" />
+                </div>
+                <label htmlFor="contractDate" className="global-ref-floating-label">Contract Date</label>
+              </div>
+            </div>
+
+            <div className="global-tran-textbox-group-div-ui">
+              <FieldRenderer id="prsiActName" label="Responsibility Center" required type="lookup" value={prsiInfo?.actName || prsiInfo?.actCode || ""} disabled={isFormDisabled} readOnly lookupDisabled={isFormDisabled} onLookup={() => updateState({ showRcModal: true, modalContext: "provisionalRC" })} />
+              <FieldRenderer id="prsiBlNo" label="Bill of Lading No." type="text" value={prsiInfo?.blNo || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ blNo: value })} maxLength={useGetFieldLength(tblFieldArray, "BL_NO")} />
+              <div className="relative w-full">
+                <div className={`flex items-stretch global-ref-textbox-ui ${isFormDisabled ? "global-ref-textbox-disabled" : "global-ref-textbox-enabled"}`}>
+                  <DateFormatInput id="blDate" value={prsiInfo?.blDate || ""} disabled={isFormDisabled} updateState={updateProvisionalInfo} className="peer flex-grow border-none bg-transparent px-3 focus:outline-none" />
+                </div>
+                <label htmlFor="blDate" className="global-ref-floating-label">Bill of Lading Date</label>
+              </div>
+              <FieldRenderer id="prsiTransportMode" label="Transport Mode" type="text" value={prsiInfo?.transportMode || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ transportMode: value })} maxLength={useGetFieldLength(tblFieldArray, "TRANSPORT_MODE")} />
+              <FieldRenderer id="prsiLoadingPeriod" label="Loading Period" type="text" value={prsiInfo?.loadingPeriod || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ loadingPeriod: value })} maxLength={useGetFieldLength(tblFieldArray, "LOADING_PERIOD")} />
+              <FieldRenderer id="prsiOtp" label="OTP" type="text" value={prsiInfo?.otp || ""} disabled={isFormDisabled} onChange={(value) => updateProvisionalInfo({ otp: value })} maxLength={useGetFieldLength(tblFieldArray, "OTP")} />
+            </div>
+          </div>
+        )}
 
     </div>
     </div>

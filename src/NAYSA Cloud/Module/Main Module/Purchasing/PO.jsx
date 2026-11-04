@@ -101,6 +101,7 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import {
+  useSelectedDefaultItemConversion,
   useSelectedHSColConfig,
   useSelectedIteBranchBalance,
 } from "@/NAYSA Cloud/Global/selectedData";
@@ -188,6 +189,7 @@ const PO = () => {
   const canAddMSItem = hasAccessibleMenuModule(accessibleMenuModules, "MS");
   const canAddRMItem = hasAccessibleMenuModule(accessibleMenuModules, "RM");
   const canAddVEItem = hasAccessibleMenuModule(accessibleMenuModules, "VE");
+  const canAddFAItem = hasAccessibleMenuModule(accessibleMenuModules, "FA");
   const { resetFlag } = useReset();
   const location = useLocation();
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -909,6 +911,7 @@ const PO = () => {
     if (normalized.endsWith("VE")) return "VE";
     if (normalized.endsWith("FG")) return "FG";
     if (normalized.endsWith("RM")) return "RM";
+    if (normalized.endsWith("FA")) return "FA";
     return "MS";
   };
 
@@ -2379,7 +2382,7 @@ const PO = () => {
         branchCode,
       );
 
-      const newDetailRows = pricedSelectedDetails.map((d, i) => {
+      const newDetailRows = await Promise.all(pricedSelectedDetails.map(async (d, i) => {
         const relatedSummary =
           summaryByPrNo[String(d?.prNo || d?.pr_no || "").trim()] ||
           summaryByGroupId[
@@ -2391,6 +2394,14 @@ const PO = () => {
 
         const qty = parseFormattedNumber(d?.quantity || 0) || 0;
         const formattedQty = formatNumber(qty, decQty);
+        const conversion = isInventoryConversionEnabled
+          ? await useSelectedDefaultItemConversion({
+              invType: d?.invType,
+              itemCode: d?.item_code || d?.itemCode,
+              baseUomCode: d?.uomCode,
+              quantity: qty,
+            })
+          : null;
 
         const prDeliveryDate =
           d?.dateNeeded ||
@@ -2432,6 +2443,9 @@ const PO = () => {
           qtyAlloc: formatNumber(0, decQty),
           prBalance: formattedQty,
           poQty: formattedQty,
+          requiredUomCode: conversion?.convertedUomCode || d?.uomCode || "",
+          requiredQty: formatNumber(conversion?.convertedQuantity ?? qty, decQty),
+          conversionFactor: conversion?.conversionFactor || 1,
           rrQty: formatNumber(0, decQty),
 
           uomCode2: "",
@@ -2457,7 +2471,7 @@ const PO = () => {
         };
 
         return recalcDetailRow(row);
-      });
+      }));
 
       const updatedRows = [...(detailRows || []), ...newDetailRows];
 
@@ -2537,7 +2551,7 @@ const PO = () => {
       updateState({
         isLoading: true,
         itemSingleSelect: itemSingleSelectParam,
-        itemLookupEndPoint: `getInvLookup${invType}`,
+        itemLookupEndPoint: invType === "FA" ? "getInvLookupMS" : `getInvLookup${invType}`,
         selectedDocType: docTypeParam,
       });
       updateState({ msLookupModalOpen: true, isLoading: false });
@@ -2568,18 +2582,34 @@ const PO = () => {
       return;
     }
 
-    const pricedItems = await applyLastPurchasePrices(
-      itemsArray.map((item) => ({
-        ...item,
-        invType: getInvTypeFromDocType(state.selectedDocType),
-      })),
-      branchCode,
-    );
+    const selectedLookupInvType = getInvTypeFromDocType(state.selectedDocType);
+    const pricedItems = selectedLookupInvType === "FA"
+      ? itemsArray.map((item) => ({ ...item, invType: "FA", lastPurchasePrice: 0 }))
+      : await applyLastPurchasePrices(
+          itemsArray.map((item) => ({ ...item, invType: selectedLookupInvType })),
+          branchCode,
+        );
     pricedItems.forEach((item, index) => {
       itemsArray[index] = item;
     });
 
     const lookupInvType = getInvTypeFromDocType(state.selectedDocType);
+    if (isInventoryConversionEnabled) {
+      const convertedItems = await Promise.all(
+        itemsArray.map(async (item) => ({
+          ...item,
+          ...(await useSelectedDefaultItemConversion({
+            invType: lookupInvType,
+            itemCode: item.itemCode,
+            baseUomCode: item.uomCode || item.uom,
+            quantity: 0,
+          })),
+        })),
+      );
+      convertedItems.forEach((item, index) => {
+        itemsArray[index] = item;
+      });
+    }
     const isDuplicateLookupItem = (newItem) =>
       detailRows.some(
         (existingRow) =>
@@ -2598,6 +2628,9 @@ const PO = () => {
           itemCode: singleItem.itemCode || "",
           itemName: singleItem.itemName || "",
           uomCode: singleItem.uomCode || singleItem.uom || "",
+          requiredUomCode: singleItem.convertedUomCode || singleItem.uomCode || singleItem.uom || "",
+          requiredQty: formatNumber(singleItem.convertedQuantity || 0, decQty),
+          conversionFactor: singleItem.conversionFactor || 1,
           qtyOnHand: formatNumber(singleItem.qtyHand ?? 0, decQty),
           unitPrice: formatNumber(singleItem.lastPurchasePrice ?? 0, DEC_PRICE),
         };
@@ -2647,6 +2680,9 @@ const PO = () => {
           qtyOnHand: formatNumber(item?.qtyHand ?? 0, decQty),
           qtyAlloc: formatNumber(0, decQty),
           prBalance: formatNumber(0, decQty),
+          requiredUomCode: item?.convertedUomCode || item?.uomCode || item?.uom || "",
+          requiredQty: formatNumber(item?.convertedQuantity || 0, decQty),
+          conversionFactor: item?.conversionFactor || 1,
           uomCode2: "",
           uomQty2: formatNumber(0, decQty),
           dateNeeded: delDate || today,
@@ -4486,6 +4522,7 @@ const PO = () => {
             <option value="MS">MS</option>
             <option value="RM">RM</option>
             <option value="FG">FG</option>
+            {canAddFAItem && <option value="FA">FA</option>}
             <option value="VE">VE</option>
           </select>
         </td>
@@ -5514,6 +5551,26 @@ const PO = () => {
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                               RM
                             </span>
+                          </button>}
+
+                          {canAddFAItem && <button
+                            type="button"
+                            className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+                            onClick={() => {
+                              setShowTypeDropdown(false);
+                              handleOpenMSLookup(false, "POFA");
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                                <FontAwesomeIcon icon={faBoxOpen} />
+                              </span>
+                              <div className="flex flex-col items-start">
+                                <span>Fixed Assets</span>
+                                <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">Add FA item</span>
+                              </div>
+                            </div>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">FA</span>
                           </button>}
 
                           {canAddVEItem && <button

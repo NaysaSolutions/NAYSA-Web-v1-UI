@@ -1,7 +1,63 @@
-import { fetchData, postRequest } from '@/NAYSA Cloud/Configuration/BaseURL';
+import { apiClient, fetchData, postRequest } from '@/NAYSA Cloud/Configuration/BaseURL';
 import { formatNumber } from '@/NAYSA Cloud/Global/behavior';
 import { parseFormattedNumber } from '@/NAYSA Cloud/Global/behavior';
 import Swal from 'sweetalert2';
+
+const defaultItemConversionCache = new Map();
+
+export const useSelectedDefaultItemConversion = async ({
+  invType,
+  itemCode,
+  baseUomCode,
+  quantity = 0,
+}) => {
+  const fallback = {
+    convertedUomCode: baseUomCode || "",
+    convertedQuantity: Number(quantity) || 0,
+    conversionFactor: 1,
+    autoSelected: false,
+  };
+
+  if (!invType || !itemCode || !baseUomCode || !["FG", "RM", "MS"].includes(String(invType).toUpperCase())) {
+    return fallback;
+  }
+
+  try {
+    const cacheKey = `${String(invType).toUpperCase()}|${String(itemCode).toUpperCase()}`;
+    let rows = defaultItemConversionCache.get(cacheKey);
+    if (!rows) {
+      const response = await apiClient.get("/itemConversion", {
+        params: { invType, itemCode },
+      });
+      const rawResult = response?.data?.data?.[0]?.result;
+      rows = typeof rawResult === "string"
+        ? JSON.parse(rawResult || "[]")
+        : Array.isArray(response?.data?.data) ? response.data.data : [];
+      defaultItemConversionCache.set(cacheKey, rows);
+    }
+    const sequenceTwo = rows.find(
+      (row) => Number(row?.seqNo ?? row?.SEQ_NO) === 2 && String(row?.active ?? row?.ACTIVE ?? "Y").toUpperCase() === "Y",
+    );
+
+    if (!sequenceTwo?.uomCode) return fallback;
+
+    const conversionFactor =
+      parseFormattedNumber(sequenceTwo?.convQty) ||
+      (parseFormattedNumber(sequenceTwo?.baseQtyRatio) /
+        (parseFormattedNumber(sequenceTwo?.uomQtyRatio) || 1)) ||
+      1;
+
+    return {
+      convertedUomCode: sequenceTwo.uomCode,
+      convertedQuantity: (Number(quantity) || 0) / conversionFactor,
+      conversionFactor,
+      autoSelected: true,
+    };
+  } catch (error) {
+    console.warn("Unable to apply the default item conversion:", error);
+    return fallback;
+  }
+};
 
 
 

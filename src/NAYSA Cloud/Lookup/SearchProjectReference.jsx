@@ -3,7 +3,7 @@ import PropTypes from "prop-types";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEraser, faSearch, faSort, faTimes } from "@fortawesome/free-solid-svg-icons";
 
-const SearchProjectReference = ({ isOpen, onClose, title, rows, codeKey, nameKey, codeLabel, nameLabel }) => {
+const SearchProjectReference = ({ isOpen, onClose, title, rows = [], codeKey, nameKey, codeLabel, nameLabel }) => {
   const [codeFilter, setCodeFilter] = useState("");
   const [nameFilter, setNameFilter] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: codeKey, direction: "asc" });
@@ -104,7 +104,5 @@ SearchProjectReference.propTypes = {
   codeLabel: PropTypes.string.isRequired,
   nameLabel: PropTypes.string.isRequired,
 };
-
-SearchProjectReference.defaultProps = { rows: [] };
 
 export default SearchProjectReference;

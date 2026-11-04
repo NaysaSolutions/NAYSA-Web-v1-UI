@@ -2195,21 +2195,6 @@ const APV = () => {
       }
     }
 
-    if (["GenerateGL", "Upsert"].includes(action) && selectedApType === "APV03") {
-      const missingPoNoRow = detailRows.findIndex((row) => !String(row?.poNo || "").trim());
-      if (missingPoNoRow >= 0) {
-        useSwalErrorAlert("AP Advances", `PO/JO No. is required in row ${missingPoNoRow + 1}.`);
-        return;
-      }
-    }
-    if (shouldGenerateGl && fieldVisibility.invoiceDetails && fieldVisibility.siNo && selectedApType !== "APV03") {
-      const missingInvoiceNoRow = findMissingInvoiceNoRow(detailRows);
-      if (missingInvoiceNoRow >= 0) {
-        useSwalErrorAlert("Generate GL", `Invoice No. is required in row ${missingInvoiceNoRow + 1} before generating GL entries.`);
-        return;
-      }
-    }
-
     if (documentStatus === "" || documentStatus === "OPEN") {
       updateState({ isLoading: true });
       const glData = buildTransactionPayload();
@@ -2217,22 +2202,19 @@ const APV = () => {
       let finalInvoiceRows = [...detailRows];
       let finalGlEntries = [...detailRowsGL];
       let finalReceivingRows = state.receivingRows;
+      let databaseGeneratedResponse = null;
 
       try {
-        if (shouldGenerateGl && isReplenishmentAPType) {
-          if (!apAccountCode) {
-            useSwalErrorAlert("Generate GL", "AP Account is required for Replenishment.");
-            return;
-          }
-
-          if (!detailRows.length) {
-            useSwalErrorAlert("Generate GL", "Please select a PCV reference first.");
-            return;
-          }
-
-          const missingDebitAccount = detailRows.find((row) => !String(row.debitAcct || "").trim());
-          if (missingDebitAccount) {
-            useSwalErrorAlert("Generate GL", "Petty Cash GL Account is missing from the selected PCV.");
+        if (shouldGenerateGl) {
+          databaseGeneratedResponse = await useGenerateGLEntries(docType, glData, {
+            includeInvoiceDetails: selectedApType === "APV01",
+            returnValidationError: true,
+          });
+          if (databaseGeneratedResponse?.validationError) {
+            useSwalErrorAlert(
+              action === "Upsert" ? "Save APV" : "Generate GL",
+              databaseGeneratedResponse.validationError,
+            );
             return;
           }
         }
@@ -2292,25 +2274,9 @@ const APV = () => {
 
             finalGlEntries = [blankRow, apRow];
           } else if (isReimbursementLikeApType(selectedApType)) {
-            if (!apAccountCode) {
-              useSwalErrorAlert("Generate GL", "AP Account is required before generating GL entries.");
-              return;
-            }
-
-            if (!detailRows.length) {
-              useSwalErrorAlert("Generate GL", "Please add at least one invoice detail row before generating GL entries.");
-              return;
-            }
-
-            const missingDebitAccountIndex = detailRows.findIndex((row) => !String(row.debitAcct || "").trim());
-            if (missingDebitAccountIndex >= 0) {
-              useSwalErrorAlert("Generate GL", `DR Account is required in row ${missingDebitAccountIndex + 1} before generating GL entries.`);
-              return;
-            }
-
             finalGlEntries = await buildReimbursementLikeGLEntries();
           } else {
-            const generatedResponse = await useGenerateGLEntries(docType, glData, { includeInvoiceDetails: selectedApType === "APV01" });
+            const generatedResponse = databaseGeneratedResponse;
             const generatedEntries = Array.isArray(generatedResponse) ? generatedResponse : generatedResponse?.glEntries;
             const generatedInvoiceDetails = Array.isArray(generatedResponse?.invoiceDetails) ? generatedResponse.invoiceDetails : [];
             if (generatedEntries) {

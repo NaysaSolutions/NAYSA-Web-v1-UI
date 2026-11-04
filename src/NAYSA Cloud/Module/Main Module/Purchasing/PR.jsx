@@ -60,7 +60,8 @@ import {
 } from "@/NAYSA Cloud/Global/procedure";
 import {
   useSelectedHSColConfig,
-  useSelectedIteBranchBalance
+  useSelectedIteBranchBalance,
+  useSelectedDefaultItemConversion
 } from '@/NAYSA Cloud/Global/selectedData';
 
 import {
@@ -165,6 +166,8 @@ const resolveDecimalPlaces = (...values) => {
   const canAddMSItem = hasAccessibleMenuModule(accessibleMenuModules, "MS");
   const canAddRMItem = hasAccessibleMenuModule(accessibleMenuModules, "RM");
   const canAddVEItem = hasAccessibleMenuModule(accessibleMenuModules, "VE");
+  const canAddFAItem = hasAccessibleMenuModule(accessibleMenuModules, "FA");
+  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const [hsOptionRow, setHsOptionRow] = useState(null);
   const decQty = resolveDecimalPlaces(
     hsOptionRow?.itemDecqtyPur,
@@ -449,6 +452,7 @@ const resolveDecimalPlaces = (...values) => {
 
 
 
+  const isRegularPrConversion = isInventoryConversionEnabled && selectedPrTranType === "PR01";
   const prDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "prStatus", label: "PR Status", width: 100 },
@@ -459,11 +463,17 @@ const resolveDecimalPlaces = (...values) => {
     { key: "itemName", label: "Item Name", width: 300 },
     { key: "itemSpecs", label: "Specification", width: 300 },
     { key: "uomCode", label: "UOM", width: 80 },
+    ...(isRegularPrConversion
+      ? [
+          { key: "uomCode2", label: "Required UOM", width: 130 },
+          { key: "uomQty2", label: "Required Quantity", width: 150 },
+        ]
+      : []),
     { key: "qtyOnHand", label: "Qty on Hand", width: 130 },
-    { key: "qtyNeeded", label: "Qty Needed", width: 130 },
+    { key: "qtyNeeded", label: isRegularPrConversion ? "PR Quantity" : "Qty Needed", width: 130 },
     { key: "dateNeeded", label: "Date Needed", width: 140 },
-    { key: "poQty", label: "PO Qty", width: 120 },
-    { key: "rrQty", label: "RR Qty", width: 120 },
+    { key: "poQty", label: "PO Quantity", width: 130 },
+    { key: "rrQty", label: "RR Quantity", width: 130 },
     { key: "joNo", label: "JO No.", width: 120 },
   ];
 
@@ -480,7 +490,31 @@ const resolveDecimalPlaces = (...values) => {
     renderResizableHeader: renderPrDetailHeader,
   } = useResizableTableColumns(prDetailColumnDefs);
 
-  const orderedPrDetailColumns = getOrderedPrDetailColumns(prDetailColumnDefs);
+  const savedPrDetailColumns = getOrderedPrDetailColumns(prDetailColumnDefs);
+  const orderedPrDetailColumns = (() => {
+    if (!isRegularPrConversion) return savedPrDetailColumns;
+
+    const conversionBlockKeys = new Set(["uomCode", "uomCode2", "uomQty2"]);
+    const columnsWithoutConversionBlock = savedPrDetailColumns.filter(
+      (column) => !conversionBlockKeys.has(column.key),
+    );
+    const qtyOnHandIndex = columnsWithoutConversionBlock.findIndex(
+      (column) => column.key === "qtyOnHand",
+    );
+    const conversionBlock = ["uomCode", "uomCode2", "uomQty2"]
+      .map((key) => prDetailColumnDefs.find((column) => column.key === key))
+      .filter(Boolean);
+
+    if (qtyOnHandIndex < 0) {
+      return [...columnsWithoutConversionBlock, ...conversionBlock];
+    }
+
+    return [
+      ...columnsWithoutConversionBlock.slice(0, qtyOnHandIndex),
+      ...conversionBlock,
+      ...columnsWithoutConversionBlock.slice(qtyOnHandIndex),
+    ];
+  })();
   const visiblePrDetailColumns = orderedPrDetailColumns.filter((column) => {
     if (["serviceCode", "serviceName", "joNo"].includes(column.key)) return isJobOrder;
     if (["itemCode", "itemName", "qtyOnHand", "poQty", "rrQty"].includes(column.key)) return !isJobOrder;
@@ -801,6 +835,12 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       qtyOnHand: formatNumber(item.qtyOnHand,decQty),
       qtyAlloc: formatNumber(item.qtyAlloc,decQty),
       qtyNeeded: formatNumber(item.qtyNeeded,decQty),
+      uomCode2: item.uomCode2 || item.uomCode || "",
+      uomQty2: formatNumber(item.uomQty2 ?? item.qtyNeeded ?? 0, decQty),
+      conversionFactor:
+        (parseFormattedNumber(item.uomQty2) || 0) > 0
+          ? (parseFormattedNumber(item.qtyNeeded) || 0) / parseFormattedNumber(item.uomQty2)
+          : 1,
       poQty: formatNumber(item.poQty,decQty),
       rrQty: formatNumber(item.rrQty,decQty),
       dateNeeded: item.dateNeeded ? useformatToDatev2(item.dateNeeded) : "",
@@ -919,11 +959,13 @@ const getItemLookupConfig = (lookupDocType) => {
     ? "FG"
     : normalizedDocType.endsWith("RM")
       ? "RM"
+      : normalizedDocType.endsWith("FA")
+        ? "FA"
       : "MS";
 
   return {
     invType,
-    endpoint: `getInvLookup${invType}`,
+    endpoint: invType === "FA" ? "getInvLookupMS" : `getInvLookup${invType}`,
   };
 };
 
@@ -992,7 +1034,16 @@ const handleCloseItemLookup = async (selectedItems) => {
     const applySingleItem = async () => {
       updateState({ isLoading: true });
       const [itemWithBalance] = await applyBranchBalanceToItems([singleItem], lookupInvType);
-      handleDetailChange(selectedRowIndex, 'itemCode', itemWithBalance || singleItem, false);
+      const selectedItem = itemWithBalance || singleItem;
+      const conversion = isRegularPrConversion
+        ? await useSelectedDefaultItemConversion({
+            invType: lookupInvType,
+            itemCode: selectedItem.itemCode,
+            baseUomCode: selectedItem.uomCode,
+            quantity: 0,
+          })
+        : null;
+      handleDetailChange(selectedRowIndex, 'itemCode', { ...selectedItem, ...conversion }, false);
       updateState({
         itemSingleSelect: false,
         itemLookupModalOpen: false,
@@ -1027,7 +1078,18 @@ const handleCloseItemLookup = async (selectedItems) => {
   const processAddition = async (itemsToAdd) => {
     updateState({ isLoading: true });
     const itemsWithBalance = await applyBranchBalanceToItems(itemsToAdd, lookupInvType);
-    const newRows = itemsWithBalance.map((item) => ({
+    const itemsWithConversions = await Promise.all(itemsWithBalance.map(async (item) => ({
+      ...item,
+      ...(isRegularPrConversion
+        ? await useSelectedDefaultItemConversion({
+            invType: lookupInvType,
+            itemCode: item.itemCode,
+            baseUomCode: item.uomCode,
+            quantity: 0,
+          })
+        : {}),
+    })));
+    const newRows = itemsWithConversions.map((item) => ({
       invType: lookupInvType,
       groupId: "",
       prStatus: "O",
@@ -1037,8 +1099,9 @@ const handleCloseItemLookup = async (selectedItems) => {
       qtyOnHand: formatNumber(item?.qtyHand ?? 0, decQty),
       qtyAlloc: formatNumber(0, decQty),
       qtyNeeded: formatNumber(0, decQty),
-      uomCode2: item?.uomCode || "",
-      uomQty2: formatNumber(0, decQty),
+      uomCode2: item?.convertedUomCode || item?.uomCode || "",
+      uomQty2: formatNumber(item?.convertedQuantity || 0, decQty),
+      conversionFactor: item?.conversionFactor || 1,
       dateNeeded: headerDateNeeded,
       itemSpecs: "",
       serviceCode: "",
@@ -1099,6 +1162,7 @@ const handleAddBlankRow = (index) => {
     qtyNeeded: formatNumber(0,decQty),
     uomCode2: "",
     uomQty2: formatNumber(0,decQty),
+    conversionFactor: 1,
     dateNeeded: headerDateNeeded,
     itemSpecs: "",
     serviceCode: "",
@@ -1176,6 +1240,7 @@ const handleAddBlankRow = (index) => {
       qtyNeeded: formatNumber(0, decQty),
       uomCode2: "",
       uomQty2: formatNumber(0, decQty),
+      conversionFactor: 1,
       dateNeeded: headerDateNeeded,
       itemSpecs: "",
       poQty: formatNumber(0, decQty),
@@ -1233,8 +1298,9 @@ const handleScanItem = async (scannedValue) => {
       qtyOnHand: formatNumber(matchedItem.qtyOnHand ?? 0, decQty),
       qtyAlloc: formatNumber(matchedItem.qtyAlloc ?? 0, decQty),
       qtyNeeded: formatNumber(0, decQty),
-      uomCode2: matchedItem.uomCode2 || "",
+          uomCode2: matchedItem.uomCode2 || matchedItem.uomCode || "",
       uomQty2: formatNumber(matchedItem.uomQty2 ?? 0, decQty),
+          conversionFactor: parseFormattedNumber(matchedItem.conversionFactor) || 1,
       dateNeeded: headerDateNeeded,
       itemSpecs: matchedItem.itemSpecs || "",
       poQty: formatNumber(matchedItem.poQuantity, decQty),
@@ -1423,6 +1489,18 @@ const handleDetailChange = (index, field, value, runCalculations = false) => {
     row["itemName"] = value.itemName;
     row["uomCode"] = value.uomCode;
     row["qtyOnHand"] = formatNumber(value.qtyHand, decQty);
+    row["uomCode2"] = value.convertedUomCode || value.uomCode || "";
+    row["uomQty2"] = formatNumber(value.convertedQuantity || 0, decQty);
+    row["conversionFactor"] = value.conversionFactor || 1;
+  }
+
+  if (runCalculations && isRegularPrConversion && field === "qtyNeeded") {
+    const factor = parseFormattedNumber(row.conversionFactor) || 1;
+    row.uomQty2 = formatNumber((parseFormattedNumber(row.qtyNeeded) || 0) / factor, decQty);
+  }
+  if (runCalculations && isRegularPrConversion && field === "uomQty2") {
+    const factor = parseFormattedNumber(row.conversionFactor) || 1;
+    row.qtyNeeded = formatNumber((parseFormattedNumber(row.uomQty2) || 0) * factor, decQty);
   }
 
 
@@ -2091,10 +2169,19 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
     const formattedValue = formatNumber(num, decQty);
     const updatedRows = [...(detailRowsRef.current || detailRows || [])];
-    updatedRows[index] = {
+    const updatedRow = {
       ...(updatedRows[index] || {}),
       [field]: formattedValue,
     };
+    if (isRegularPrConversion && field === "qtyNeeded") {
+      const factor = parseFormattedNumber(updatedRow.conversionFactor) || 1;
+      updatedRow.uomQty2 = formatNumber(num / factor, decQty);
+    }
+    if (isRegularPrConversion && field === "uomQty2") {
+      const factor = parseFormattedNumber(updatedRow.conversionFactor) || 1;
+      updatedRow.qtyNeeded = formatNumber(num * factor, decQty);
+    }
+    updatedRows[index] = updatedRow;
 
     detailRowsRef.current = updatedRows;
     updateState({ detailRows: updatedRows });
@@ -2150,7 +2237,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isDocumentLocked || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option><option value="R">Rejected</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
-    invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option><option value="VE">VE</option></>}</select></td>,
+    invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option>{canAddFAItem && <option value="FA">FA</option>}<option value="VE">VE</option></>}</select></td>,
     serviceCode: () => lookupCell("serviceCode", () => updateState({ showJobCodesModal: true, selectedRowIndex: index }), { hideIcon: isFormDisabled || row.prStatus !== "O" }),
     serviceName: () => modalTextCell("serviceName", "Scope of Work", "Enter scope of work..."),
     itemCode: () => lookupCell("itemCode", () => handleAddItem(index, "PR" + row.invType), { hideIcon: isFormDisabled || Number(row.poQty || 0) !== 0 || row.prStatus !== "O" || row.invType === "" || row.invType == null }),
@@ -2159,6 +2246,8 @@ const renderPrDetailColumn = (columnKey, row, index) => {
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: isFormDisabled || row.prStatus !== "O" || (parseFormattedNumber(row.poQty) || 0) > 0 || !isJobOrder })}</td>,
     qtyOnHand: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{textInput("qtyOnHand", { readOnly: true, tabIndex: -1, className: "text-right cursor-not-allowed" })}</td>,
     qtyNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{qtyInput("qtyNeeded", { readOnly: rowLocked })}</td>,
+    uomCode2: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode2", { readOnly: true, className: "cursor-not-allowed" })}</td>,
+    uomQty2: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{qtyInput("uomQty2", { readOnly: rowLocked })}</td>,
     dateNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`dateNeeded-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.dateNeeded)} min={toDateInputValue(documentDate)} onChange={(e) => handleDetailChange(index, "dateNeeded", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("dateNeeded"); } }} /></td>,
     poQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("poQty", { readOnly: true, disabled: isFormDisabled })}</td>,
     rrQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("rrQty", { readOnly: true, disabled: isFormDisabled })}</td>,
@@ -2620,6 +2709,26 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
               RM
             </span>
+          </button>}
+
+          {canAddFAItem && <button
+            type="button"
+            className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+            onClick={() => {
+              setShowTypeDropdown(false);
+              handleOpenItemLookup(false, "PRFA");
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                <FontAwesomeIcon icon={faBoxOpen} />
+              </span>
+              <div className="flex flex-col items-start">
+                <span>Fixed Assets</span>
+                <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">Add FA item</span>
+              </div>
+            </div>
+            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">FA</span>
           </button>}
 
           {canAddVEItem && <button

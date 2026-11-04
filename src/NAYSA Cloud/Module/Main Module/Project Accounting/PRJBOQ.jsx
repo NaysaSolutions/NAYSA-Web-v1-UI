@@ -13,6 +13,7 @@ import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
 import SearchProjectRef from "@/NAYSA Cloud/Lookup/SearchProjectRef.jsx";
 import SearchProjectJobOrderDetail from "@/NAYSA Cloud/Lookup/SearchProjectJobOrderDetail.jsx";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
+import RequiredUomLookupModal from "@/NAYSA Cloud/Lookup/SearchRequiredUOM.jsx";
 import VATLookupModal from "@/NAYSA Cloud/Lookup/SearchVATRef.jsx";
 import CancelTranModal from "@/NAYSA Cloud/Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
@@ -21,7 +22,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
-import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
+import { useSelectedDefaultItemConversion, useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
 import {
   formatNumber,
   parseFormattedNumber,
@@ -50,6 +51,9 @@ const emptyDetailRow = (lineNo, decQty = 2) => ({
   itemNo: "",
   itemDesc: "",
   uomCode: "",
+  convertedUomCode: "",
+  convertedQuantity: formatNumber(0, decQty),
+  conversionFactor: 1,
   qtyHand: formatNumber(0, decQty),
   boqQty: formatNumber(0, decQty),
   unitCost: "0.00",
@@ -83,6 +87,7 @@ const PRJBOQ = () => {
   const loadedFromUrlRef = useRef(false);
   const { currentUserRow, companyInfo, getAllTopHSDocRow, getAllTopVatRow } = useAuth();
   const decQty = Number(companyInfo?.itemDecqtyFG ?? 2);
+  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
   const documentTitle = `${hsDoc?.docName || "Bill of Quantity"} Transaction`;
 
@@ -97,6 +102,11 @@ const PRJBOQ = () => {
   const [detailColumnConfig, setDetailColumnConfig] = useState([]);
   const [itemLookupIndex, setItemLookupIndex] = useState(null);
   const [vatLookupIndex, setVatLookupIndex] = useState(null);
+  const [convertedUomLookup, setConvertedUomLookup] = useState({
+    isOpen: false,
+    rowIndex: null,
+    data: [],
+  });
   const [state, setState] = useState({
     documentID: "",
     documentNo: "",
@@ -187,6 +197,12 @@ const PRJBOQ = () => {
       { key: "uomCode", label: "UOM", width: 90 },
       { key: "qtyHand", label: "Qty on Hand", width: 130 },
       { key: "boqQty", label: "BOQ Quantity", width: 140 },
+      ...(isInventoryConversionEnabled
+        ? [
+            { key: "convertedUomCode", label: "Converted UOM", width: 130 },
+            { key: "convertedQuantity", label: "Converted Quantity", width: 155 },
+          ]
+        : []),
       { key: "unitCost", label: "Unit Cost", width: 130 },
       { key: "amount", label: "Amount", width: 140 },
       { key: "markupRate", label: "Mark Up %", width: 120 },
@@ -200,7 +216,7 @@ const PRJBOQ = () => {
       { key: "blQty", label: "BL Quantity", width: 125 },
       { key: "prQty", label: "PR Quantity", width: 125 },
     ],
-    []
+    [isInventoryConversionEnabled]
   );
 
   const detailColumnDefs = useMemo(() => {
@@ -210,7 +226,7 @@ const PRJBOQ = () => {
       defaultDetailColumnDefs.map((column) => [column.key, column])
     );
 
-    return detailColumnConfig
+    const configuredColumns = detailColumnConfig
       .filter(
         (column) => Number(column.hidden || 0) !== 1 && defaults.has(column.key)
       )
@@ -218,7 +234,16 @@ const PRJBOQ = () => {
         ...defaults.get(column.key),
         label: column.label || defaults.get(column.key).label,
       }));
-  }, [defaultDetailColumnDefs, detailColumnConfig]);
+
+    if (!isInventoryConversionEnabled) return configuredColumns;
+
+    const conversionKeys = new Set(["convertedUomCode", "convertedQuantity"]);
+    const withoutConversion = configuredColumns.filter((column) => !conversionKeys.has(column.key));
+    const quantityIndex = withoutConversion.findIndex((column) => column.key === "boqQty");
+    const conversionColumns = [defaults.get("convertedUomCode"), defaults.get("convertedQuantity")];
+    withoutConversion.splice(quantityIndex >= 0 ? quantityIndex + 1 : withoutConversion.length, 0, ...conversionColumns);
+    return withoutConversion;
+  }, [defaultDetailColumnDefs, detailColumnConfig, isInventoryConversionEnabled]);
 
   const {
     getColumnStyle,
@@ -355,6 +380,9 @@ const PRJBOQ = () => {
             uomCode: String(row.invType || "").toUpperCase() === "SV" ? (row.uomCode || "LOT") : (row.uomCode || ""),
             qtyHand: formatNumber(row.qtyHand || 0, decQty),
             boqQty: formatNumber(row.boqQty || 0, decQty),
+            convertedUomCode: row.convertedUomCode || row.uomCode || "",
+            convertedQuantity: formatNumber(row.convertedQuantity ?? row.boqQty ?? 0, decQty),
+            conversionFactor: parseFormattedNumber(row.conversionFactor) || 1,
             unitCost: formatNumber(row.unitCost || 0, 2),
             amount: formatNumber(row.amount || 0, 2),
             markupRate: formatNumber(row.markupRate || 0, 2),
@@ -404,6 +432,9 @@ const PRJBOQ = () => {
           changed.itemDesc = "";
           changed.uomCode = String(value || "").toUpperCase() === "SV" ? "LOT" : "";
           changed.qtyHand = formatNumber(0, decQty);
+          changed.convertedUomCode = "";
+          changed.convertedQuantity = formatNumber(0, decQty);
+          changed.conversionFactor = 1;
           changed.unitCost = formatNumber(0, 2);
           changed.amount = formatNumber(0, 2);
           changed.markupAmount = formatNumber(0, 2);
@@ -412,7 +443,22 @@ const PRJBOQ = () => {
           changed.grossAmount = formatNumber(0, 2);
           changed.vatCode = "";
         }
-        if (["boqQty", "unitCost", "markupRate"].includes(field)) {
+        if (isInventoryConversionEnabled && field === "convertedQuantity") {
+          const conversionFactor = parseFormattedNumber(changed.conversionFactor) || 1;
+          changed.boqQty = formatNumber(
+            parseFormattedNumber(changed.convertedQuantity || 0) * conversionFactor,
+            decQty
+          );
+        }
+        if (isInventoryConversionEnabled && field === "boqQty") {
+          const conversionFactor = parseFormattedNumber(changed.conversionFactor) || 1;
+          changed.convertedUomCode = changed.convertedUomCode || changed.uomCode || "";
+          changed.convertedQuantity = formatNumber(
+            parseFormattedNumber(changed.boqQty || 0) / conversionFactor,
+            decQty
+          );
+        }
+        if (["boqQty", "convertedQuantity", "unitCost", "markupRate"].includes(field)) {
           const amount = parseFormattedNumber(changed.boqQty) * parseFormattedNumber(changed.unitCost);
           const markupAmount = amount * parseFormattedNumber(changed.markupRate) / 100;
           changed.amount = formatNumber(amount, 2);
@@ -427,6 +473,101 @@ const PRJBOQ = () => {
         return changed;
       }),
     }));
+  };
+
+  const parseItemConversionRows = (response) => {
+    const result = response?.data?.data?.[0]?.result;
+    if (typeof result === "string") {
+      try {
+        return JSON.parse(result);
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(response?.data?.data) ? response.data.data : [];
+  };
+
+  const isSameUom = (left, right) =>
+    String(left || "").trim().toUpperCase() === String(right || "").trim().toUpperCase();
+
+  const openConvertedUomLookup = async (index) => {
+    const row = state.detailRows[index];
+    if (!row?.itemNo || !row?.invType || String(row.invType).toUpperCase() === "SV") {
+      useSwalErrorAlert("Converted UOM", "Select an inventory item first.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await apiClient.get("/itemConversion", {
+        params: { invType: row.invType, itemCode: row.itemNo },
+      });
+      const data = parseItemConversionRows(response).map((entry) => ({
+        ...entry,
+        groupId: entry.itemUomConvId || entry.uomCode,
+      }));
+      if (!data.some((entry) => !isSameUom(entry.uomCode, row.uomCode))) {
+        useSwalErrorAlert("Converted UOM", "No other UOM is defined for this item.");
+        return;
+      }
+      setConvertedUomLookup({ isOpen: true, rowIndex: index, data });
+    } catch (error) {
+      useSwalErrorAlert(
+        "Converted UOM",
+        error?.response?.data?.message || error.message || "Unable to load item conversions."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConvertedUomSelect = async (selected) => {
+    const index = convertedUomLookup.rowIndex;
+    setConvertedUomLookup({ isOpen: false, rowIndex: null, data: [] });
+    if (!selected || index === null) return;
+
+    const row = state.detailRows[index];
+    try {
+      setIsLoading(true);
+      let conversionFactor = 1;
+      if (!isSameUom(selected.uomCode, row.uomCode)) {
+        const response = await apiClient.post("/convertItemUom", {
+          json_data: {
+            invType: row.invType,
+            itemCode: row.itemNo,
+            fromUomCode: row.uomCode,
+            toUomCode: selected.uomCode,
+            quantity: parseFormattedNumber(row.boqQty) || 0,
+          },
+        });
+        const result = response?.data?.data?.[0] || response?.data?.[0] || {};
+        if (Number(result.errorcount || 0) > 0) {
+          throw new Error(result.errormsg || "Unable to convert the item quantity.");
+        }
+        conversionFactor = parseFormattedNumber(result.toConvQty) || 1;
+      }
+
+      setState((previous) => ({
+        ...previous,
+        detailRows: previous.detailRows.map((item, rowIndex) =>
+          rowIndex === index
+            ? {
+                ...item,
+                convertedUomCode: selected.uomCode,
+                conversionFactor,
+                convertedQuantity: formatNumber(
+                  (parseFormattedNumber(item.boqQty) || 0) / conversionFactor,
+                  decQty
+                ),
+              }
+            : item
+        ),
+      }));
+    } catch (error) {
+      useSwalErrorAlert("Conversion Failed", error.message || "Unable to convert the item quantity.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const openJobOrderLookup = () => {
@@ -524,6 +665,9 @@ const PRJBOQ = () => {
           uomCode: row.uomCode || "",
           qtyHand: parseFormattedNumber(row.qtyHand || 0),
           boqQty: parseFormattedNumber(row.boqQty || 0),
+          convertedUomCode: row.convertedUomCode || row.uomCode || "",
+          convertedQuantity: parseFormattedNumber(row.convertedQuantity ?? row.boqQty ?? 0),
+          conversionFactor: parseFormattedNumber(row.conversionFactor) || 1,
           unitCost: parseFormattedNumber(row.unitCost || 0),
           amount: parseFormattedNumber(row.amount || 0),
           markupRate: parseFormattedNumber(row.markupRate || 0),
@@ -736,6 +880,30 @@ const PRJBOQ = () => {
               onClick={() => setVatLookupIndex(index)}
               className="absolute right-1 px-1 text-blue-600 hover:text-blue-800"
               title="Search VAT Code"
+            >
+              <FontAwesomeIcon icon={faMagnifyingGlass} />
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (options.convertedUomLookup) {
+      return (
+        <div className="relative flex w-full items-center">
+          <input
+            value={row.convertedUomCode || row.uomCode || ""}
+            readOnly
+            disabled={isFormDisabled || String(row.invType || "").toUpperCase() === "SV"}
+            className={`${common} cursor-pointer pr-7 text-center`}
+            onClick={() => !isFormDisabled && openConvertedUomLookup(index)}
+          />
+          {!isFormDisabled && String(row.invType || "").toUpperCase() !== "SV" && (
+            <button
+              type="button"
+              onClick={() => openConvertedUomLookup(index)}
+              className="absolute right-1 px-1 text-blue-600 hover:text-blue-800"
+              title="Select Converted UOM"
             >
               <FontAwesomeIcon icon={faMagnifyingGlass} />
             </button>
@@ -1042,7 +1210,7 @@ const PRJBOQ = () => {
                             className={`global-tran-td-ui ${
                               column.key === "lineNo"
                                 ? "text-center"
-                                : ["qtyHand", "boqQty", "unitCost", "amount", "markupRate", "markupAmount", "totalAmount", "vatAmount", "grossAmount", "mrQty", "isQty", "blQty", "prQty"].includes(column.key)
+                                : ["qtyHand", "boqQty", "convertedQuantity", "unitCost", "amount", "markupRate", "markupAmount", "totalAmount", "vatAmount", "grossAmount", "mrQty", "isQty", "blQty", "prQty"].includes(column.key)
                                   ? "text-right"
                                   : ""
                             }`}
@@ -1059,12 +1227,18 @@ const PRJBOQ = () => {
                                       ? { readOnly: String(row.invType || "").toUpperCase() !== "SV" }
                                     : column.key === "vatCode"
                                       ? { vatLookup: true }
+                                    : column.key === "convertedUomCode"
+                                      ? { readOnly: true, convertedUomLookup: true }
                                     : ["qtyHand", "amount", "markupAmount", "totalAmount", "vatAmount", "grossAmount", "mrQty", "isQty", "blQty", "prQty"].includes(column.key)
                                   ? { readOnly: true, numeric: true, decimals: ["qtyHand", "mrQty", "isQty", "blQty", "prQty"].includes(column.key) ? decQty : 2 }
                                     : column.key === "uomCode"
                                       ? { readOnly: String(row.invType || "").toUpperCase() !== "SV" }
-                                      : ["boqQty", "unitCost", "markupRate"].includes(column.key)
-                                    ? { numeric: true, decimals: column.key === "boqQty" ? decQty : 2 }
+                                      : ["boqQty", "convertedQuantity", "unitCost", "markupRate"].includes(column.key)
+                                    ? {
+                                        numeric: true,
+                                        decimals: ["boqQty", "convertedQuantity"].includes(column.key) ? decQty : 2,
+                                        readOnly: column.key === "convertedQuantity" && String(row.invType || "").toUpperCase() === "SV",
+                                      }
                                         : column.key === "invType"
                                           ? { select: [{ value: "FG", label: "FG" }, { value: "RM", label: "RM" }, { value: "MS", label: "MS" }, { value: "SV", label: "SV" }] }
                                           : {}
@@ -1250,11 +1424,20 @@ const PRJBOQ = () => {
           docType="BOQ"
           customParam="ActiveAll"
           enableMultiSelect={false}
-          onClose={(payload) => {
+          onClose={async (payload) => {
             const rowIndex = itemLookupIndex;
             setItemLookupIndex(null);
             const item = payload?.records?.[0];
             if (!item || rowIndex === null) return;
+            const invType = state.detailRows[rowIndex]?.invType || "FG";
+            const conversion = isInventoryConversionEnabled
+              ? await useSelectedDefaultItemConversion({
+                  invType,
+                  itemCode: item.itemCode,
+                  baseUomCode: item.uomCode,
+                  quantity: 0,
+                })
+              : null;
             setState((previous) => ({
               ...previous,
               detailRows: previous.detailRows.map((row, index) =>
@@ -1264,6 +1447,9 @@ const PRJBOQ = () => {
                       itemNo: item.itemCode || "",
                       itemDesc: item.itemName || item.itemDesc || "",
                       uomCode: item.uomCode || "",
+                      convertedUomCode: conversion?.convertedUomCode || item.uomCode || "",
+                      convertedQuantity: formatNumber(conversion?.convertedQuantity || 0, decQty),
+                      conversionFactor: conversion?.conversionFactor || 1,
                       qtyHand: formatNumber(item.qtyHand || 0, decQty),
                       unitCost: formatNumber(item.unitCost || 0, 2),
                     }
@@ -1302,6 +1488,16 @@ const PRJBOQ = () => {
               }),
             }));
           }}
+        />
+      )}
+
+      {convertedUomLookup.isOpen && (
+        <RequiredUomLookupModal
+          isOpen={convertedUomLookup.isOpen}
+          title="Select Converted UOM"
+          decimalPlaces={decQty}
+          data={convertedUomLookup.data}
+          onClose={handleConvertedUomSelect}
         />
       )}
 

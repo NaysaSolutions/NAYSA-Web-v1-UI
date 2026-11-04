@@ -72,7 +72,7 @@ const createFilterObject = (cols = []) =>
 const normalizeLookupRow = (row = {}) => {
   if (!row || typeof row !== "object") return row;
 
-  const itemCode = row.itemCode ?? row.ITEM_CODE ?? row.item_code ?? "";
+  const itemCode = row.itemCode ?? row.ITEM_CODE ?? row.item_code ?? row.faCode ?? row.FA_CODE ?? "";
 
   return {
     ...row,
@@ -80,11 +80,13 @@ const normalizeLookupRow = (row = {}) => {
     itemName:
       row.itemName ??
       row.itemDesc ??
+      row.faName ??
+      row.FA_NAME ??
       row.ITEM_NAME ??
       row.ITEM_DESC ??
       row.item_desc ??
       "",
-    uomCode: row.uomCode ?? row.uom ?? row.UOM_CODE ?? row.UOM ?? "",
+    uomCode: row.uomCode ?? row.uom ?? row.UOM_CODE ?? row.UOM ?? (row.faCode ?? row.FA_CODE ? "PC" : ""),
     qtyHand: row.qtyHand ?? row.qtyOnHand ?? row.QTY_HAND ?? row.QTY_ON_HAND ?? 0,
     unitCost: row.unitCost ?? row.UNIT_COST ?? row.unit_cost ?? 0,
     categCode:
@@ -173,7 +175,7 @@ const ItemMastLookupModal = ({
   // For FA records use faCode as the unique key; inventory uses groupId/itemCode
   const getRowUniqueKey = (row) => {
     const dt = String(docType || "").toUpperCase();
-    if (dt === "FA") return String(row?.faCode ?? row?.FA_CODE ?? "");
+    if (dt === "FA") return String(row?.faCode ?? row?.FA_CODE ?? row?.itemCode ?? "");
     return String(row?.groupId ?? row?.GROUP_ID ?? row?.group_id ?? row?.itemCode ?? row?.ITEM_CODE ?? "");
   };
 
