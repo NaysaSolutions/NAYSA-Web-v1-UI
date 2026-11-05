@@ -943,7 +943,11 @@ function MSStockCardQuery() {
         { key: "quantityIn", header: "Qty In", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-emerald-700 font-semibold" },
         { key: "quantityOut", header: "Qty Out", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-rose-600 font-semibold" },
         { key: "endingBalance", header: "End. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
+        { key: "unitCost", header: "Unit Cost", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
+        { key: "openPRQty", header: "Open PR Qty", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-semibold" },
+        { key: "openPOQty", header: "Open PO Qty", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-semibold" },
+        { key: "reorderLevelQty", header: "Reorder Level Qty", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-semibold" },
         { key: "inventoryAcct", header: "Inventory Acct", size: 140 },
       ],
       perItem: [
@@ -956,6 +960,7 @@ function MSStockCardQuery() {
         { key: "quantityIn", header: "Qty In", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-emerald-700 font-semibold" },
         { key: "quantityOut", header: "Qty Out", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-rose-600 font-semibold" },
         { key: "endingBalance", header: "End. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
+        { key: "unitCost", header: "Unit Cost", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
       ],
       perLot: [
@@ -968,6 +973,7 @@ function MSStockCardQuery() {
         { key: "bbDate", header: "BB Date", size: 110, type: "date" },
         { key: "qcStat", header: "QC Status", size: 110 },
         { key: "balance", header: "Balance", size: 120, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
+        { key: "unitCost", header: "Unit Cost", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
       ],
       });
