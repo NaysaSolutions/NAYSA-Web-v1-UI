@@ -96,6 +96,7 @@ export const pageRegistry = {
   
   // Vehicle Service
   VEHSVMast: lazyPage(() => import("./NAYSA Cloud/Master Data/VEMasterData/VEHSVMast.jsx")),
+  VESVPriceMatrix: lazyPage(() => import("./NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VESVPriceMatrix.jsx")),
   VESVJOMotor: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Vehicle Service/MJO.jsx")),
   VESVJO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Vehicle Service/CJO.jsx")),
 
