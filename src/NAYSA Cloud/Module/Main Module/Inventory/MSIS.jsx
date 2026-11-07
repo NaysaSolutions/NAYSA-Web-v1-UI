@@ -3342,7 +3342,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
         <WarehouseLookupModal
           isOpen={state.warehouseLookupOpen}
           onClose={handleCloseWarehouseLookup}
-          filter="ActiveAll"
+          filter={`InventoryByBranch|${branchCode || ""}|MS`}
           branchCode={branchCode || ""}
         invType="MS"
         />

@@ -16,147 +16,61 @@ const PostMSRFP = ({ isOpen, onClose, userCode }) => {
   const alertFired = useRef(false);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const fetchPostingData = async () => {
+    let mounted = true;
+    const load = async () => {
       if (!isOpen) return;
-
       setLoading(true);
       setModalReady(false);
       alertFired.current = false;
-
       try {
-        const endpoint = "postingMSRFP";
-        const response = await fetchDataJson(endpoint);
-        let rawData = [];
-
-        if (Array.isArray(response?.data)) {
-          if (response.data[0]?.result) {
-            try {
-              rawData = JSON.parse(response.data[0].result || "[]");
-            } catch (error) {
-              console.error("MSRFP posting JSON parse error:", error);
-            }
-          } else {
-            rawData = response.data;
-          }
-        }
-
-        if (!rawData.length) {
-          if (!alertFired.current) {
-            useSwalValidationAlert({
-              icon: "info",
-              title: "No Transactions to Post",
-              message: "There are no MSRFP records to display.",
-            });
-            alertFired.current = true;
-          }
-
+        const response = await fetchDataJson("postingMSRFP");
+        const rows = typeof response?.data?.[0]?.result === "string"
+          ? JSON.parse(response.data[0].result || "[]")
+          : Array.isArray(response?.data) ? response.data : [];
+        if (!rows.length) {
+          useSwalValidationAlert({ icon: "info", title: "No Transactions to Finalize", message: "There are no open MSRFP records to display." });
+          alertFired.current = true;
           onClose?.();
           return;
         }
-
-        const colConfig = await useSelectedHSColConfig(endpoint);
-
-        if (isMounted) {
-          setData(rawData);
-          setColConfigData(colConfig);
+        const columns = await useSelectedHSColConfig("postingMSRFP");
+        if (mounted) {
+          setData(rows);
+          setColConfigData(columns);
           setModalReady(true);
         }
       } catch (error) {
-        console.error("Error fetching MSRFP posting records:", error);
+        console.error("Unable to load MSRFP finalization records.", error);
+        if (!alertFired.current) useSwalValidationAlert({ icon: "error", title: "MSRFP Finalization", message: "Unable to load transactions for finalization." });
+        onClose?.();
       } finally {
-        if (isMounted) setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
-
-    fetchPostingData();
-
-    return () => {
-      isMounted = false;
-      setModalReady(false);
-    };
+    load();
+    return () => { mounted = false; };
   }, [isOpen, onClose]);
 
-  const handlePost = async (selectedData, userPw) => {
-    setUserPassword(userPw || null);
-    await useHandlePostTran(
-      selectedData,
-      userPw,
-      "MSRFP",
-      userCode,
-      setLoading,
-      onClose,
-    );
-  };
-
-  const pickDocAndBranch = (row) => {
-    if (!row) return { docNo: null, branchCode: null };
-
-    const docNo =
-      row.rfpNo ||
-      row.rfp_no ||
-      row.RFP_NO ||
-      row.msrfpNo ||
-      row.MSRFPNo ||
-      row.MSRFP_NO ||
-      row.documentNo ||
-      row.docNo;
-    const branchCode =
-      row.branchCode ||
-      row.branch_code ||
-      row.BRANCH_CODE ||
-      row.bCode ||
-      row.BCode ||
-      row.BC ||
-      row.Branch;
-
-    return { docNo, branchCode };
+  const handlePost = async (selectedRows, password) => {
+    setUserPassword(password || null);
+    await useHandlePostTran(selectedRows, password, "MSRFP", userCode, setLoading, onClose);
   };
 
   const handleViewDocument = (row) => {
-    const { docNo, branchCode } = pickDocAndBranch(row);
-
+    const docNo = row?.msrfpNo || row?.rfpNo || row?.rfp_no || row?.RFP_NO || row?.documentNo || row?.docNo;
+    const branchCode = row?.branchCode || row?.branch_code || row?.BRANCH_CODE || row?.bCode || row?.BC;
     if (!docNo || !branchCode) {
-      useSwalValidationAlert({
-        icon: "warning",
-        title: "Missing keys",
-        message: "Cannot determine MSRFP No or Branch Code.",
-      });
+      useSwalValidationAlert({ icon: "warning", title: "Missing Document Information", message: "Cannot determine the MSRFP number or branch." });
       return;
     }
-
-    const url =
-      `${window.location.origin}/page/MSRFP` +
-      `?rfpNo=${encodeURIComponent(docNo)}` +
-      `&branchCode=${encodeURIComponent(branchCode)}` +
-      `&viewDocument=true`;
-
+    const url = `${window.location.origin}/page/MSRFP?rfpNo=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}&viewDocument=true`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  return (
-    <>
-      {modalReady && (
-        <GlobalGLPostingModalv1
-          data={data}
-          colConfigData={colConfigData}
-          title="Finalize MS Return from Production"
-          userPassword={userPassword}
-          btnCaption="Okay"
-          onClose={onClose}
-          onPost={handlePost}
-          onViewDocument={handleViewDocument}
-          remoteLoading={loading}
-        />
-      )}
-
-      {ReactDOM.createPortal(
-        loading ? <LoadingSpinner /> : null,
-        document.body,
-      )}
-    </>
-  );
+  return <>
+    {modalReady && <GlobalGLPostingModalv1 data={data} colConfigData={colConfigData} title="Finalize MS Return from Production" userPassword={userPassword} btnCaption="Finalize" onClose={onClose} onPost={handlePost} onViewDocument={handleViewDocument} remoteLoading={loading} />}
+    {ReactDOM.createPortal(loading ? <LoadingSpinner /> : null, document.body)}
+  </>;
 };
 
 export default PostMSRFP;

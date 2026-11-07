@@ -23,7 +23,7 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import { formatNumber, parseFormattedNumber, useSwalErrorAlert, useSwalProceedConfirm, useSwalshowSaveSuccessDialog } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useGetCurrentDayV2, useformatToDatev2 } from "@/NAYSA Cloud/Global/dates.js";
-import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
+import { useSelectedDefaultItemConversion, useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData.js";
 import {
   transactionActionsCellStyle,
   transactionActionsHeaderStyle,
@@ -35,7 +35,7 @@ const parseResult = (response) => {
   if (!raw) return null;
   try { return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; }
 };
-const blankRow = (lineNo, invType = "FG", decQty = 2) => ({ lineNo, groupId: "", boqNo: "", boqLineNo: null, uniqueKey: "", invType, itemNo: "", itemDesc: "", uomCode: "", qtyHand: formatNumber(0, decQty), requestQty: formatNumber(0, decQty), allocatedQty: formatNumber(0, decQty), allocationStatus: "F", quantity: formatNumber(0, decQty), unitCost: "0.000000", amount: "0.00", lotNo: "", bbDate: "", qsCode: "", whCode: "", locCode: "", acctCode: "", costMethod: "", fifoDocCode: "", fifoDocNo: "", wacKey: "", fifoLocId: null, wacLocId: null });
+const blankRow = (lineNo, invType = "FG", decQty = 2) => ({ lineNo, groupId: "", boqNo: "", boqLineNo: null, uniqueKey: "", invType, itemNo: "", itemDesc: "", uomCode: "", convertedUomCode: "", convertedQuantity: formatNumber(0, decQty), conversionFactor: 1, qtyHand: formatNumber(0, decQty), requestQty: formatNumber(0, decQty), allocatedQty: formatNumber(0, decQty), allocationStatus: "F", quantity: formatNumber(0, decQty), unitCost: "0.000000", amount: "0.00", lotNo: "", bbDate: "", qsCode: "", whCode: "", locCode: "", acctCode: "", costMethod: "", fifoDocCode: "", fifoDocNo: "", wacKey: "", fifoLocId: null, wacLocId: null });
 const calculateRowAmount = (row) => Math.round(parseFormattedNumber(row?.quantity) * parseFormattedNumber(row?.unitCost) * 100) / 100;
 const formatGlReferenceDate = (value) => {
   const rawValue = String(value || "").trim();
@@ -98,6 +98,7 @@ const PRJBL = ({
   const getQtyDecimals = () => decQty;
   const getCostDecimals = (invType) => Number(companyInfo?.[{ FG: "itemDecUcostFG", RM: "itemDecUcostRM", MS: "itemDecUcostMS" }[String(invType || "").toUpperCase()]] ?? 2);
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
+  const isInventoryConversionEnabled = hsDoc?.invConversion === "E";
   const documentTitle = `${hsDoc?.docName || "Project Material Backload"} Transaction`;
   const { pagePermission, isReadOnly, isFullAccess, canSave } = usePagePermission({ componentKey, menuName:documentTitle, debug:false });
   const [topTab, setTopTab] = useState("details");
@@ -155,7 +156,14 @@ const PRJBL = ({
       const response = await apiClient.get(api.load, { params: { blNo: docNo, branchCode, tranType: transactionType } });
       const data = parseResult(response);
       if (!data) return;
-      setState((old) => ({ ...old, documentID: data.blId || "", documentNo: data.blNo || "", documentDate: useformatToDatev2(data.blDate), documentStatus: data.documentStatus || "", status: data.docStatus || "OPEN", branchCode: data.branchCode || "", tranType: transactionType, projCode: data.projCode || "", projName: data.projName || "", custCode: data.custCode || "", custName: data.custName || "", phaseCode: data.phaseCode || "", siteCode: data.siteCode || "", actCode: data.actCode || "", rcCode: data.rcCode || "", referenceNo: data.referenceNo || "", whCode: data.whCode || "", whName: data.whName || "", locCode: data.locCode || "", locName: data.locName || "", remarks: data.particular || "", detailRows: (data.dt1 || []).map((row, index) => ({ ...row, lineNo: row.lineNo || index + 1, qtyHand: formatNumber(row.qtyHand || 0, getQtyDecimals(row.invType)), requestQty: formatNumber(row.requestQty ?? row.quantity ?? 0, getQtyDecimals(row.invType)), allocatedQty: formatNumber(row.allocatedQty ?? row.quantity ?? 0, getQtyDecimals(row.invType)), allocationStatus: row.allocationStatus || "F", quantity: formatNumber(row.quantity || 0, getQtyDecimals(row.invType)), unitCost: formatNumber(row.unitCost || 0, getCostDecimals(row.invType)), amount: formatNumber(row.amount || 0, 2) })), detailRowsGL: (data.dt2 || []).map((row) => ({ ...row, slRefNo: row.slRefNo ?? row.slrefNo ?? "", slRefDate: row.slRefDate ?? row.slrefDate ?? "" })) }));
+      setState((old) => ({ ...old, documentID: data.blId || "", documentNo: data.blNo || "", documentDate: useformatToDatev2(data.blDate), documentStatus: data.documentStatus || "", status: data.docStatus || "OPEN", branchCode: data.branchCode || "", tranType: transactionType, projCode: data.projCode || "", projName: data.projName || "", custCode: data.custCode || "", custName: data.custName || "", phaseCode: data.phaseCode || "", siteCode: data.siteCode || "", actCode: data.actCode || "", rcCode: data.rcCode || "", referenceNo: data.referenceNo || "", whCode: data.whCode || "", whName: data.whName || "", locCode: data.locCode || "", locName: data.locName || "", remarks: data.particular || "", detailRows: (data.dt1 || []).map((row, index) => {
+        const decimals = getQtyDecimals(row.invType);
+        const conversionFactor = parseFormattedNumber(row.conversionFactor) || 1;
+        const baseConversionQty = transactionType === "I"
+          ? parseFormattedNumber(row.quantity)
+          : parseFormattedNumber(row.allocatedQty ?? row.quantity);
+        return { ...row, lineNo: row.lineNo || index + 1, convertedUomCode: row.convertedUomCode || row.uomCode || "", convertedQuantity: formatNumber(row.convertedQuantity ?? (baseConversionQty / conversionFactor), decimals), conversionFactor, qtyHand: formatNumber(row.qtyHand || 0, decimals), requestQty: formatNumber(row.requestQty ?? row.quantity ?? 0, decimals), allocatedQty: formatNumber(row.allocatedQty ?? row.quantity ?? 0, decimals), allocationStatus: row.allocationStatus || "F", quantity: formatNumber(row.quantity || 0, decimals), unitCost: formatNumber(row.unitCost || 0, getCostDecimals(row.invType)), amount: formatNumber(row.amount || 0, 2) };
+      }), detailRowsGL: (data.dt2 || []).map((row) => ({ ...row, slRefNo: row.slRefNo ?? row.slrefNo ?? "", slRefDate: row.slRefDate ?? row.slrefDate ?? "" })) }));
     } catch (error) { await Swal.fire({ icon: "error", title: "Retrieval Error", text: error?.response?.data?.details || error.message }); }
     finally { setLoading(false); }
   }, [companyInfo]);
@@ -163,7 +171,14 @@ const PRJBL = ({
   const changeDetail = (index, field, value) => setState((old) => ({ ...old, detailRowsGL: [], detailRows: old.detailRows.map((row, i) => {
     if (i !== index) return row;
     const nextRow = { ...row, [field]: value };
-    if (field === "quantity" || field === "unitCost") nextRow.amount = formatNumber(calculateRowAmount(nextRow), 2);
+    const conversionFactor = parseFormattedNumber(nextRow.conversionFactor) || 1;
+    if (isInventoryConversionEnabled && field === "quantity") {
+      nextRow.convertedQuantity = formatNumber(parseFormattedNumber(value) / conversionFactor, getQtyDecimals(nextRow.invType));
+    }
+    if (isInventoryConversionEnabled && field === "convertedQuantity" && state.tranType === "I") {
+      nextRow.quantity = formatNumber(parseFormattedNumber(value) * conversionFactor, getQtyDecimals(nextRow.invType));
+    }
+    if (["quantity", "convertedQuantity", "unitCost"].includes(field)) nextRow.amount = formatNumber(calculateRowAmount(nextRow), 2);
     return nextRow;
   }) }));
   const confirmApplyDetailValue = async (index, field, value, label, extra = {}) => {
@@ -255,7 +270,22 @@ const PRJBL = ({
       useSwalErrorAlert("BOQ Lookup Error", error?.response?.data?.details || error.message);
     } finally { setLoading(false); }
   };
-  const applyBoqItems = (payload) => {
+  const applyDefaultConversion = async (item, quantity = 0) => {
+    if (!isInventoryConversionEnabled) {
+      return {
+        convertedUomCode: item.uomCode || "",
+        convertedQuantity: quantity,
+        conversionFactor: 1,
+      };
+    }
+    return useSelectedDefaultItemConversion({
+      invType: item.invType,
+      itemCode: item.itemNo || item.itemCode,
+      baseUomCode: item.uomCode,
+      quantity,
+    });
+  };
+  const applyBoqItems = async (payload) => {
     const selected = payload?.records || [];
     setBoqLookupOpen(false);
     if (!selected.length) return;
@@ -264,14 +294,73 @@ const PRJBL = ({
       useSwalErrorAlert("Duplicate BOQ Reference", "The selected item from the BOQ Reference already exists in Item Details. Selecting the same BOQ item more than once is not allowed.");
       return;
     }
+    const convertedItems = await Promise.all(selected.map(async (item) => {
+      const qty = parseFormattedNumber(item.boqBalance);
+      const conversion = await applyDefaultConversion(item, transactionType === "I" ? qty : 0);
+      return { item, qty, conversion };
+    }));
     setState((old) => ({
       ...old,
       detailRowsGL: [],
-      detailRows: [...old.detailRows, ...selected.map((item, index) => {
-        const qty = parseFormattedNumber(item.boqBalance);
+      detailRows: [...old.detailRows, ...convertedItems.map(({ item, qty, conversion }, index) => {
         const cost = parseFormattedNumber(item.unitCost);
-        return { ...blankRow(old.detailRows.length + index + 1, item.invType, decQty), groupId:item.groupId || "", boqNo:item.boqNo || "", boqLineNo:item.boqLineNo ?? null, itemNo:item.itemNo || "", itemDesc:item.itemDesc || "", uomCode:item.uomCode || "", requestQty:formatNumber(qty,getQtyDecimals(item.invType)), quantity:formatNumber(transactionType === "I" ? qty : 0,getQtyDecimals(item.invType)), unitCost:formatNumber(cost,getCostDecimals(item.invType)), amount:formatNumber(transactionType === "I" ? qty*cost : 0,2), whCode:old.whCode, locCode:old.locCode };
+        return { ...blankRow(old.detailRows.length + index + 1, item.invType, decQty), groupId:item.groupId || "", boqNo:item.boqNo || "", boqLineNo:item.boqLineNo ?? null, itemNo:item.itemNo || "", itemDesc:item.itemDesc || "", uomCode:item.uomCode || "", convertedUomCode:conversion.convertedUomCode || item.uomCode || "", convertedQuantity:formatNumber(conversion.convertedQuantity || 0,getQtyDecimals(item.invType)), conversionFactor:parseFormattedNumber(conversion.conversionFactor) || 1, requestQty:formatNumber(qty,getQtyDecimals(item.invType)), quantity:formatNumber(transactionType === "I" ? qty : 0,getQtyDecimals(item.invType)), unitCost:formatNumber(cost,getCostDecimals(item.invType)), amount:formatNumber(transactionType === "I" ? qty*cost : 0,2), whCode:old.whCode, locCode:old.locCode };
       })],
+    }));
+  };
+  const applySingleLookupItem = async (rowIndex, item) => {
+    if (!item || rowIndex === null) return;
+    const currentRow = state.detailRows[rowIndex];
+    const selectedItem = {
+      ...item,
+      invType: currentRow?.invType,
+      itemNo: item.itemCode || "",
+      uomCode: item.uomCode || "",
+    };
+    const conversion = await applyDefaultConversion(selectedItem, 0);
+    setState((old) => ({
+      ...old,
+      detailRowsGL: [],
+      detailRows: old.detailRows.map((row, index) => index === rowIndex ? {
+        ...row,
+        itemNo: selectedItem.itemNo,
+        itemDesc: item.itemName || item.itemDesc || "",
+        uomCode: selectedItem.uomCode,
+        convertedUomCode: conversion.convertedUomCode || selectedItem.uomCode,
+        convertedQuantity: formatNumber(conversion.convertedQuantity || 0, getQtyDecimals(row.invType)),
+        conversionFactor: parseFormattedNumber(conversion.conversionFactor) || 1,
+        qtyHand: formatNumber(item.qtyHand || 0, getQtyDecimals(row.invType)),
+        unitCost: formatNumber(item.unitCost || 0, getCostDecimals(row.invType)),
+        quantity: formatNumber(0, getQtyDecimals(row.invType)),
+        amount: "0.00",
+        whCode: row.whCode || old.whCode,
+        locCode: row.locCode || old.locCode,
+      } : row),
+    }));
+  };
+  const applyMultipleLookupItems = async (invType, selected) => {
+    const existingItems = new Set(state.detailRows.map((row) => `${row.invType}|${row.itemNo}`));
+    const newItems = selected.filter((item) => !existingItems.has(`${invType}|${item.itemCode}`));
+    const convertedItems = await Promise.all(newItems.map(async (item) => ({
+      item,
+      conversion: await applyDefaultConversion({ ...item, invType, itemNo:item.itemCode }, 0),
+    })));
+    setState((old) => ({
+      ...old,
+      detailRowsGL: [],
+      detailRows: [...old.detailRows, ...convertedItems.map(({ item, conversion }, index) => ({
+        ...blankRow(old.detailRows.length + index + 1, invType, decQty),
+        itemNo: item.itemCode || "",
+        itemDesc: item.itemName || item.itemDesc || "",
+        uomCode: item.uomCode || "",
+        convertedUomCode: conversion.convertedUomCode || item.uomCode || "",
+        convertedQuantity: formatNumber(conversion.convertedQuantity || 0, getQtyDecimals(invType)),
+        conversionFactor: parseFormattedNumber(conversion.conversionFactor) || 1,
+        qtyHand: formatNumber(item.qtyHand || 0, getQtyDecimals(invType)),
+        unitCost: formatNumber(item.unitCost || 0, getCostDecimals(invType)),
+        whCode: old.whCode,
+        locCode: old.locCode,
+      }))],
     }));
   };
   const insertBlankRow = (index) => setState((old) => {
@@ -285,8 +374,8 @@ const PRJBL = ({
     if(state.tranType==="O" && parseFormattedNumber(row?.allocatedQty)>0){const confirm=await useSwalProceedConfirm("Delete Allocated Backload Detail?","Deleting this line will release its inventory allocation.","Yes");if(!confirm?.isConfirmed)return;setLoading(true);try{await apiClient.post(api.allocation,{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode||"",dt1:[]}});}catch(error){useSwalErrorAlert("Delete Detail Failed",error?.response?.data?.details||error.message);setLoading(false);return;}finally{setLoading(false);}}
     const rows=state.detailRows.filter((_,i)=>i!==index).map((item,i)=>({...item,lineNo:i+1}));setState((old)=>({...old,detailRows:rows,detailRowsGL:[]}));if(state.documentID)await persistRows(rows);
   };
-  const generateGLEntries = async (sourceRows = state.detailRows) => {
-    if (!sourceRows.length || (state.tranType === "O" && !sourceRows.some((row) => parseFormattedNumber(row.allocatedQty) > 0))) return [];
+  const generateGLEntries = async (sourceRows = state.detailRows, requireEntries = false) => {
+    if (!sourceRows.length || (!requireEntries && state.tranType === "O" && !sourceRows.some((row) => parseFormattedNumber(row.allocatedQty) > 0))) return [];
     const response = await apiClient.post(api.entries, { json_data: { blDate: state.documentDate, tranType: transactionType, custCode: state.custCode, custName: state.custName, rcCode: state.rcCode, dt1: sourceRows.map((row, index) => ({ ...row, lineNo: index + 1, amount: calculateRowAmount(row) })) } });
     const rows = response?.data?.data || [];
     if (rows[0]?.errorCount) throw new Error(rows[0].errorMsg || "Unable to generate General Ledger entries.");
@@ -294,18 +383,18 @@ const PRJBL = ({
     update({ detailRowsGL: normalized });
     return normalized;
   };
-  const copyDocument = () => setState((old) => ({ ...old, documentID: "", documentNo: "", documentStatus: "", status: "OPEN", documentDate: useGetCurrentDayV2(), detailRows: old.detailRows.map((row, index) => ({ ...row, lineNo: index + 1, groupId: "", boqNo: "", boqLineNo: null, ...(old.tranType === "O" ? {allocatedQty:formatNumber(0,decQty),allocationStatus:"F",quantity:formatNumber(0,decQty),unitCost:"0.000000",amount:"0.00"} : {}) })), detailRowsGL: [] }));
+  const copyDocument = () => setState((old) => ({ ...old, documentID: "", documentNo: "", documentStatus: "", status: "OPEN", documentDate: useGetCurrentDayV2(), detailRows: old.detailRows.map((row, index) => ({ ...row, lineNo: index + 1, groupId: "", boqNo: "", boqLineNo: null, ...(old.tranType === "O" ? {allocatedQty:formatNumber(0,decQty),convertedQuantity:formatNumber(0,decQty),allocationStatus:"F",quantity:formatNumber(0,decQty),unitCost:"0.000000",amount:"0.00"} : {}) })), detailRowsGL: [] }));
   const persistRows = async (sourceRows, showSuccess = false) => {
     setLoading(true);
     try {
       const glRows = await generateGLEntries(sourceRows);
-      const payload = { branchCode: state.branchCode, blId: state.documentID, blNo: state.documentNo, blDate: state.documentDate, docCode: DOC_TYPE, tranType: transactionType, projCode: state.projCode, projName: state.projName, custCode: state.custCode, custName: state.custName, phaseCode: state.phaseCode, siteCode: state.siteCode, actCode: state.actCode, rcCode: state.rcCode, referenceNo: state.referenceNo, whCode: state.whCode, locCode: state.locCode, particular: state.remarks, userCode: currentUserRow?.userCode || "", dt1: sourceRows.map((row, i) => ({ ...row, lineNo: i + 1, qtyHand: parseFormattedNumber(row.qtyHand), requestQty: parseFormattedNumber(row.requestQty), allocatedQty: parseFormattedNumber(row.allocatedQty), quantity: parseFormattedNumber(row.quantity), unitCost: parseFormattedNumber(row.unitCost), amount: calculateRowAmount(row), whCode: row.whCode || state.whCode, locCode: row.locCode || state.locCode })), dt2: glRows.map((row, index) => ({ ...row, recNo: index + 1, debit: parseFormattedNumber(row.debit), credit: parseFormattedNumber(row.credit) })) };
+      const payload = { branchCode: state.branchCode, blId: state.documentID, blNo: state.documentNo, blDate: state.documentDate, docCode: DOC_TYPE, tranType: transactionType, projCode: state.projCode, projName: state.projName, custCode: state.custCode, custName: state.custName, phaseCode: state.phaseCode, siteCode: state.siteCode, actCode: state.actCode, rcCode: state.rcCode, referenceNo: state.referenceNo, whCode: state.whCode, locCode: state.locCode, particular: state.remarks, userCode: currentUserRow?.userCode || "", dt1: sourceRows.map((row, i) => ({ ...row, lineNo: i + 1, convertedUomCode:row.convertedUomCode || row.uomCode || "", convertedQuantity:parseFormattedNumber(row.convertedQuantity), conversionFactor:parseFormattedNumber(row.conversionFactor) || 1, qtyHand: parseFormattedNumber(row.qtyHand), requestQty: parseFormattedNumber(row.requestQty), allocatedQty: parseFormattedNumber(row.allocatedQty), quantity: parseFormattedNumber(row.quantity), unitCost: parseFormattedNumber(row.unitCost), amount: calculateRowAmount(row), whCode: row.whCode || state.whCode, locCode: row.locCode || state.locCode })), dt2: glRows.map((row, index) => ({ ...row, recNo: index + 1, debit: parseFormattedNumber(row.debit), credit: parseFormattedNumber(row.credit) })) };
       const response = await apiClient.post(api.upsert, { json_data: payload });
       const result = response?.data?.data?.[0] || {};
       if (result.errorCount) throw new Error(result.errorMsg);
       await load(result.docNo || state.documentNo, state.branchCode, state.tranType);
       if (showSuccess) useSwalshowSaveSuccessDialog(reset);
-    } catch (error) { await Swal.fire({ icon: "error", title: "Save Error", text: error?.response?.data?.details || error?.response?.data?.message || error.message }); }
+    } catch (error) { useSwalErrorAlert("Save Backload", error?.response?.data?.details || error?.response?.data?.message || error.message); }
     finally { setLoading(false); }
   };
   const save = async () => persistRows(state.detailRows, true);
@@ -327,7 +416,7 @@ const PRJBL = ({
     try {
       const response=await apiClient.post(api.allocation,{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,docCode:DOC_TYPE,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode || "",dt1:allocation?.allocations || []}});
       const result=parseResult(response) || {}; const allocated=parseFormattedNumber(result.totalAllocated); const amount=parseFormattedNumber(result.itemAmount);
-      const rows=state.detailRows.map((item,index)=>index===pickingIndex?{...item,allocatedQty:formatNumber(allocated,getQtyDecimals(item.invType)),quantity:formatNumber(allocated,getQtyDecimals(item.invType)),allocationStatus:result.allocationStatus || "F",unitCost:formatNumber(allocated?amount/allocated:0,getCostDecimals(item.invType)),amount:formatNumber(amount,2)}:item);
+      const rows=state.detailRows.map((item,index)=>index===pickingIndex?{...item,allocatedQty:formatNumber(allocated,getQtyDecimals(item.invType)),convertedQuantity:formatNumber(allocated/(parseFormattedNumber(item.conversionFactor)||1),getQtyDecimals(item.invType)),quantity:formatNumber(allocated,getQtyDecimals(item.invType)),allocationStatus:result.allocationStatus || "F",unitCost:formatNumber(allocated?amount/allocated:0,getCostDecimals(item.invType)),amount:formatNumber(amount,2)}:item);
       setPickingIndex(null); await persistRows(rows);
     } catch(error){useSwalErrorAlert("Allocation Failed",error?.response?.data?.details || error.message);} finally{setLoading(false);}
   };
@@ -335,7 +424,7 @@ const PRJBL = ({
   const bulkAllocation=async(release=false)=>{
     if(!state.documentID)return useSwalErrorAlert("Save Required","Save the Outgoing Backload before allocating stock.");
     const confirm=await useSwalProceedConfirm(release?"Release All?":"Allocate All?",release?"This will release all Outgoing Backload allocations.":"This will allocate available stock for all Outgoing Backload details.","Yes"); if(!confirm?.isConfirmed)return;
-    setLoading(true);try{let rows=[...state.detailRows];for(let i=0;i<rows.length;i+=1){const row=rows[i];const stock=release?[]:((parseResult(await apiClient.post(api.stock,{json_data:{blId:state.documentID,blNo:state.documentNo,branchCode:state.branchCode,docCode:DOC_TYPE,whCode:row.whCode||state.whCode,locCode:row.locCode||state.locCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty)}}))||{}).stockRows||[]);const response=await apiClient.post(api.allocation,{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,docCode:DOC_TYPE,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode||"",dt1:release?[]:buildAutoAllocations(stock,row.requestQty)}});const result=parseResult(response)||{};const allocated=parseFormattedNumber(result.totalAllocated),amount=parseFormattedNumber(result.itemAmount);rows[i]={...row,allocatedQty:formatNumber(allocated,getQtyDecimals(row.invType)),quantity:formatNumber(allocated,getQtyDecimals(row.invType)),allocationStatus:result.allocationStatus||"F",unitCost:formatNumber(allocated?amount/allocated:0,getCostDecimals(row.invType)),amount:formatNumber(amount,2)};}await persistRows(rows);}catch(error){useSwalErrorAlert(release?"Release All Failed":"Allocate All Failed",error?.response?.data?.details||error.message);}finally{setLoading(false);}
+    setLoading(true);try{let rows=[...state.detailRows];for(let i=0;i<rows.length;i+=1){const row=rows[i];const stock=release?[]:((parseResult(await apiClient.post(api.stock,{json_data:{blId:state.documentID,blNo:state.documentNo,branchCode:state.branchCode,docCode:DOC_TYPE,whCode:row.whCode||state.whCode,locCode:row.locCode||state.locCode,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty)}}))||{}).stockRows||[]);const response=await apiClient.post(api.allocation,{json_data:{blId:state.documentID,blNo:state.documentNo,blDate:state.documentDate,branchCode:state.branchCode,docCode:DOC_TYPE,groupId:row.groupId,lineNo:row.lineNo,invType:row.invType,itemNo:row.itemNo,requestedQty:parseFormattedNumber(row.requestQty),userCode:currentUserRow?.userCode||"",dt1:release?[]:buildAutoAllocations(stock,row.requestQty)}});const result=parseResult(response)||{};const allocated=parseFormattedNumber(result.totalAllocated),amount=parseFormattedNumber(result.itemAmount);rows[i]={...row,allocatedQty:formatNumber(allocated,getQtyDecimals(row.invType)),convertedQuantity:formatNumber(allocated/(parseFormattedNumber(row.conversionFactor)||1),getQtyDecimals(row.invType)),quantity:formatNumber(allocated,getQtyDecimals(row.invType)),allocationStatus:result.allocationStatus||"F",unitCost:formatNumber(allocated?amount/allocated:0,getCostDecimals(row.invType)),amount:formatNumber(amount,2)};}await persistRows(rows);}catch(error){useSwalErrorAlert(release?"Release All Failed":"Allocate All Failed",error?.response?.data?.details||error.message);}finally{setLoading(false);}
   };
 
   const detailColumnDefs = [
@@ -346,10 +435,18 @@ const PRJBL = ({
     { key: "allocationStatus", label: "Picking Status", width: 140 },
     { key: "itemNo", label: "Item Code", width: 130 },
     { key: "itemDesc", label: "Item Name", width: 280 },
+    ...(isInventoryConversionEnabled && state.tranType === "I" ? [
+      { key: "convertedUomCode", label: "Required UOM", width: 130 },
+      { key: "convertedQuantity", label: "Required Qty", width: 140 },
+    ] : []),
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "qtyHand", label: "Qty on Hand", width: 130 },
     { key: "requestQty", label: "Required Quantity", width: 145 },
     { key: "allocatedQty", label: "Allocated Quantity", width: 155 },
+    ...(isInventoryConversionEnabled && state.tranType === "O" ? [
+      { key: "convertedQuantity", label: "Converted Qty", width: 140 },
+      { key: "convertedUomCode", label: "Converted UOM", width: 140 },
+    ] : []),
     { key: "quantity", label: "Quantity", width: 120 },
     { key: "unitCost", label: "Unit Cost", width: 130 },
     { key: "amount", label: "Amount", width: 150 },
@@ -368,7 +465,23 @@ const PRJBL = ({
     renderHeaderContextMenu,
     renderResizableHeader,
   } = useResizableTableColumns(detailColumnDefs);
-  const visibleDetailColumns = getOrderedColumns(detailColumnDefs).filter(
+  const preferredDetailColumns = getOrderedColumns(detailColumnDefs);
+  const orderedDetailColumns = (() => {
+    if (!isInventoryConversionEnabled) return preferredDetailColumns;
+    const conversionKeys = new Set(["convertedQuantity", "convertedUomCode"]);
+    const columns = preferredDetailColumns.filter((column) => !conversionKeys.has(column.key));
+    const anchorKey = state.tranType === "I" ? "itemDesc" : "allocatedQty";
+    const anchorIndex = columns.findIndex((column) => column.key === anchorKey);
+    const conversionOrder = state.tranType === "I"
+      ? ["convertedUomCode", "convertedQuantity"]
+      : ["convertedQuantity", "convertedUomCode"];
+    const conversionColumns = conversionOrder
+      .map((key) => preferredDetailColumns.find((column) => column.key === key))
+      .filter(Boolean);
+    columns.splice(anchorIndex + 1, 0, ...conversionColumns);
+    return columns;
+  })();
+  const visibleDetailColumns = orderedDetailColumns.filter(
     (column) =>
       (!["allocationStatus","requestQty","allocatedQty"].includes(column.key) || state.tranType === "O") &&
       (column.key !== "quantity" || state.tranType === "I") &&
@@ -420,16 +533,22 @@ const PRJBL = ({
         return <td key={column.key} className={common} style={style}>{row.itemNo ? row.itemNo : renderLookupCell("", () => { if (row.invType) setItemLookupIndex(index); }, !row.invType)}</td>;
       case "itemDesc":
       case "uomCode":
+      case "convertedUomCode":
         return <td key={column.key} className={common} style={style}>{row[column.key]}</td>;
       case "allocationStatus":
         return <td key={column.key} className={`${common} text-center`} style={style}>{{F:"For Allocation",T:"Partially Allocated",P:"Allocated"}[row.allocationStatus] || "For Allocation"}</td>;
       case "qtyHand":
         return <td key={column.key} className={`${common} text-right`} style={style}>{formatNumber(parseFormattedNumber(row.qtyHand), getQtyDecimals(row.invType))}</td>;
       case "quantity":
+      case "convertedQuantity":
       case "unitCost": {
         const field = column.key;
-        const disabled = finalized || (field === "quantity" ? (!incoming && !row.uniqueKey) : !incoming);
-        const decimals = field === "quantity" ? getQtyDecimals(row.invType) : getCostDecimals(row.invType);
+        const isQuantityField = ["quantity", "convertedQuantity"].includes(field);
+        const disabled = finalized || (field === "quantity" ? (!incoming && !row.uniqueKey) : field === "convertedQuantity" ? !incoming : !incoming);
+        const decimals = isQuantityField ? getQtyDecimals(row.invType) : getCostDecimals(row.invType);
+        if (field === "convertedQuantity" && !incoming) {
+          return <td key={column.key} className={`${common} text-right`} style={style}>{formatNumber(parseFormattedNumber(row.convertedQuantity), decimals)}</td>;
+        }
         return <td key={column.key} className={common} style={style}><input id={`${field}-${index}`} className="global-tran-td-inputclass-ui w-full border-0 bg-transparent text-right text-xs" value={row[field]} disabled={disabled} onFocus={(event) => handleNumericFocus(event, index, field)} onChange={(event) => changeDetail(index, field, event.target.value.replace(/[^0-9.-]/g, ""))} onBlur={() => commitNumericValue(index, field, decimals)} onKeyDown={(event) => handleNumericEnter(event, index, field, decimals)} /></td>;
       }
       case "requestQty": {
@@ -623,7 +742,7 @@ const PRJBL = ({
         </div>
       </section>
       <section className="global-tran-tab-div-ui">
-        <div className="global-tran-tab-nav-ui"><div className="flex flex-row"><button type="button" className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">General Ledger</button></div><div className="flex justify-end"><button type="button" className="global-tran-button-generateGL" style={{ visibility: finalized ? "hidden" : "visible" }} disabled={loading || finalized || !state.detailRows.length} onClick={async () => { setLoading(true); try { await generateGLEntries(); } catch (error) { await Swal.fire({ icon:"error",title:"GL Generation Error",text:error?.response?.data?.details || error.message }); } finally { setLoading(false); } }}>{loading ? "Generating..." : "Generate GL Entries"}</button></div></div>
+        <div className="global-tran-tab-nav-ui"><div className="flex flex-row"><button type="button" className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">General Ledger</button></div><div className="flex justify-end"><button type="button" className="global-tran-button-generateGL" style={{ visibility: finalized ? "hidden" : "visible" }} disabled={loading || finalized || !state.detailRows.length} onClick={async () => { setLoading(true); try { await generateGLEntries(state.detailRows, true); } catch (error) { useSwalErrorAlert("Generate GL Entries", error?.response?.data?.details || error?.response?.data?.message || error.message); } finally { setLoading(false); } }}>{loading ? "Generating..." : "Generate GL Entries"}</button></div></div>
         <div className="global-tran-table-main-div-ui">
           <div className="global-tran-table-main-sub-div-ui">
             <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
@@ -647,8 +766,8 @@ const PRJBL = ({
     {locationOpen && <LocationLookupModal isOpen onClose={async (row) => { setLocationOpen(false); if (!row) { setSelectedDetailIndex(null); return; } const locCode=row.locCode || ""; const locName=row.locName || ""; if (selectedDetailIndex === null) await confirmApplyHeaderValue("locCode",locCode,"Location",{ locCode,locName }); else await confirmApplyDetailValue(selectedDetailIndex,"locCode",locCode,"Location"); setSelectedDetailIndex(null); }} whCode={selectedDetailIndex === null ? state.whCode : (state.detailRows[selectedDetailIndex]?.whCode || state.whCode)} />}
     {qualityOpen && <QstatLookupModal isOpen onClose={async (row) => { setQualityOpen(false); if (row && selectedDetailIndex !== null) await confirmApplyDetailValue(selectedDetailIndex,"qsCode",row.qstatCode || row.qsCode || "","Quality Status"); setSelectedDetailIndex(null); }} filter="ActiveAll" />}
     {accountOpen && <COAMastLookupModal isOpen onClose={async (row) => { setAccountOpen(false); if (row && selectedDetailIndex !== null) await confirmApplyDetailValue(selectedDetailIndex,"acctCode",row.acctCode || row.accountCode || "","Account Code"); setSelectedDetailIndex(null); }} source="acctCode" />}
-    {itemLookupIndex !== null && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${state.detailRows[itemLookupIndex]?.invType || "FG"}`} docType={DOC_TYPE} customParam="ActiveAll" enableMultiSelect={false} onClose={(payload) => { const rowIndex=itemLookupIndex; setItemLookupIndex(null); const item=payload?.records?.[0]; if (!item || rowIndex === null) return; setState((old) => ({ ...old, detailRowsGL: [], detailRows:old.detailRows.map((row,index) => index===rowIndex ? { ...row,itemNo:item.itemCode || "",itemDesc:item.itemName || item.itemDesc || "",uomCode:item.uomCode || "",qtyHand:formatNumber(item.qtyHand || 0,decQty),unitCost:formatNumber(item.unitCost || 0,6),quantity:formatNumber(0,decQty),amount:"0.00",whCode:row.whCode || old.whCode,locCode:row.locCode || old.locCode } : row) })); }} onCancel={() => setItemLookupIndex(null)} />}
-    {itemLookup && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${itemLookup}`} docType={DOC_TYPE} customParam="ActiveAll" enableMultiSelect onClose={(payload) => { const invType=itemLookup; setItemLookup(null); const selected=payload?.records || []; setState((old) => ({ ...old, detailRowsGL: [], detailRows: [...old.detailRows, ...selected.filter((item) => !old.detailRows.some((r) => r.invType===invType && r.itemNo===item.itemCode)).map((item,i) => ({ ...blankRow(old.detailRows.length+i+1,invType,decQty), itemNo:item.itemCode || "", itemDesc:item.itemName || item.itemDesc || "", uomCode:item.uomCode || "", qtyHand:formatNumber(item.qtyHand || 0,decQty), unitCost:formatNumber(item.unitCost || 0,6), whCode:old.whCode, locCode:old.locCode }))] })); }} onCancel={() => setItemLookup(null)} />}
+    {itemLookupIndex !== null && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${state.detailRows[itemLookupIndex]?.invType || "FG"}`} docType={DOC_TYPE} customParam="ActiveAll" enableMultiSelect={false} onClose={async (payload) => { const rowIndex=itemLookupIndex; setItemLookupIndex(null); await applySingleLookupItem(rowIndex,payload?.records?.[0]); }} onCancel={() => setItemLookupIndex(null)} />}
+    {itemLookup && <ItemMastLookupModal isOpen endpoint={`/getInvLookup${itemLookup}`} docType={DOC_TYPE} customParam="ActiveAll" enableMultiSelect onClose={async (payload) => { const invType=itemLookup; setItemLookup(null); await applyMultipleLookupItems(invType,payload?.records || []); }} onCancel={() => setItemLookup(null)} />}
     <GlobalLookupModalv1 isOpen={boqLookupOpen} data={boqLookupRows} endpoint={boqLookupColumns} title={`Select BOQ Items - ${state.projCode}`} btnCaption="Get Selected BOQ Items" onClose={applyBoqItems} onCancel={() => setBoqLookupOpen(false)} preferenceKey={`${DOC_TYPE}_BOQ_Items`} exportFileName={`${state.projCode}_BOQ_Items`} />
     {pickingIndex !== null && <SearchGlobalItemPickingModal isOpen transaction={{sourceDocType:DOC_TYPE,sourceDocTypeName:"Project Material Backload",sourceDocNo:state.documentNo,sourceLineNo:state.detailRows[pickingIndex]?.lineNo,groupId:state.detailRows[pickingIndex]?.groupId,customerCode:state.custCode,customerName:state.custName,itemCode:state.detailRows[pickingIndex]?.itemNo,itemName:state.detailRows[pickingIndex]?.itemDesc,requestedQty:parseFormattedNumber(state.detailRows[pickingIndex]?.requestQty)}} stockRows={pickingStockRows} existingAllocations={existingAllocations} onClose={()=>setPickingIndex(null)} onConfirm={saveAllocation}/>} 
   </div>;

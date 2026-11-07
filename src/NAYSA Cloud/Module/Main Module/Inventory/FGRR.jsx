@@ -120,8 +120,9 @@ const FGRR = (item) => {
   const location = useLocation();
 
   const { resetFlag } = useReset();
-  const { user, companyInfo, currentUserRow, getReplacementVatRow } = useAuth();
-  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
+  const { user, companyInfo, currentUserRow, getReplacementVatRow, getAllTopHSDocRow } = useAuth();
+  const hsDoc = getAllTopHSDocRow?.(docTypes?.FGRR || "FGRR") || {};
+  const isInventoryConversionEnabled = hsDoc?.invConversion === "E";
   const isViewDocumentUrl = useMemo(
     () => new URLSearchParams(location.search).get("viewDocument") === "true",
     [location.search],
@@ -7822,7 +7823,7 @@ const handleClosePayeeLookup = async (row) => {
         <WarehouseLookupModal
           isOpen={state.warehouseLookupOpen}
           onClose={handleCloseWarehouseLookup}
-          filter={"ByBC" + branchCode}
+          filter={`InventoryByBranch|${state.branchCode || ""}|FG`}
           branchCode={state.branchCode || ""}
           invType="FG"
         />

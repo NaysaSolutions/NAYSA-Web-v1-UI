@@ -87,8 +87,8 @@ const PRJBOQ = () => {
   const loadedFromUrlRef = useRef(false);
   const { currentUserRow, companyInfo, getAllTopHSDocRow, getAllTopVatRow } = useAuth();
   const decQty = Number(companyInfo?.itemDecqtyFG ?? 2);
-  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const hsDoc = getAllTopHSDocRow?.(DOC_TYPE) || {};
+  const isInventoryConversionEnabled = hsDoc?.invConversion === "E";
   const documentTitle = `${hsDoc?.docName || "Bill of Quantity"} Transaction`;
 
   const [topTab, setTopTab] = useState("details");

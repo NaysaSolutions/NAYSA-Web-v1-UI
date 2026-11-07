@@ -195,9 +195,9 @@ const PO = () => {
   const [isViewDocument, setIsViewDocument] = useState(false);
   const decQty = companyInfo?.itemDecqtyPur ?? 2;
   const decUPrice = companyInfo?.pur_decuprice ?? 2;
-  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const docType = docTypes?.PO || "PO";
   const hsDoc = getAllTopHSDocRow(docType) || {};
+  const isInventoryConversionEnabled = hsDoc?.invConversion === "E";
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);

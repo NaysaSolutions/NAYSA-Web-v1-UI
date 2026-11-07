@@ -3033,7 +3033,7 @@ return (
             <WarehouseLookupModal
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
-              filter="ActiveAll"
+              filter={`InventoryByBranch|${branchCode || ""}|MS`}
               branchCode={branchCode || ""}
               source={accountModalSource}
             invType="MS"

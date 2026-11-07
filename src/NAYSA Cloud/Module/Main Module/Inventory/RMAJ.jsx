@@ -3316,7 +3316,7 @@ return (
             <WarehouseLookupModal
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
-              filter={"ByBC" + branchCode}
+              filter={`InventoryByBranch|${branchCode || ""}|RM`}
               branchCode={branchCode || ""}
               source={accountModalSource}
             invType="RM"

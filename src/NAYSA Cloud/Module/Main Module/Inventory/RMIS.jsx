@@ -3286,7 +3286,7 @@ useEffect(() => {
         <WarehouseLookupModal
           isOpen={state.warehouseLookupOpen}
           onClose={handleCloseWarehouseLookup}
-          filter="ActiveAll"
+          filter={`InventoryByBranch|${branchCode || ""}|RM`}
           branchCode={branchCode || ""}
         invType="RM"
         />

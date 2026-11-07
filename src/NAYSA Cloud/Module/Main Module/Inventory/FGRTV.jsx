@@ -3162,7 +3162,7 @@ return (
             <WarehouseLookupModal
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
-              filter="ActiveAll"
+              filter={`InventoryByBranch|${branchCode || ""}|FG`}
               branchCode={branchCode || ""}
               source={accountModalSource}
             invType="FG"

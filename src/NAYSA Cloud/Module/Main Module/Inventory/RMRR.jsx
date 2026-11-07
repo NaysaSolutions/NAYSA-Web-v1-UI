@@ -123,8 +123,9 @@ const RMRR = (item) => {
   const location = useLocation();
 
   const { resetFlag } = useReset();
-  const { user, companyInfo, currentUserRow, getReplacementVatRow } = useAuth();
-  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
+  const { user, companyInfo, currentUserRow, getReplacementVatRow, getAllTopHSDocRow } = useAuth();
+  const hsDoc = getAllTopHSDocRow?.(docTypes?.RMRR || "RMRR") || {};
+  const isInventoryConversionEnabled = hsDoc?.invConversion === "E";
   const isViewDocumentUrl = useMemo(
     () => new URLSearchParams(location.search).get("viewDocument") === "true",
     [location.search],
@@ -7002,7 +7003,7 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
         <WarehouseLookupModal
           isOpen={state.warehouseLookupOpen}
           onClose={handleCloseWarehouseLookup}
-          filter={"ByBC" + branchCode}
+          filter={`InventoryByBranch|${state.branchCode || ""}|RM`}
           branchCode={state.branchCode || ""}
           invType="RM"
         />

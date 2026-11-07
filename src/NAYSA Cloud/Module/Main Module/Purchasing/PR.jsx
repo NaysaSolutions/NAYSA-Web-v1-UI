@@ -167,7 +167,6 @@ const resolveDecimalPlaces = (...values) => {
   const canAddRMItem = hasAccessibleMenuModule(accessibleMenuModules, "RM");
   const canAddVEItem = hasAccessibleMenuModule(accessibleMenuModules, "VE");
   const canAddFAItem = hasAccessibleMenuModule(accessibleMenuModules, "FA");
-  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const [hsOptionRow, setHsOptionRow] = useState(null);
   const decQty = resolveDecimalPlaces(
     hsOptionRow?.itemDecqtyPur,
@@ -194,7 +193,8 @@ const resolveDecimalPlaces = (...values) => {
   const [topTab, setTopTab] = useState("details"); 
   const { resetFlag } = useReset();
   const docType = docTypes?.PR || "PR";
-  const hsDoc = getAllTopHSDocRow(docType);
+  const hsDoc = getAllTopHSDocRow(docType) || {};
+  const isInventoryConversionEnabled = hsDoc?.invConversion === "E";
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
@@ -462,13 +462,13 @@ const resolveDecimalPlaces = (...values) => {
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Name", width: 300 },
     { key: "itemSpecs", label: "Specification", width: 300 },
-    { key: "uomCode", label: "UOM", width: 80 },
     ...(isRegularPrConversion
       ? [
           { key: "uomCode2", label: "Required UOM", width: 130 },
           { key: "uomQty2", label: "Required Quantity", width: 150 },
         ]
       : []),
+    { key: "uomCode", label: "UOM", width: 80 },
     { key: "qtyOnHand", label: "Qty on Hand", width: 130 },
     { key: "qtyNeeded", label: isRegularPrConversion ? "PR Quantity" : "Qty Needed", width: 130 },
     { key: "dateNeeded", label: "Date Needed", width: 140 },
@@ -494,25 +494,39 @@ const resolveDecimalPlaces = (...values) => {
   const orderedPrDetailColumns = (() => {
     if (!isRegularPrConversion) return savedPrDetailColumns;
 
-    const conversionBlockKeys = new Set(["uomCode", "uomCode2", "uomQty2"]);
-    const columnsWithoutConversionBlock = savedPrDetailColumns.filter(
-      (column) => !conversionBlockKeys.has(column.key),
+    const fixedConversionKeys = new Set(["uomCode", "uomCode2", "uomQty2"]);
+    const remainingColumns = savedPrDetailColumns.filter(
+      (column) => !fixedConversionKeys.has(column.key),
     );
-    const qtyOnHandIndex = columnsWithoutConversionBlock.findIndex(
-      (column) => column.key === "qtyOnHand",
+    const specificationIndex = remainingColumns.findIndex(
+      (column) => column.key === "itemSpecs",
     );
-    const conversionBlock = ["uomCode", "uomCode2", "uomQty2"]
+    const requiredColumns = ["uomCode2", "uomQty2"]
       .map((key) => prDetailColumnDefs.find((column) => column.key === key))
       .filter(Boolean);
+    const columnsWithRequired = [...remainingColumns];
+
+    if (specificationIndex < 0) {
+      columnsWithRequired.push(...requiredColumns);
+    } else {
+      columnsWithRequired.splice(specificationIndex + 1, 0, ...requiredColumns);
+    }
+
+    const qtyOnHandIndex = columnsWithRequired.findIndex(
+      (column) => column.key === "qtyOnHand",
+    );
+    const uomColumn = prDetailColumnDefs.find((column) => column.key === "uomCode");
+
+    if (!uomColumn) return columnsWithRequired;
 
     if (qtyOnHandIndex < 0) {
-      return [...columnsWithoutConversionBlock, ...conversionBlock];
+      return [...columnsWithRequired, uomColumn];
     }
 
     return [
-      ...columnsWithoutConversionBlock.slice(0, qtyOnHandIndex),
-      ...conversionBlock,
-      ...columnsWithoutConversionBlock.slice(qtyOnHandIndex),
+      ...columnsWithRequired.slice(0, qtyOnHandIndex),
+      uomColumn,
+      ...columnsWithRequired.slice(qtyOnHandIndex),
     ];
   })();
   const visiblePrDetailColumns = orderedPrDetailColumns.filter((column) => {
