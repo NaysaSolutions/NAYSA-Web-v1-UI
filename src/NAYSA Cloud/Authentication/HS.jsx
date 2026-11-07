@@ -3136,6 +3136,8 @@ function ModuleLicensingTab() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [menuView, setMenuView] =
+    useState("installed");
   const [
     selectedMenuKeys,
     setSelectedMenuKeys,
@@ -3222,6 +3224,8 @@ function ModuleLicensingTab() {
         setMeta({
           mode: payload.mode || "delete_restore",
           snapshotFile: payload.snapshotFile || "",
+          snapshotBackupFile:
+            payload.snapshotBackupFile || "",
           snapshotCreatedAt:
             payload.snapshotCreatedAt || null,
           snapshotUpdatedAt:
@@ -3251,19 +3255,17 @@ function ModuleLicensingTab() {
         });
 
         setSelectedMenuKeys((current) => {
-          const validInstalledMenuKeys = new Set(
+          const validMenuKeys = new Set(
             nextModules.flatMap((module) =>
               (Array.isArray(module?.items)
                 ? module.items
                 : []
-              )
-                .filter((item) => Boolean(item?.exists))
-                .map((item) => item.snapshotKey)
+              ).map((item) => item.snapshotKey)
             )
           );
 
           return current.filter((key) =>
-            validInstalledMenuKeys.has(key)
+            validMenuKeys.has(key)
           );
         });
 
@@ -3393,22 +3395,41 @@ function ModuleLicensingTab() {
     [filteredItems]
   );
 
+  const missingFilteredItems = useMemo(
+    () =>
+      filteredItems.filter(
+        (item) => !Boolean(item.exists)
+      ),
+    [filteredItems]
+  );
+
+  const visibleMenuItems =
+    menuView === "deleted"
+      ? missingFilteredItems
+      : installedFilteredItems;
+
   const selectedMenus = useMemo(() => {
     const selected = new Set(selectedMenuKeys);
+    const shouldExist =
+      menuView === "installed";
 
     return (Array.isArray(activeModule?.items)
       ? activeModule.items
       : []
     ).filter(
       (item) =>
-        Boolean(item.exists) &&
+        Boolean(item.exists) === shouldExist &&
         selected.has(item.snapshotKey)
     );
-  }, [activeModule, selectedMenuKeys]);
+  }, [
+    activeModule,
+    menuView,
+    selectedMenuKeys,
+  ]);
 
-  const allVisibleInstalledMenusSelected =
-    installedFilteredItems.length > 0 &&
-    installedFilteredItems.every((item) =>
+  const allVisibleMenusSelected =
+    visibleMenuItems.length > 0 &&
+    visibleMenuItems.every((item) =>
       selectedMenuKeys.includes(item.snapshotKey)
     );
 
@@ -3423,7 +3444,7 @@ function ModuleLicensingTab() {
   };
 
   const toggleSelectAllVisibleMenus = () => {
-    const visibleKeys = installedFilteredItems.map(
+    const visibleKeys = visibleMenuItems.map(
       (item) => item.snapshotKey
     );
 
@@ -3630,6 +3651,113 @@ function ModuleLicensingTab() {
         },
         fallback:
           "Some selected menus could not be removed.",
+        details: failedMenus.map(
+          ({ item, message }) =>
+            `${item.menuName} (${item.menuCode}): ${message}`
+        ),
+      });
+    }
+
+    setSavingKey("");
+  };
+
+  const restoreSelectedMenus = async () => {
+    if (selectedMenus.length === 0) {
+      await showValidation({
+        title: "No deleted menus selected",
+        message:
+          "Select at least one deleted or missing menu before continuing.",
+        details: [
+          "Only menus missing from HS_MENU are shown in this recovery view.",
+          "Restored values are read from the tenant JSON master.",
+        ],
+      });
+      return;
+    }
+
+    const preview = selectedMenus
+      .slice(0, 8)
+      .map(
+        (item) =>
+          `${item.menuName} (${item.menuCode})`
+      );
+
+    if (selectedMenus.length > 8) {
+      preview.push(
+        `+ ${selectedMenus.length - 8} more menu(s)`
+      );
+    }
+
+    const confirmation =
+      await useSwalProceedConfirm(
+        `Restore ${selectedMenus.length} Selected Menu(s)?`,
+        `${selectedMenus.length} missing HS_MENU row(s) will be restored from the tenant JSON master.\n\n${preview
+          .map((item) => `• ${item}`)
+          .join("\n")}`,
+        "Restore Selected"
+      );
+
+    if (!confirmation?.isConfirmed) return;
+
+    setSavingKey("bulk-menu-restore");
+
+    let restoredMenus = 0;
+    let affectedRows = 0;
+    const failedMenus = [];
+
+    for (const item of selectedMenus) {
+      try {
+        const { data } = await apiClient.post(
+          "/heartstrong/modules",
+          {
+            scope: "menu",
+            snapshotKey: item.snapshotKey,
+            enabled: true,
+          },
+          {
+            withCredentials: true,
+          }
+        );
+
+        restoredMenus += 1;
+        affectedRows += Number(
+          data?.data?.affectedRows ?? 0
+        );
+      } catch (error) {
+        failedMenus.push({
+          item,
+          message: errorText(
+            error,
+            "Unknown server error"
+          ),
+        });
+      }
+    }
+
+    await load({ silent: true });
+
+    setSelectedMenuKeys(
+      failedMenus.map(
+        ({ item }) => item.snapshotKey
+      )
+    );
+
+    if (restoredMenus > 0) {
+      await useSwalSuccessAlert(
+        "Restored",
+        `${restoredMenus} menu(s) restored. ${affectedRows} HS_MENU row(s) were inserted from JSON.`
+      );
+    }
+
+    if (failedMenus.length > 0) {
+      await showApiError({
+        title: `${failedMenus.length} restore operation(s) failed`,
+        error: {
+          message:
+            "Some selected menus could not be restored. Failed menus remain selected.",
+        },
+        fallback:
+          "Some selected menus could not be restored.",
         details: failedMenus.map(
           ({ item, message }) =>
             `${item.menuName} (${item.menuCode}): ${message}`
@@ -3912,11 +4040,11 @@ function ModuleLicensingTab() {
 
     const confirmation =
       await useSwalProceedConfirm(
-        "Restore All Removed Menus?",
+        "Restore All Deleted / Missing Menus?",
         `${Number(
           meta.totalMissingRows ?? 0
         )} missing HS_MENU row(s) will be restored from the current tenant JSON master.`,
-        "Restore All"
+        "Restore All Missing"
       );
 
     if (!confirmation?.isConfirmed) return;
@@ -3981,18 +4109,29 @@ function ModuleLicensingTab() {
             </div>
 
             <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-blue-100/90">
-              Select modules on the left. Review and
-              manage the selected module's menus on the
-              right.
+              Manage installed HS_MENU rows and recover
+              deleted or missing menus from the tenant JSON
+              master without maintaining another database table.
             </p>
 
             {!!meta.snapshotFile && (
-              <p
-                className="mt-2 max-w-4xl truncate font-mono text-[10px] font-bold text-blue-200"
-                title={meta.snapshotFile}
-              >
-                {meta.snapshotFile}
-              </p>
+              <div className="mt-2 space-y-0.5">
+                <p
+                  className="max-w-4xl truncate font-mono text-[10px] font-bold text-blue-200"
+                  title={meta.snapshotFile}
+                >
+                  Master: {meta.snapshotFile}
+                </p>
+
+                {!!meta.snapshotBackupFile && (
+                  <p
+                    className="max-w-4xl truncate font-mono text-[9px] font-semibold text-blue-300/80"
+                    title={meta.snapshotBackupFile}
+                  >
+                    Backup: {meta.snapshotBackupFile}
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
@@ -4006,7 +4145,7 @@ function ModuleLicensingTab() {
             </span>
 
             <span className="rounded-lg bg-rose-400/15 px-3 py-2 text-xs font-black text-rose-100">
-              {totalMissingRows} removed
+              {totalMissingRows} deleted / missing
             </span>
 
             <button
@@ -4022,7 +4161,7 @@ function ModuleLicensingTab() {
               <RotateCcw size={14} />
               {savingKey === "reset-all"
                 ? "Restoring..."
-                : "Restore All"}
+                : "Restore All Missing"}
             </button>
 
             <button
@@ -4174,6 +4313,7 @@ function ModuleLicensingTab() {
                             moduleKey
                           );
                           setSearchTerm("");
+                          setMenuView("installed");
                           setSelectedMenuKeys([]);
                         }}
                         className="min-w-0 flex-1 text-left"
@@ -4241,24 +4381,64 @@ function ModuleLicensingTab() {
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuView("installed");
+                        setSelectedMenuKeys([]);
+                      }}
+                      className={`inline-flex h-8 items-center gap-1.5 px-3 text-[10px] font-black transition ${
+                        menuView === "installed"
+                          ? "bg-emerald-600 text-white"
+                          : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      <CheckCircle2 size={13} />
+                      Installed
+                      <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[9px]">
+                        {activeModule?.existingCount ?? 0}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuView("deleted");
+                        setSelectedMenuKeys([]);
+                      }}
+                      className={`inline-flex h-8 items-center gap-1.5 border-l border-slate-200 px-3 text-[10px] font-black transition dark:border-slate-700 ${
+                        menuView === "deleted"
+                          ? "bg-amber-500 text-white"
+                          : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      <RotateCcw size={13} />
+                      Deleted / Missing
+                      <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[9px]">
+                        {activeModule?.missingCount ?? 0}
+                      </span>
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-black text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-blue-950/30">
                       <input
                         type="checkbox"
                         checked={
-                          allVisibleInstalledMenusSelected
+                          allVisibleMenusSelected
                         }
                         onChange={
                           toggleSelectAllVisibleMenus
                         }
                         disabled={
                           savingKey !== "" ||
-                          installedFilteredItems.length === 0
+                          visibleMenuItems.length === 0
                         }
                         className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600"
                       />
 
-                      {allVisibleInstalledMenusSelected
+                      {allVisibleMenusSelected
                         ? "Clear Visible"
                         : "Select Visible"}
                     </label>
@@ -4282,75 +4462,102 @@ function ModuleLicensingTab() {
                           event.target.value
                         )
                       }
-                      placeholder="Search menu..."
+                      placeholder={
+                        menuView === "deleted"
+                          ? "Search deleted menu..."
+                          : "Search installed menu..."
+                      }
                       className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 py-2 pl-8 pr-3 text-xs font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:focus:ring-sky-950 sm:w-52"
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={removeSelectedMenus}
-                    disabled={
-                      savingKey !== "" ||
-                      selectedMenus.length === 0
-                    }
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Trash2 size={13} />
-                    {savingKey === "bulk-menu-remove"
-                      ? "Removing Selected..."
-                      : `Remove Selected${
-                          selectedMenus.length > 0
-                            ? ` (${selectedMenus.length})`
-                            : ""
-                        }`}
-                  </button>
+                  {menuView === "deleted" ? (
+                    <button
+                      type="button"
+                      onClick={restoreSelectedMenus}
+                      disabled={
+                        savingKey !== "" ||
+                        selectedMenus.length === 0
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <RotateCcw size={13} />
+                      {savingKey === "bulk-menu-restore"
+                        ? "Restoring Selected..."
+                        : `Restore Selected${
+                            selectedMenus.length > 0
+                              ? ` (${selectedMenus.length})`
+                              : ""
+                          }`}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={removeSelectedMenus}
+                      disabled={
+                        savingKey !== "" ||
+                        selectedMenus.length === 0
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Trash2 size={13} />
+                      {savingKey === "bulk-menu-remove"
+                        ? "Removing Selected..."
+                        : `Remove Selected${
+                            selectedMenus.length > 0
+                              ? ` (${selectedMenus.length})`
+                              : ""
+                          }`}
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateWholeModule(
-                        activeModule,
-                        true
-                      )
-                    }
-                    disabled={
-                      savingKey !== "" ||
-                      Number(
-                        activeModule?.missingCount ?? 0
-                      ) === 0
-                    }
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <RotateCcw size={13} />
-                    {savingKey ===
-                    `module:${moduleKeyFor(activeModule)}:true`
-                      ? "Restoring..."
-                      : "Restore Module"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateWholeModule(
-                        activeModule,
-                        false
-                      )
-                    }
-                    disabled={
-                      savingKey !== "" ||
-                      Number(
-                        activeModule?.existingCount ?? 0
-                      ) === 0
-                    }
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Trash2 size={13} />
-                    {savingKey ===
-                    `module:${moduleKeyFor(activeModule)}:false`
-                      ? "Removing..."
-                      : "Remove Module"}
-                  </button>
+                  {menuView === "deleted" ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateWholeModule(
+                          activeModule,
+                          true
+                        )
+                      }
+                      disabled={
+                        savingKey !== "" ||
+                        Number(
+                          activeModule?.missingCount ?? 0
+                        ) === 0
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                    >
+                      <RotateCcw size={13} />
+                      {savingKey ===
+                      `module:${moduleKeyFor(activeModule)}:true`
+                        ? "Restoring..."
+                        : "Restore Module"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateWholeModule(
+                          activeModule,
+                          false
+                        )
+                      }
+                      disabled={
+                        savingKey !== "" ||
+                        Number(
+                          activeModule?.existingCount ?? 0
+                        ) === 0
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
+                    >
+                      <Trash2 size={13} />
+                      {savingKey ===
+                      `module:${moduleKeyFor(activeModule)}:false`
+                        ? "Removing..."
+                        : "Remove Module"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -4363,14 +4570,14 @@ function ModuleLicensingTab() {
                       <input
                         type="checkbox"
                         checked={
-                          allVisibleInstalledMenusSelected
+                          allVisibleMenusSelected
                         }
                         onChange={
                           toggleSelectAllVisibleMenus
                         }
                         disabled={
                           savingKey !== "" ||
-                          installedFilteredItems.length === 0
+                          visibleMenuItems.length === 0
                         }
                         title="Select all visible installed menus"
                         className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600"
@@ -4400,7 +4607,7 @@ function ModuleLicensingTab() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredItems.map((item) => {
+                  {visibleMenuItems.map((item) => {
                     const key =
                       item.snapshotKey;
                     const operationKey =
@@ -4427,13 +4634,12 @@ function ModuleLicensingTab() {
                               toggleMenuSelection(key)
                             }
                             disabled={
-                              savingKey !== "" ||
-                              !item.exists
+                              savingKey !== ""
                             }
                             title={
-                              item.exists
-                                ? `Select ${item.menuName}`
-                                : "Removed menus cannot be selected for removal"
+                              menuView === "deleted"
+                                ? `Select ${item.menuName} for restore`
+                                : `Select ${item.menuName} for removal`
                             }
                             className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-600"
                           />
@@ -4509,13 +4715,15 @@ function ModuleLicensingTab() {
                     );
                   })}
 
-                  {filteredItems.length === 0 && (
+                  {visibleMenuItems.length === 0 && (
                     <tr>
                       <td
                         colSpan={6}
                         className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400"
                       >
-                        No matching menu rows were found.
+                        {menuView === "deleted"
+                          ? "No deleted or missing menus were found."
+                          : "No matching installed menu rows were found."}
                       </td>
                     </tr>
                   )}
@@ -4525,15 +4733,20 @@ function ModuleLicensingTab() {
 
             <div className="flex flex-col gap-1 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
               <span>
-                {filteredItems.length} menu row(s) displayed
+                {visibleMenuItems.length}{" "}
+                {menuView === "deleted"
+                  ? "deleted / missing"
+                  : "installed"}{" "}
+                menu row(s) displayed
                 {selectedMenus.length > 0
                   ? ` · ${selectedMenus.length} selected`
                   : ""}.
               </span>
 
               <span>
-                Select installed menus and use Remove Selected.
-                Removed rows remain recoverable from JSON.
+                {menuView === "deleted"
+                  ? "Select missing menus and use Restore Selected. Values are restored from the tenant JSON master."
+                  : "Select installed menus and use Remove Selected. Deleted rows remain recoverable from JSON."}
               </span>
             </div>
           </main>
