@@ -3040,7 +3040,11 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     if (isFormDisabled) return;
     setShowTypeDropdown(false);
-    updateState({ rmLookupModalOpen: true, selectedRowIndex: null });
+    updateState({
+      rmLookupModalOpen: true,
+      selectedRowIndex: null,
+      selectionContext: "multiAdd",
+    });
   };
 
   // When user picks FG / rm / RM
@@ -3091,7 +3095,11 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   const handleOpenrmLookup = () => {
     if (isFormDisabled) return;
     setShowTypeDropdown(false);
-    updateState({ rmLookupModalOpen: true, selectedRowIndex: null });
+    updateState({
+      rmLookupModalOpen: true,
+      selectedRowIndex: null,
+      selectionContext: "multiAdd",
+    });
   };
 
   const handleDeleteRow = (index) => {
@@ -3126,11 +3134,14 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     updateState({
       detailRows: updatedRows,
       selectedRowIndex: insertedIndex,
-      rmLookupModalOpen: true,
     });
+    detailRowsRef.current = updatedRows;
+    updateTotalsDisplay(updatedRows);
   };
 
   const handleCloseWarehouseLookup = async (row) => {
+    updateState({ warehouseLookupOpen: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (row) {
       const pickedWhCode =
         row.whCode ?? row.WHCode ?? row.WH_CODE ?? row.whouseCode ?? "";
@@ -3198,6 +3209,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const handleCloseLocationLookup = async (row) => {
+    updateState({ locationLookupOpen: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (row) {
       const pickedLocCode = row.locCode ?? row.LocCode ?? row.LOC_CODE ?? "";
       const pickedLocName = row.locName ?? row.LocName ?? row.LOC_NAME ?? "";
@@ -3272,7 +3285,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     });
   };
 
-  const handleCloseQStatLookup = (picked) => {
+  const handleCloseQStatLookup = async (picked) => {
+    updateState({ showQstatModal: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (picked && selectedRowIndex !== null && selectedRowIndex !== undefined) {
       const code = picked?.qstatCode ?? picked?.QSTAT_CODE ?? "";
       const name = picked?.qstatName ?? picked?.QSTAT_NAME ?? "";
@@ -4521,17 +4536,22 @@ if (action === "GenerateGL") {
   };
 
   const handleCloseCOALookup = async (selectedAccount) => {
+    updateState({ showCOALookup: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (selectedAccount) {
       if (accountModalSource === "detailAcctCode") {
         const currentRow = detailRowsRef.current?.[selectedRowIndex] || {};
-        const reqRc = selectedAccount.REQ_RC || selectedAccount.reqRc || selectedAccount.rcReq || "N";
-        const reqSl = selectedAccount.REQ_SL || selectedAccount.reqSl || selectedAccount.slReq || "N";
+        const reqRc = selectedAccount.REQ_RC === "Y" ? "Y" : "N";
+        const reqSl = selectedAccount.REQ_SL === "Y" ? "Y" : "N";
         await handleDetailChange(selectedRowIndex, "acctCode", selectedAccount, {
           acctName: selectedAccount.acctName || "",
           reqRc,
           reqSl,
-          rcCode: String(reqRc).toUpperCase() === "Y" ? currentRow.rcCode || "" : "",
-          slCode: String(reqSl).toUpperCase() === "Y" ? currentRow.slCode || "" : "",
+          rcCode: reqRc === "Y" ? currentRow.rcCode || "" : "",
+          rcName: reqRc === "Y" ? currentRow.rcName || "" : "",
+          slCode: reqSl === "Y" ? currentRow.slCode || "" : "",
+          slName: reqSl === "Y" ? currentRow.slName || "" : "",
+          sltypeCode: reqSl === "Y" ? currentRow.sltypeCode || "" : "",
         });
       } else {
         await applyLookupToGLRow("acctCode", {
@@ -4548,6 +4568,8 @@ if (action === "GenerateGL") {
   };
 
   const handleCloseGLRCLookup = async (selectedRC) => {
+    updateState({ showRCLookupGL: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (selectedRC) {
       if (accountModalSource === "detailRcCode") {
         await handleDetailChange(selectedRowIndex, "rcCode", selectedRC, {
@@ -4568,6 +4590,8 @@ if (action === "GenerateGL") {
   };
 
   const handleCloseSLLookup = async (selectedSL) => {
+    updateState({ showSLLookup: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (selectedSL) {
       const selectedValues = {
         slCode: selectedSL.slCode || "",
@@ -5050,6 +5074,8 @@ const handleClosePayeeLookup = async (row) => {
     const columnWidth = getFGRFPDetailFallbackWidth(columnKey);
     const style = getFGRFPDetailCellStyle(columnKey, columnWidth);
     const rowLocked = isFormDisabled || row.operation === "S";
+    const isRcRequired = row.reqRc === "Y";
+    const isSlRequired = row.reqSl === "Y";
 
     const textInput = (field, options = {}) => (
       <input
@@ -5125,6 +5151,7 @@ const handleClosePayeeLookup = async (row) => {
               updateState({
                 selectedRowIndex: index,
                 rmLookupModalOpen: true,
+                selectionContext: "singleRow",
               })
             )}
           </div>
@@ -5388,6 +5415,7 @@ const handleClosePayeeLookup = async (row) => {
               id={`rcCode-${index}`}
               className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
               value={row.rcCode || ""}
+              placeholder={isRcRequired ? "REQ RC" : ""}
               readOnly
               disabled={rowLocked}
             />
@@ -5410,6 +5438,7 @@ const handleClosePayeeLookup = async (row) => {
               id={`slCode-${index}`}
               className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
               value={row.slCode || ""}
+              placeholder={isSlRequired ? "REQ SL" : ""}
               readOnly
               disabled={rowLocked}
             />
@@ -5528,7 +5557,14 @@ const handleClosePayeeLookup = async (row) => {
       />
     );
 
-    const lookupCell = (field, options = {}) => (
+    const lookupCell = (field, options = {}) => {
+      const lookupEnabled = options.lookupEnabled ?? true;
+      const showLookupIcon =
+        !rowLocked &&
+        lookupEnabled &&
+        (options.alwaysShowIcon || String(row[field] || "").trim());
+
+      return (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
         <div className="relative w-full">
           <input
@@ -5538,7 +5574,7 @@ const handleClosePayeeLookup = async (row) => {
             value={options.value ?? row[field] ?? ""}
             readOnly={options.readOnly ?? true}
             disabled={options.disabled ?? rowLocked}
-            onClick={() => !rowLocked && modalHandlers[field]?.()}
+            onClick={() => !rowLocked && lookupEnabled && modalHandlers[field]?.()}
             onChange={(e) => handleGLFieldChange(index, field, e.target.value)}
             onKeyDown={(e) => {
               if (e.key !== "Enter" || rowLocked) return;
@@ -5546,7 +5582,7 @@ const handleClosePayeeLookup = async (row) => {
               focusNextGlCell(field);
             }}
           />
-          {!rowLocked && (options.alwaysShowIcon || String(row[field] || "").trim()) && (
+          {showLookupIcon && (
             <FontAwesomeIcon
               icon={faMagnifyingGlass}
               className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -5555,7 +5591,8 @@ const handleClosePayeeLookup = async (row) => {
           )}
         </div>
       </td>
-    );
+      );
+    };
 
     const amountInput = (field) => (
       <input
@@ -5606,13 +5643,25 @@ const handleClosePayeeLookup = async (row) => {
         </td>
       ),
       acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
-      rcCode: () => lookupCell("rcCode", { alwaysShowIcon: true }),
+      rcCode: () =>
+        lookupCell("rcCode", {
+          lookupEnabled:
+            row.reqRc === "Y" ||
+            String(row.rcCode || "").trim().toUpperCase() === "REQ RC",
+          alwaysShowIcon: true,
+        }),
       sltypeCode: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("sltypeCode")}
         </td>
       ),
-      slCode: () => lookupCell("slCode", { alwaysShowIcon: true }),
+      slCode: () =>
+        lookupCell("slCode", {
+          lookupEnabled:
+            row.reqSl === "Y" ||
+            String(row.slCode || "").trim().toUpperCase() === "REQ SL",
+          alwaysShowIcon: true,
+        }),
       particular: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("particular")}
@@ -6764,11 +6813,15 @@ const handleClosePayeeLookup = async (row) => {
           onClose={handleClosermLookup}
           onGetSelectedItems={handleClosermLookup}
           onCancel={() =>
-            updateState({ rmLookupModalOpen: false, selectedRowIndex: null })
+            updateState({
+              rmLookupModalOpen: false,
+              selectedRowIndex: null,
+              selectionContext: "",
+            })
           }
-          enableMultiSelect
           customParam="ActiveAll"
           docType="FGRFP"
+          enableMultiSelect={state.selectionContext === "multiAdd"}
         />
       )}
 

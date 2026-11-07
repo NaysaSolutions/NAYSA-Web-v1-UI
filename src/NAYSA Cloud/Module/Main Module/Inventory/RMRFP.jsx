@@ -84,9 +84,8 @@ import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 import {
   formatNumber,
   parseFormattedNumber,
+  useSwalErrorAlert,
   useSwalshowSaveSuccessDialog,
-  useSwalvalidateRequiredFields,
-  useSwalValidationAlert,
   useSwalProceedConfirm,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
@@ -2525,8 +2524,31 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 });
 
   const resolveDefaultRMRFPAccount = async (item = {}) => {
-    // Use the selected item lookup result only. Do not call getrmCategoryAccount.
-    return getDefaultRMRFPAccountFromItem(item);
+    const lookupAccount = getDefaultRMRFPAccountFromItem(item);
+    if (lookupAccount.code) return lookupAccount;
+
+    const itemCode = pickRMRFPFirstValue(
+      item?.itemCode,
+      item?.ITEM_CODE,
+      item?.item_code,
+    );
+    if (!itemCode) return lookupAccount;
+
+    try {
+      const response = await apiClient.post("/getRMRFPItemCreditAccount", {
+        json_data: { itemCode },
+      });
+      const account = response?.data?.data?.[0] || {};
+      return {
+        code: pickRMRFPFirstValue(account.acctCode, account.ACCT_CODE),
+        name: pickRMRFPFirstValue(account.acctName, account.ACCT_NAME),
+        reqRc: pickRMRFPFirstValue(account.reqRc, account.REQ_RC, "N"),
+        reqSl: pickRMRFPFirstValue(account.reqSl, account.REQ_SL, "N"),
+      };
+    } catch (error) {
+      console.error("Unable to load the RM category WIP account.", error);
+      return lookupAccount;
+    }
   };
 
   const handleClosermLookup = async (selectedPayload) => {
@@ -2548,6 +2570,15 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       updateState({ rmLookupModalOpen: false, selectedRowIndex: null });
       return;
     }
+
+    updateState({
+      rmLookupModalOpen: false,
+      showSpinner: true,
+      isLoading: true,
+    });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    try {
 
     const getSelectedUomCode = (selectedItem = {}) =>
       firstValue(
@@ -2708,18 +2739,18 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         convertedUomCode: defaultConversion.convertedUomCode,
         convertedQuantity: formatNumber(defaultConversion.convertedQuantity, decQty),
         conversionFactor: defaultConversion.conversionFactor,
-        qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
-        qtyAlloc: "0.000000",
-        qtyNeeded: "0.000000",
+        qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, decQty),
+        qtyAlloc: formatNumber(0, decQty),
+        qtyNeeded: formatNumber(0, decQty),
         uomCode2: "",
-        uomQty2: "0.000000",
+        uomQty2: formatNumber(0, decQty),
         dateNeeded: today,
         itermpecs: "",
         serviceCode: "",
         serviceName: "",
-        poQty: "0.000000",
-        rrQty: "0.000000",
-        freeQty: "0.000000",
+        poQty: formatNumber(0, decQty),
+        rrQty: formatNumber(0, decQty),
+        freeQty: formatNumber(0, decQty),
       }));
     };
 
@@ -2838,7 +2869,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         convertedUomCode: defaultConversion.convertedUomCode,
         convertedQuantity: formatNumber(defaultConversion.convertedQuantity, decQty),
         conversionFactor: defaultConversion.conversionFactor,
-        qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
+        qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, decQty),
         dateNeeded: currentRow.dateNeeded || today,
         unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
         vatCode: selectedVatCode || currentRow.vatCode || "",
@@ -2878,18 +2909,18 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       convertedUomCode: defaultConversion.convertedUomCode,
       convertedQuantity: formatNumber(defaultConversion.convertedQuantity, decQty),
       conversionFactor: defaultConversion.conversionFactor,
-      qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
-      qtyAlloc: "0.000000",
-      qtyNeeded: "0.000000",
+      qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, decQty),
+      qtyAlloc: formatNumber(0, decQty),
+      qtyNeeded: formatNumber(0, decQty),
       uomCode2: "",
-      uomQty2: "0.000000",
+      uomQty2: formatNumber(0, decQty),
       dateNeeded: today,
       itermpecs: "",
       serviceCode: "",
       serviceName: "",
-      poQty: "0.000000",
-      rrQty: "0.000000",
-      freeQty: "0.000000",
+      poQty: formatNumber(0, decQty),
+      rrQty: formatNumber(0, decQty),
+      freeQty: formatNumber(0, decQty),
     };
 
     const updatedRows = [...detailRows, recalcRMRFPRow(getHeaderWarehouseLocationFields(newRow))];
@@ -2903,6 +2934,17 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       0,
     );
     updateTotalsDisplay(updatedRows);
+    } finally {
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      updateState({
+        rmLookupModalOpen: false,
+        selectedRowIndex: null,
+        showSpinner: false,
+        isLoading: false,
+      });
+    }
   };
 
   const handlePrNoBlur = () => {
@@ -2971,7 +3013,11 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     if (isFormDisabled) return;
     setShowTypeDropdown(false);
-    updateState({ rmLookupModalOpen: true, selectedRowIndex: null });
+    updateState({
+      rmLookupModalOpen: true,
+      selectedRowIndex: null,
+      selectionContext: "multiAdd",
+    });
   };
 
   // When user picks FG / rm / RM
@@ -2985,18 +3031,18 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       itemCode: "",
       itemName: "",
       uomCode: "",
-      qtyOnHand: "0.000000",
-      qtyAlloc: "0.000000",
-      qtyNeeded: "0.000000",
+      qtyOnHand: formatNumber(0, decQty),
+      qtyAlloc: formatNumber(0, decQty),
+      qtyNeeded: formatNumber(0, decQty),
       uomCode2: "",
-      uomQty2: "0.000000",
+      uomQty2: formatNumber(0, decQty),
       dateNeeded: today,
       itermpecs: "",
       serviceCode: "",
       serviceName: "",
-      poQty: "0.000000",
-      rrQty: "0.000000",
-      freeQty: "0.000000",
+      poQty: formatNumber(0, decQty),
+      rrQty: formatNumber(0, decQty),
+      freeQty: formatNumber(0, decQty),
       acctCode: "",
       acctName: "",
       whouseCode: state.WHCode || state.WHcode || WHCode || WHcode || "",
@@ -3020,7 +3066,11 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   const handleOpenrmLookup = () => {
     if (isFormDisabled) return;
     setShowTypeDropdown(false);
-    updateState({ rmLookupModalOpen: true, selectedRowIndex: null });
+    updateState({
+      rmLookupModalOpen: true,
+      selectedRowIndex: null,
+      selectionContext: "multiAdd",
+    });
   };
 
   const handleDeleteRow = (index) => {
@@ -3050,10 +3100,14 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       acctCode: "",
       acctName: "",
     });
-    updateState({ detailRows: updatedRows, selectedRowIndex: insertedIndex, rmLookupModalOpen: true });
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows, selectedRowIndex: insertedIndex });
+    updateTotalsDisplay(updatedRows);
   };
 
   const handleCloseWarehouseLookup = async (row) => {
+    updateState({ warehouseLookupOpen: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (row) {
       const pickedWhCode =
         row.whCode ?? row.WHCode ?? row.WH_CODE ?? row.whouseCode ?? "";
@@ -3121,6 +3175,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const handleCloseLocationLookup = async (row) => {
+    updateState({ locationLookupOpen: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (row) {
       const pickedLocCode = row.locCode ?? row.LocCode ?? row.LOC_CODE ?? "";
       const pickedLocName = row.locName ?? row.LocName ?? row.LOC_NAME ?? "";
@@ -3195,7 +3251,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     });
   };
 
-  const handleCloseQStatLookup = (picked) => {
+  const handleCloseQStatLookup = async (picked) => {
+    updateState({ showQstatModal: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (picked && selectedRowIndex !== null && selectedRowIndex !== undefined) {
       const code = picked?.qstatCode ?? picked?.QSTAT_CODE ?? "";
       const name = picked?.qstatName ?? picked?.QSTAT_NAME ?? "";
@@ -3524,7 +3582,14 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
  const handleDetailChange = async (index, field, value, extraData = {}) => {
-    const rows = Array.isArray(detailRows) ? detailRows : [];
+    // Enter commits the formatted value before focus moves to the next line.
+    // Always use the latest committed rows so the next focus update cannot
+    // restore the render-time raw Quantity/Converted Qty/Unit Cost value.
+    const rows = Array.isArray(detailRowsRef.current)
+      ? detailRowsRef.current
+      : Array.isArray(detailRows)
+        ? detailRows
+        : [];
     const updatedRows = [...rows];
 
     // ✅ guard: invalid index or row not found
@@ -3584,6 +3649,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         }
       });
 
+      detailRowsRef.current = [...updatedRows];
       updateState({ detailRows: [...updatedRows] });
     };
 
@@ -3703,70 +3769,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   // If already posted/cancelled/finalized, do not allow save / generate
   if (documentStatus !== "") return;
 
-  // ✅ VALIDATE FIRST BEFORE LOADING
-  if (action === "Upsert") {
-    const headerWhCode = state.WHCode || state.WHcode || "";
-    const headerLocCode = state.LocCode || "";
-
-    const headerValid = await useSwalvalidateRequiredFields(
-      {
-        "Header - Warehouse": headerWhCode,
-        "Header - Location": headerLocCode,
-      },
-      "Missing required fields"
-    );
-
-    if (!headerValid) return;
-
-    const detailRequiredErrors = [];
-
-    (state.detailRows || []).forEach((row, index) => {
-      const lineNo = row.lnNo || index + 1;
-
-      const rowWhCode =
-        row.whouseCode ||
-        row.whCode ||
-        state.WHCode ||
-        state.WHcode ||
-        "";
-
-      const rowLocCode =
-        row.locCode ||
-        row.LocCode ||
-        state.LocCode ||
-        "";
-
-        const rrQty =
-        row.rrQty ||
-        row.rrQuantity ||
-        state.rrQty ||
-        "";
-
-      if (!rowWhCode) {
-        detailRequiredErrors.push(`- RR Detail Line # ${lineNo} - Warehouse`);
-      }
-
-      if (!rowLocCode) {
-        detailRequiredErrors.push(`- RR Detail Line # ${lineNo} - Location`);
-      }
-      if (!rrQty || parseFormattedNumber(rrQty) <= 0) {
-        detailRequiredErrors.push(`- RR Detail Line # ${lineNo} - RR Quantity must be greater than zero`);
-      }
-    });
-
-    if (detailRequiredErrors.length > 0) {
-      useSwalValidationAlert({
-        icon: "warning",
-        title: "The following fields are required:\n",
-        message:
-          detailRequiredErrors.join("\n"),
-      });
-
-      return;
-    }
-  }
-
-  // ✅ ONLY LOAD AFTER VALIDATION PASSED
+  // Required-field validation is owned by sproc_PHP_RMRFP so Save and
+  // Generate GL return the same complete, line-specific validation list.
   updateState({ isLoading: true, showSpinner: true });
 
   try {
@@ -4074,16 +4078,45 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
 if (action === "GenerateGL") {
       if (!isGeneralLedgerEnabled) return;
-const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
-        if (newGlEntries) updateState({ detailRowsGL: newGlEntries });
-        return;
-      }
+      const generateResult = await useGenerateGLEntries(
+        docType,
+        getNetAmountGLData(),
+        { returnValidationError: true },
+      );
+
+      if (generateResult?.validationError) {
+        useSwalErrorAlert("Generation Failed", generateResult.validationError);
+        return;
+      }
+
+      const newGlEntries = Array.isArray(generateResult)
+        ? generateResult
+        : generateResult?.glEntries;
+
+      if (Array.isArray(newGlEntries) && newGlEntries.length > 0) {
+        updateState({ detailRowsGL: newGlEntries });
+      }
+      return;
+    }
 
       if (action === "Upsert" && shouldAutoGenerateGLOnSave) {
         glRowsForSave = [];
         glData.dt2 = [];
 
-        const generatedGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
+        const generateResult = await useGenerateGLEntries(
+          docType,
+          getNetAmountGLData(),
+          { returnValidationError: true },
+        );
+
+        if (generateResult?.validationError) {
+          useSwalErrorAlert("Generation Failed", generateResult.validationError);
+          return;
+        }
+
+        const generatedGlEntries = Array.isArray(generateResult)
+          ? generateResult
+          : generateResult?.glEntries;
 
         if (Array.isArray(generatedGlEntries) && generatedGlEntries.length > 0) {
           glRowsForSave = generatedGlEntries;
@@ -4092,11 +4125,21 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
         }
 
         if (!Array.isArray(glRowsForSave) || glRowsForSave.length === 0) {
-          Swal.fire({
-            icon: "warning",
-            title: "General Ledger",
-            text: "No GL entries were generated. Please check the rm Category account setup.",
-          });
+          const existingGlRows = Array.isArray(detailRowsGLRef.current)
+            ? detailRowsGLRef.current
+            : [];
+
+          if (existingGlRows.length > 0) {
+            glRowsForSave = existingGlRows;
+            glData.dt2 = mapGLRowsForSave(existingGlRows);
+          }
+        }
+
+        if (!Array.isArray(glRowsForSave) || glRowsForSave.length === 0) {
+          useSwalErrorAlert(
+            "Generation Failed",
+            "No General Ledger entries were returned. Please review the transaction details.",
+          );
           return;
         }
 
@@ -4428,17 +4471,22 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
   };
 
   const handleCloseCOALookup = async (selectedAccount) => {
+    updateState({ showCOALookup: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (selectedAccount) {
       if (accountModalSource === "detailAcctCode") {
         const currentRow = detailRowsRef.current?.[selectedRowIndex] || {};
-        const reqRc = selectedAccount.REQ_RC || selectedAccount.reqRc || selectedAccount.rcReq || "N";
-        const reqSl = selectedAccount.REQ_SL || selectedAccount.reqSl || selectedAccount.slReq || "N";
+        const reqRc = selectedAccount.REQ_RC === "Y" ? "Y" : "N";
+        const reqSl = selectedAccount.REQ_SL === "Y" ? "Y" : "N";
         await handleDetailChange(selectedRowIndex, "acctCode", selectedAccount, {
           acctName: selectedAccount.acctName || "",
           reqRc,
           reqSl,
-          rcCode: String(reqRc).toUpperCase() === "Y" ? currentRow.rcCode || "" : "",
-          slCode: String(reqSl).toUpperCase() === "Y" ? currentRow.slCode || "" : "",
+          rcCode: reqRc === "Y" ? currentRow.rcCode || "" : "",
+          rcName: reqRc === "Y" ? currentRow.rcName || "" : "",
+          slCode: reqSl === "Y" ? currentRow.slCode || "" : "",
+          slName: reqSl === "Y" ? currentRow.slName || "" : "",
+          sltypeCode: reqSl === "Y" ? currentRow.sltypeCode || "" : "",
         });
       } else {
         await applyLookupToGLRow("acctCode", {
@@ -4455,6 +4503,8 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
   };
 
   const handleCloseGLRCLookup = async (selectedRC) => {
+    updateState({ showRCLookupGL: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (selectedRC) {
       if (accountModalSource === "detailRcCode") {
         await handleDetailChange(selectedRowIndex, "rcCode", selectedRC, {
@@ -4475,6 +4525,8 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
   };
 
   const handleCloseSLLookup = async (selectedSL) => {
+    updateState({ showSLLookup: false });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     if (selectedSL) {
       const selectedValues = {
         slCode: selectedSL.slCode || "",
@@ -4943,6 +4995,8 @@ const handleClosePayeeLookup = async (row) => {
     const columnWidth = getRMRFPDetailFallbackWidth(columnKey);
     const style = getRMRFPDetailCellStyle(columnKey, columnWidth);
     const rowLocked = isFormDisabled || row.operation === "S";
+    const isRcRequired = row.reqRc === "Y";
+    const isSlRequired = row.reqSl === "Y";
 
     const textInput = (field, options = {}) => (
       <input
@@ -5018,6 +5072,7 @@ const handleClosePayeeLookup = async (row) => {
               updateState({
                 selectedRowIndex: index,
                 rmLookupModalOpen: true,
+                selectionContext: "singleRow",
               })
             )}
           </div>
@@ -5260,6 +5315,7 @@ const handleClosePayeeLookup = async (row) => {
               id={`rcCode-${index}`}
               className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
               value={row.rcCode || ""}
+              placeholder={isRcRequired ? "REQ RC" : ""}
               readOnly
               disabled={rowLocked}
             />
@@ -5282,6 +5338,7 @@ const handleClosePayeeLookup = async (row) => {
               id={`slCode-${index}`}
               className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
               value={row.slCode || ""}
+              placeholder={isSlRequired ? "REQ SL" : ""}
               readOnly
               disabled={rowLocked}
             />
@@ -5400,7 +5457,14 @@ const handleClosePayeeLookup = async (row) => {
       />
     );
 
-    const lookupCell = (field, options = {}) => (
+    const lookupCell = (field, options = {}) => {
+      const lookupEnabled = options.lookupEnabled ?? true;
+      const showLookupIcon =
+        !rowLocked &&
+        lookupEnabled &&
+        (options.alwaysShowIcon || String(row[field] || "").trim());
+
+      return (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
         <div className="relative w-full">
           <input
@@ -5410,7 +5474,7 @@ const handleClosePayeeLookup = async (row) => {
             value={options.value ?? row[field] ?? ""}
             readOnly={options.readOnly ?? true}
             disabled={options.disabled ?? rowLocked}
-            onClick={() => !rowLocked && modalHandlers[field]?.()}
+            onClick={() => !rowLocked && lookupEnabled && modalHandlers[field]?.()}
             onChange={(e) => handleGLFieldChange(index, field, e.target.value)}
             onKeyDown={(e) => {
               if (e.key !== "Enter" || rowLocked) return;
@@ -5418,7 +5482,7 @@ const handleClosePayeeLookup = async (row) => {
               focusNextGlCell(field);
             }}
           />
-          {!rowLocked && (options.alwaysShowIcon || String(row[field] || "").trim()) && (
+          {showLookupIcon && (
             <FontAwesomeIcon
               icon={faMagnifyingGlass}
               className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -5427,7 +5491,8 @@ const handleClosePayeeLookup = async (row) => {
           )}
         </div>
       </td>
-    );
+      );
+    };
 
     const amountInput = (field) => (
       <input
@@ -5478,13 +5543,25 @@ const handleClosePayeeLookup = async (row) => {
         </td>
       ),
       acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
-      rcCode: () => lookupCell("rcCode", { alwaysShowIcon: true }),
+      rcCode: () =>
+        lookupCell("rcCode", {
+          lookupEnabled:
+            row.reqRc === "Y" ||
+            String(row.rcCode || "").trim().toUpperCase() === "REQ RC",
+          alwaysShowIcon: true,
+        }),
       sltypeCode: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("sltypeCode")}
         </td>
       ),
-      slCode: () => lookupCell("slCode", { alwaysShowIcon: true }),
+      slCode: () =>
+        lookupCell("slCode", {
+          lookupEnabled:
+            row.reqSl === "Y" ||
+            String(row.slCode || "").trim().toUpperCase() === "REQ SL",
+          alwaysShowIcon: true,
+        }),
       particular: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("particular")}
@@ -6624,13 +6701,17 @@ const handleClosePayeeLookup = async (row) => {
           isOpen={rmLookupModalOpen}
           endpoint="getInvLookupRM"
           onClose={handleClosermLookup}
-          onGetSelectedIterm={handleClosermLookup}
+          onGetSelectedItems={handleClosermLookup}
           onCancel={() =>
-            updateState({ rmLookupModalOpen: false, selectedRowIndex: null })
+            updateState({
+              rmLookupModalOpen: false,
+              selectedRowIndex: null,
+              selectionContext: "",
+            })
           }
-          enableMultiSelect
           customParam="ActiveAll"
           docType="RMRFP"
+          enableMultiSelect={state.selectionContext === "multiAdd"}
         />
       )}
 
