@@ -361,12 +361,30 @@ const JV = () => {
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[normalizedStatus] || "";
+  const isCashReversalJV =
+    String(selectedJVType || "").trim().toUpperCase() === "JV12";
+  const isSavedCashReversalJV = Boolean(documentID) && isCashReversalJV;
   const isFormDisabled =
     isReadOnly ||
     isViewDocumentUrl ||
+    isSavedCashReversalJV ||
     ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus);
   const isARSettlement = String(selectedJVType || "").toUpperCase() === "JV03";
   const isRegularJV = String(selectedJVType || "").toUpperCase() === "JV01";
+  const refDocTypeOptions = [
+    ...refdocTypes.map((type) => ({
+      label:
+        String(type.DROPDOWN_CODE || "").toUpperCase() === "ARDS"
+          ? "Deposit Slip"
+          : type.DROPDOWN_NAME,
+      value: type.DROPDOWN_CODE,
+    })),
+    ...(refdocTypes.some(
+      (type) => String(type.DROPDOWN_CODE || "").toUpperCase() === "ARDS",
+    )
+      ? []
+      : [{ label: "Deposit Slip", value: "ARDS" }]),
+  ];
 
   const jvSettlementColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -937,8 +955,12 @@ const JV = () => {
         selectedJVType: data.jvtranType,
         noReprints: data.noReprints,
         selectedRefDocType:
-          data.refDocType ||
-          (String(data.jvtranType || "").toUpperCase() === "JV03" ? "CR" : "JV"),
+          String(data.jvtranType || "").trim().toUpperCase() === "JV12"
+            ? "ARDS"
+            : data.refDocType ||
+              (String(data.jvtranType || "").toUpperCase() === "JV03"
+                ? "CR"
+                : "JV"),
         custCode: data.slCode,
         custName: data.slName,
         refDocNo: data.refDocNo,
@@ -1085,6 +1107,8 @@ const JV = () => {
   };
 
   const handleActivityOption = async (action) => {
+    if (isSavedCashReversalJV) return;
+
     if (action === "Upsert" && detailRowsGL.length === 0) {
       Swal.fire({
         icon: "warning",
@@ -1388,6 +1412,7 @@ const JV = () => {
   };
 
   const handleCancel = async () => {
+    if (isSavedCashReversalJV) return;
     if (documentID && documentStatus === "") {
       updateState({ showCancelModal: true });
     }
@@ -1404,6 +1429,7 @@ const JV = () => {
   };
 
   const handleCopy = async () => {
+    if (isSavedCashReversalJV) return;
     if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
@@ -2473,8 +2499,14 @@ const handleTranDocNoSelection = async (data) => {
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!isFullAccess || !documentID}
           isPrintDisabled={!documentID || normalizedStatus === "CANCELLED"}
-          isCopyDisabled={!canAdd || !documentID || normalizedStatus === "CANCELLED"}
+          isCopyDisabled={
+            isSavedCashReversalJV ||
+            !canAdd ||
+            !documentID ||
+            normalizedStatus === "CANCELLED"
+          }
           isCancelDisabled={
+            isSavedCashReversalJV ||
             !canCancel ||
             !documentID ||
             ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus)
@@ -2642,15 +2674,12 @@ const handleTranDocNoSelection = async (data) => {
                   id="selectedRefDocType"
                   label="Ref Doc Type"
                   type="select"
-                  value={selectedRefDocType}
+                  value={isCashReversalJV ? "ARDS" : selectedRefDocType}
                   disabled={isFormDisabled || isARSettlement || selectedJVType === "JV01"}
                   onChange={(val) => updateState({ selectedRefDocType: val })}
-                  options={refdocTypes
-                    .filter((t) => !isARSettlement || t.DROPDOWN_CODE === "CR")
-                    .map((t) => ({
-                    label: t.DROPDOWN_NAME,
-                    value: t.DROPDOWN_CODE,
-                    }))}
+                  options={refDocTypeOptions.filter(
+                    (type) => !isARSettlement || type.value === "CR",
+                  )}
                 />
 
                 <FieldRenderer

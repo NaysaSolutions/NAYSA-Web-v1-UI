@@ -1056,15 +1056,10 @@ export default function ApprovalMatrixModal() {
   }, [getAllTopHSDocRow, refsLoaded]);
 
   useEffect(() => {
-    if (!docTypeOptions.length) {
-      setDocType("");
-      return;
-    }
-
     setDocType((current) =>
-      docTypeOptions.some((option) => option.value === current)
+      current && docTypeOptions.some((option) => option.value === current)
         ? current
-        : docTypeOptions[0].value
+        : ""
     );
   }, [docTypeOptions]);
 
@@ -1470,6 +1465,60 @@ const validateRows = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleClearApprovers = async () => {
+    if (!docType) {
+      useSwalErrorAlert("Validation", "Select a document code.");
+      return;
+    }
+
+    if (!rows.length) {
+      useSwalErrorAlert(
+        "Nothing to Clear",
+        "No Approver Matrix is configured for the selected document."
+      );
+      return;
+    }
+
+    const confirmation = await useSwalDeleteConfirm(
+      "Clear Approver Matrix?",
+      `This will remove all ${rows.length} approver(s) for ${docType}. Continue?`
+    );
+
+    if (!confirmation?.isConfirmed) return;
+
+    try {
+      setIsDeleting(true);
+      await apiClient.post("/allTranApproval/clear", {
+        json_data: {
+          docCode: docType,
+          userCode: user?.USER_CODE || user?.userCode || "ADMIN",
+        },
+      });
+
+      await refetchApprovalRows();
+      useSwalSuccessAlert(
+        "Setup Cleared",
+        "Approver Matrix cleared successfully."
+      );
+    } catch (error) {
+      const rawMessage = String(
+        error?.response?.data?.details ||
+          error?.response?.data?.message ||
+          "Unable to clear the Approver Matrix."
+      );
+      const sqlServerMessage = rawMessage.match(
+        /\[SQL Server\]([\s\S]*?)(?:\s*\(Connection:|$)/i
+      );
+
+      useSwalErrorAlert(
+        "Clear Failed",
+        (sqlServerMessage?.[1] || rawMessage).trim()
+      );
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1956,20 +2005,21 @@ const validateRows = () => {
                 <span className="sm:inline ml-1">Add</span>
               </button>
 
-              {activeTab !== "approvers" && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    activeTab === "positions"
+              <button
+                type="button"
+                onClick={() =>
+                  activeTab === "approvers"
+                    ? handleClearApprovers()
+                    : activeTab === "positions"
                       ? positionRulesRef.current?.clearSetup()
                       : amountMatrixRef.current?.clearSetup()
-                  }
-                  className="flex h-7 w-20 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 sm:h-8 sm:w-auto sm:px-4"
-                >
-                  <FontAwesomeIcon icon={faTrashAlt} className="text-[12px]" />
-                  <span className="ml-1 sm:inline">Clear</span>
-                </button>
-              )}
+                }
+                disabled={isDeleting}
+                className="flex h-7 w-20 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-8 sm:w-auto sm:px-4"
+              >
+                <FontAwesomeIcon icon={faTrashAlt} className="text-[12px]" />
+                <span className="ml-1 sm:inline">Clear</span>
+              </button>
 
               <button
                 type="button"
@@ -2019,15 +2069,17 @@ const validateRows = () => {
       </div>
 
       <div className="mt-40 sm:mt-24">
-        <div className={activeTab === "amounts" ? "block" : "hidden"}>
-          <ApprovalAmountMatrix
-            ref={amountMatrixRef}
-            docType={docType}
-            docTypeOptions={docTypeOptions}
-            onDocTypeChange={setDocType}
-            approvalScope={approvalScope}
-          />
-        </div>
+        {docType !== "PR" && (
+          <div className={activeTab === "amounts" ? "block" : "hidden"}>
+            <ApprovalAmountMatrix
+              ref={amountMatrixRef}
+              docType={docType}
+              docTypeOptions={docTypeOptions}
+              onDocTypeChange={setDocType}
+              approvalScope={approvalScope}
+            />
+          </div>
+        )}
 
         <div className={activeTab === "positions" ? "block" : "hidden"}>
           <ApprovalPositionRules

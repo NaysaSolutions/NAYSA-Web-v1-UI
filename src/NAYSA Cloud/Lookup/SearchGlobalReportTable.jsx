@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import React, {
   useEffect,
   useMemo,
@@ -98,6 +99,13 @@ const SearchGlobalReportTable = forwardRef(
     const userResizedColsRef = useRef(new Set());
 
     const [isMobile, setIsMobile] = useState(false);
+    const [isMaximized, setIsMaximized] = useState(false);
+    useEffect(() => {
+      if (!isMaximized) return undefined;
+      const onKey = (e) => e.key === "Escape" && setIsMaximized(false);
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [isMaximized]);
     const [isMobileView, setIsMobileView] = useState(false);
     const [mobileViewMode, setMobileViewMode] = useState(
       () => initialState?.mobileViewMode || "table",
@@ -1006,7 +1014,7 @@ const SearchGlobalReportTable = forwardRef(
       return status === "FAILED" || moveDirection === "OUT";
     };
 
-    return (
+    const tableView = (
       <div
         className={[
           "global-tran-table-main-div-ui flex flex-col flex-1 h-full overflow-hidden",
@@ -1029,6 +1037,7 @@ const SearchGlobalReportTable = forwardRef(
           }}
         >
           <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
+
             {showGroupBy && groupBy.length === 0 && !isMobile && (
               <div
                 className={`text-gray-400 italic border border-dashed border-gray-300 rounded ${
@@ -1309,6 +1318,38 @@ const SearchGlobalReportTable = forwardRef(
               </div>
             ) : (
               <>
+                <label
+                  className={`inline-flex items-center cursor-pointer select-none shrink-0 ${
+                    tableSize === "Half" ? "h-7" : "h-8"
+                  }`}
+                  title={isMaximized ? "Restore (Esc)" : "Maximize table"}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isMaximized}
+                    onChange={() => setIsMaximized((v) => !v)}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`relative rounded-full transition-colors duration-200 ${
+                      isMaximized ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"
+                    } ${tableSize === "Half" ? "w-[92px] h-7" : "w-[92px] h-8"}`}
+                  >
+                    <span
+                      className={`absolute top-[2px] rounded-full bg-white shadow-md transition-all duration-200 ${
+                        isMaximized ? "left-[62px]" : "left-[2px]"
+                      } ${tableSize === "Half" ? "w-6 h-6" : "w-7 h-7"}`}
+                    />
+                    <span
+                      className={`absolute inset-0 flex items-center text-[11px] font-medium pointer-events-none transition-all duration-200 ${
+                        isMaximized ? "justify-start pl-2 text-white" : "justify-end pr-2"
+                      }`}
+                    >
+                      Maximize
+                    </span>
+                  </div>
+                </label>
+
                 {!isMobile && (
                   <label
                     className={`inline-flex items-center cursor-pointer select-none shrink-0 ${
@@ -1572,7 +1613,7 @@ const SearchGlobalReportTable = forwardRef(
           </div>
         )}
 
-        <div className="global-tran-table-main-sub-div-ui flex flex-col flex-1 relative bg-gray-50 border border-gray-200 rounded-sm h-50 max-h-[600px]">
+        <div className={`global-tran-table-main-sub-div-ui flex flex-col flex-1 min-h-0 relative bg-gray-50 border border-gray-200 rounded-sm ${isMaximized ? "h-full max-h-none" : "h-50 max-h-[calc(100vh-320px)] min-h-[320px]"}`}>
           {!areColumnsReady ? (
             <TableLoader message="Loading columns..." spinner />
           ) : isLoading ? (
@@ -2125,7 +2166,7 @@ const SearchGlobalReportTable = forwardRef(
               <span className="font-bold text-gray-800">
                 {(safePage - 1) * rowsPerPage + 1}
               </span>
-              –
+              â€“
               <span className="font-bold text-gray-800">
                 {Math.min(safePage * rowsPerPage, totalItems)}
               </span>{" "}
@@ -2233,6 +2274,9 @@ const SearchGlobalReportTable = forwardRef(
         />
       </div>
     );
+    return isMaximized
+      ? createPortal(<div className="fixed inset-0 z-[9999] flex flex-col bg-white p-3">{tableView}</div>, document.body)
+      : tableView;
   },
 );
 

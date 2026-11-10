@@ -4,13 +4,14 @@ import { useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
+import { faClipboardCheck, faMagnifyingGlass, faPlus, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
 import BankMastLookupModal from "../../../Lookup/SearchBankMast.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
+import ARDSCashReversalModal from "../../../Lookup/SearchARDSCashReversal.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
@@ -120,6 +121,9 @@ const ARDS = () => {
     bankCode: companyInfo?.depBankcode || "",
     bankName: companyInfo?.depositBankName || "",
     bankAcctNo: companyInfo?.depositBankAcctNo || "",
+    depositType: "SAME_BANK",
+    jvId: "",
+    jvNo: "",
     refDocNo1: "",
     refDocNo2: "",
     remarks: "",
@@ -138,6 +142,8 @@ const ARDS = () => {
     showBankMastModal: false,
     showAllTranDocNo: false,
     showCRDSOpenDetailModal: false,
+    showCashReversalModal: false,
+    cashReversalDefaults: null,
   });
 
   const updateState = (updates) => setState((prev) => ({ ...prev, ...updates }));
@@ -167,6 +173,9 @@ const ARDS = () => {
     bankCode,
     bankName,
     bankAcctNo,
+    depositType,
+    jvId,
+    jvNo,
     refDocNo1,
     refDocNo2,
     remarks,
@@ -181,6 +190,8 @@ const ARDS = () => {
     showBankMastModal,
     showAllTranDocNo,
     showCRDSOpenDetailModal,
+    showCashReversalModal,
+    cashReversalDefaults,
   } = state;
 
   useEffect(() => {
@@ -194,8 +205,12 @@ const ARDS = () => {
     CLOSED: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[String(displayStatus || "").toUpperCase()] || "";
+  const hasLinkedJv = Boolean(jvId);
+  const isTerminalDocument = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
+    String(displayStatus || "").toUpperCase()
+  );
   const isFormDisabled =
-    isViewDocument || ["FINALIZED", "CANCELLED", "CLOSED"].includes(String(displayStatus || "").toUpperCase());
+    isViewDocument || hasLinkedJv || isTerminalDocument;
 
   const ardsFieldLengths = {
     docNo: useGetFieldLength(tblFieldArray, "doc_no"),
@@ -209,6 +224,11 @@ const ARDS = () => {
     { key: "docDate", label: "Receipt Date", width: 130 },
     { key: "custCode", label: "Customer Code", width: 130 },
     { key: "custName", label: "Customer Name", width: 260 },
+    { key: "depBankCode", label: "Dep Bank", width: 130 },
+    { key: "paymentType", label: "Payment Type", width: 150 },
+    { key: "bank", label: "Bank", width: 180 },
+    { key: "checkNo", label: "Check No.", width: 140 },
+    { key: "checkDate", label: "Check Date", width: 130 },
     { key: "amount", label: "Amount", width: 130 },
     { key: "appliedAmount", label: "Applied", width: 150 },
     { key: "balance", label: "Balance", width: 130 },
@@ -316,6 +336,9 @@ const ARDS = () => {
       bankCode: companyInfo?.depBankcode || "",
       bankName: companyInfo?.depositBankName || "",
       bankAcctNo: companyInfo?.depositBankAcctNo || "",
+      depositType: "SAME_BANK",
+      jvId: "",
+      jvNo: "",
       refDocNo1: "",
       refDocNo2: "",
       remarks: "",
@@ -374,6 +397,11 @@ const ARDS = () => {
         docDate: toDateInputValue(item.docDate),
         custCode: item.custCode || "",
         custName: item.custName || "",
+        depBankCode: item.depBankCode || item.sourceBankCode || "",
+        paymentType: item.paymentType || "",
+        bank: item.bank || "",
+        checkNo: item.checkNo || "",
+        checkDate: toDateInputValue(item.checkDate),
         amount: formatNumber(item.amount ?? item.receiptAmount ?? 0),
         appliedAmount: formatNumber(item.appliedAmount ?? 0),
         balance: formatNumber(item.balance ?? 0),
@@ -392,6 +420,9 @@ const ARDS = () => {
         bankCode: data.bankCode || data.depBankCode || "",
         bankName: data.bankName || data.depAcctName || "",
         bankAcctNo: data.bankAcctNo || data.depAcctNo || "",
+        depositType: data.depositType || "SAME_BANK",
+        jvId: data.jvId || "",
+        jvNo: data.jvNo || "",
         refDocNo1: data.refDocNo1 || "",
         refDocNo2: data.refDocNo2 || "",
         remarks: data.remarks || "",
@@ -431,6 +462,7 @@ const ARDS = () => {
         bankCode: bankCode || "",
         bankName: bankName || "",
         bankAcctNo: bankAcctNo || "",
+        depositType,
         refDocNo1: refDocNo1 || "",
         refDocNo2: refDocNo2 || "",
         remarks: remarks || "",
@@ -488,6 +520,8 @@ const ARDS = () => {
   };
 
   const handleAddRow = async () => {
+    if (hasLinkedJv) return;
+
     const fieldsToCheck = {
       "Header : Bank Name": bankName,
       "Header : Bank Account No": bankAcctNo,
@@ -496,6 +530,82 @@ const ARDS = () => {
     if (!isValid) return;
 
     await handleOpenCRDSDetail();
+  };
+
+  const handleGenerateCashReversal = async () => {
+    if (hasLinkedJv) return;
+
+    if (!documentID) {
+      useSwalErrorAlert("Generate Cash Reversal", "Save the ARDS transaction before generating the cash reversal.");
+      return;
+    }
+
+    if (depositType !== "SAME_BANK_CASH") {
+      useSwalErrorAlert("Generate Cash Reversal", "Cash reversal is available only for Same Bank with Cash Collection.");
+      return;
+    }
+
+    if (jvId) {
+      useSwalInfoAlert("Generate Cash Reversal", `JV ${jvNo || "reference"} is already linked to this ARDS.`);
+      return;
+    }
+
+    updateState({ showSpinner: true });
+    try {
+      const response = await fetchDataJson("getARDSCashReversalDefaults", {
+        ardsId: documentID,
+      });
+      const row = response?.data?.[0] || response?.[0] || {};
+
+      updateState({
+        cashReversalDefaults: {
+          docSeries: row.docSeries || "Auto",
+          jvNo: row.jvNo || "",
+          jvDate: toDateInputValue(row.jvDate || documentDate),
+          remarks: row.remarks || `System-Generated JV Transaction from ARDS ${documentNo}`,
+        },
+        showCashReversalModal: true,
+      });
+    } catch (error) {
+      useSwalErrorAlert(
+        "Generate Cash Reversal",
+        error?.response?.data?.message || "Unable to prepare the cash reversal JV."
+      );
+    } finally {
+      updateState({ showSpinner: false });
+    }
+  };
+
+  const handleConfirmCashReversal = async (confirmation) => {
+    updateState({ showCashReversalModal: false, showSpinner: true });
+    try {
+      const response = await postRequest("generateARDSCashReversal", {
+        userCode,
+        userPassword: confirmation.password,
+        json_data: {
+          ardsId: documentID,
+          userCode,
+          jvNo: confirmation.jvNo,
+          jvDate: confirmation.jvDate,
+          remarks: confirmation.remarks,
+        },
+      });
+      const row = response?.data?.[0] || {};
+      if (Number(row.errorCount || row.errorcount || 0) > 0) {
+        useSwalErrorAlert("Generate Cash Reversal", row.errorMsg || row.errormsg || "Cash reversal was not generated.");
+        return;
+      }
+
+      useSwalSuccessAlert("Generate Cash Reversal", row.result || `JV ${row.jvNo || ""} was generated and posted successfully.`);
+      await fetchTranData(documentNo, branchCode);
+    } catch (error) {
+      useSwalErrorAlert(
+        "Generate Cash Reversal",
+        error?.response?.data?.message || "Unable to generate the cash reversal JV."
+      );
+    } finally {
+      updateState({ showSpinner: false });
+    }
   };
 
   const handleOpenCRDSDetail = async () => {
@@ -507,6 +617,7 @@ const ARDS = () => {
       const response = await fetchDataJson(endpoint, {
               bankCode: bankCode,
               branchCode: branchCode,
+              depositType,
             });
       
 
@@ -517,7 +628,7 @@ const ARDS = () => {
       const colConfig = await useSelectedHSColConfig(endpoint, userCode);
 
       if (!Array.isArray(openDetails) || openDetails.length === 0) {
-        useSwalErrorAlert("Open CR DS Detail", "There are no open CR records for the selected bank.");
+        useSwalErrorAlert("Open ARDS Collection", "There are no eligible collection records for the selected deposit type.");
         updateState({ globalLookupRow: [], globalLookupHeader: [] });
         return;
       }
@@ -583,6 +694,11 @@ const ARDS = () => {
       docDate: toDateInputValue(entry.docDate),
       custCode: entry.custCode || "",
       custName: entry.custName || "",
+      depBankCode: entry.depBankCode || entry.sourceBankCode || "",
+      paymentType: entry.paymentType || "",
+      bank: entry.bank || "",
+      checkNo: entry.checkNo || "",
+      checkDate: toDateInputValue(entry.checkDate),
       amount: formatNumber(entry.amount || 0),
       appliedAmount: formatNumber(entry.appliedAmount || entry.amount || 0),
       balance: formatNumber(entry.balance || 0),
@@ -840,6 +956,11 @@ const ARDS = () => {
       docDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("docDate", { type: "date", readOnly: true })}</td>,
       custCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("custCode", { readOnly: true })}</td>,
       custName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("custName", { readOnly: true })}</td>,
+      depBankCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("depBankCode", { readOnly: true })}</td>,
+      paymentType: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("paymentType", { readOnly: true })}</td>,
+      bank: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("bank", { readOnly: true })}</td>,
+      checkNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("checkNo", { readOnly: true })}</td>,
+      checkDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("checkDate", { type: "date", readOnly: true })}</td>,
       amount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("amount", { readOnly: true })}</td>,
       appliedAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("appliedAmount")}</td>,
       balance: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("balance", { readOnly: true })}</td>,
@@ -961,6 +1082,19 @@ const ARDS = () => {
 
             <div className="global-tran-textbox-group-div-ui">
               <FieldRenderer
+                id="depositType"
+                label="Deposit Type"
+                type="select"
+                value={depositType}
+                disabled={isFormDisabled || detailRows.length > 0}
+                options={[
+                  { value: "SAME_BANK", label: "Same Bank Collection" },
+                  { value: "SAME_BANK_CASH", label: "Same Bank with Cash Collection" },
+                ]}
+                onChange={(val) => updateState({ depositType: val })}
+              />
+
+              <FieldRenderer
                 id="bankName"
                 label="Bank Name"
                 type="lookup"
@@ -976,8 +1110,8 @@ const ARDS = () => {
                 label="Bank Account No"
                 type="text"
                 value={bankAcctNo || ""}
-                disabled={isFormDisabled}
-                onChange={(val) => updateState({ bankAcctNo: val })}
+                disabled
+                readOnly
               />
             </div>
 
@@ -999,6 +1133,17 @@ const ARDS = () => {
                 disabled={isFormDisabled}
                 onChange={(val) => updateState({ refDocNo2: val })}
               />
+
+              {jvId && (
+                <FieldRenderer
+                  id="jvNo"
+                  label="Cash Reversal JV No."
+                  type="text"
+                  value={jvNo || jvId}
+                  disabled
+                  readOnly
+                />
+              )}
             </div>
 
             <div className="col-span-full">
@@ -1072,10 +1217,21 @@ const ARDS = () => {
             <div className="global-tran-tab-footer-button-div-ui">
               <button
                 onClick={handleAddRow}
-                className="global-tran-tab-footer-button-add-ui"
-                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                className="global-tran-tab-footer-button-add-ui disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ visibility: isViewDocument || isTerminalDocument ? "hidden" : "visible" }}
+                disabled={hasLinkedJv || isLoading}
               >
                 <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateCashReversal}
+                className="ml-2 flex min-h-[36px] items-center justify-center whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:border-blue-500 hover:bg-blue-600 hover:text-white focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ visibility: documentID && depositType === "SAME_BANK_CASH" ? "visible" : "hidden" }}
+                disabled={hasLinkedJv || isLoading}
+              >
+                <FontAwesomeIcon icon={faClipboardCheck} className="mr-2" />
+                Generate Cash Reversal
               </button>
             </div>
 
@@ -1129,6 +1285,13 @@ const ARDS = () => {
 
 
       {showCancelModal && <CancelTranModal isOpen={showCancelModal} onClose={handleCloseCancel} />}
+
+      <ARDSCashReversalModal
+        isOpen={showCashReversalModal}
+        defaults={cashReversalDefaults}
+        onClose={() => updateState({ showCashReversalModal: false })}
+        onConfirm={handleConfirmCashReversal}
+      />
 
       {showAttachModal && (
         <AttachDocumentModal

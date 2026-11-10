@@ -920,14 +920,14 @@
 //               <div className="flex flex-nowrap items-center justify-center gap-2 md:justify-end">
 //                 <button
 //                   onClick={() => setIsMobileNavOpen(true)}
-//                   className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90 lg:hidden"
+//                   className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 lg:hidden"
 //                 >
 //                   <FontAwesomeIcon icon={faBars} />
 //                 </button>
 
 //                 <button
 //                   onClick={handleFind}
-//                   className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90"
+//                   className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700"
 //                 >
 //                   <FontAwesomeIcon icon={faMagnifyingGlass} />
 //                   <span className="ml-2 hidden lg:inline">Filter</span>
@@ -935,7 +935,7 @@
 
 //                 <button
 //                   onClick={handleReset}
-//                   className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90"
+//                   className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700"
 //                 >
 //                   <FontAwesomeIcon icon={faUndo} />
 //                   <span className="ml-2 hidden lg:inline">Reset</span>
@@ -943,7 +943,7 @@
 
 //                 <button
 //                   onClick={handlePrint}
-//                   className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90"
+//                   className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700"
 //                 >
 //                   <FontAwesomeIcon icon={faPrint} />
 //                   <span className="ml-2 hidden lg:inline">Print</span>
@@ -951,7 +951,7 @@
 
 //                 <button
 //                   onClick={() => setHideNav((v) => !v)}
-//                   className="hidden shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90 lg:inline-flex"
+//                   className="hidden shrink-0 items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 lg:inline-flex"
 //                 >
 //                   <FontAwesomeIcon
 //                     icon={hideNav ? faChevronRight : faChevronLeft}
@@ -974,8 +974,8 @@
 //             }`}
 //           >
 //             <div className="global-tran-tab-div-ui h-full">
-//               <div className="h-full overflow-hidden rounded-2xl border bg-white shadow-sm">
-//                 <div className="border-b px-4 py-4">
+//               <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+//                 <div className="border-b border-slate-200 bg-slate-50 px-4 py-4">
 //                   {!hideNav ? (
 //                     <>
 //                       <div className="text-sm font-semibold text-gray-800">
@@ -1006,8 +1006,8 @@
 
 //           <div className="min-w-0 flex-1">
 //             <div className="global-tran-tab-div-ui">
-//               <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-//                 <div className="border-b bg-gradient-to-r from-blue-50 to-white px-4 py-3">
+//               <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md">
+//                 <div className="border-b border-slate-200 border-l-4 border-l-blue-600 bg-gradient-to-r from-slate-50 via-blue-50/40 to-white px-5 py-4">
 //                   <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between">
 //                     <div>
 //                       <div className="text-base font-semibold text-gray-800">
@@ -1133,6 +1133,8 @@ import {
   faListOl,
   faArrowTrendUp,
   faArrowTrendDown,
+  faBookOpen,
+  faFileInvoiceDollar,
 } from "@fortawesome/free-solid-svg-icons";
 import { ArrowLeftRight, Layers } from "lucide-react";
 
@@ -1169,7 +1171,7 @@ import IncomeStatementMTDReport from "./IncomeStatementMTDReport.jsx";
 import IncomeExpenseReport from "./IncomeExpenseReport.jsx";
 
 export default function GLINQ({
-  pageTitle = "GL Query",
+  pageTitle = "GL Inquiry & Financial Reporting",
   sourceMode = "GL_QUERY",
 }) {
   const { user, companyInfo, currentUserRow } = useAuth();
@@ -1966,6 +1968,10 @@ export default function GLINQ({
   const ActiveReport = tabRegistry[activeTab];
   const currentContext = buildContextText(filters, activeTab);
 
+  const showBlank =
+    !view.hasLoaded &&
+    ["glQuery", "slQuery", "trialBalance", "balSheetYTD", "incStatementYTD", "isMTD", "incExp"].includes(activeTab);
+
   return (
     <div className="global-ref-main-div-ui">
       {(showSpinner || isPrinting) && <LoadingSpinner />}
@@ -1973,9 +1979,7 @@ export default function GLINQ({
       <div className="global-ref-header-ui">
         <div className="flex w-full flex-col gap-6 md:flex-row md:items-center md:justify-between lg:min-h-[40px]">
           <div className="flex w-full md:w-auto md:justify-start">
-            <h1 className="global-ref-headertext-ui w-full truncate text-center md:w-auto md:text-left">
-              {pageTitle}
-            </h1>
+            <h1 className="global-ref-headertext-ui w-full truncate text-center md:w-auto md:text-left"><FontAwesomeIcon icon={faFileInvoiceDollar} className="mr-2.5 text-[0.85em] opacity-90" />{pageTitle}</h1>
           </div>
 
           <div className="flex w-full md:w-auto md:justify-end">
@@ -1983,14 +1987,14 @@ export default function GLINQ({
               <div className="flex flex-nowrap items-center justify-center gap-2 md:justify-end">
                 <button
                   onClick={() => setIsMobileNavOpen(true)}
-                  className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90 lg:hidden"
+                  className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 lg:hidden"
                 >
                   <FontAwesomeIcon icon={faBars} />
                 </button>
 
                 <button
                   onClick={handleFind}
-                  className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90"
+                  className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700"
                 >
                   <FontAwesomeIcon icon={faMagnifyingGlass} />
                   <span className="ml-2 hidden lg:inline">Filter</span>
@@ -1998,7 +2002,7 @@ export default function GLINQ({
 
                 <button
                   onClick={handleReset}
-                  className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90"
+                  className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700"
                 >
                   <FontAwesomeIcon icon={faUndo} />
                   <span className="ml-2 hidden lg:inline">Reset</span>
@@ -2006,7 +2010,7 @@ export default function GLINQ({
 
                 <button
                   onClick={handlePrint}
-                  className="shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90"
+                  className="shrink-0 inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700"
                 >
                   <FontAwesomeIcon icon={faPrint} />
                   <span className="ml-2 hidden lg:inline">Print</span>
@@ -2014,7 +2018,7 @@ export default function GLINQ({
 
                 <button
                   onClick={() => setHideNav((v) => !v)}
-                  className="hidden shrink-0 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90 lg:inline-flex"
+                  className="hidden shrink-0 items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 lg:inline-flex"
                 >
                   <FontAwesomeIcon
                     icon={hideNav ? faChevronRight : faChevronLeft}
@@ -2037,8 +2041,8 @@ export default function GLINQ({
             }`}
           >
             <div className="global-tran-tab-div-ui h-full !m-0 !p-4">
-              <div className="h-full overflow-hidden rounded-2xl border bg-white shadow-sm">
-                <div className="border-b px-4 py-4">
+              <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-4">
                   {!hideNav ? (
                     <>
                       <div className="text-sm font-semibold text-gray-800">
@@ -2049,9 +2053,7 @@ export default function GLINQ({
                       </div>
                     </>
                   ) : (
-                    <div className="text-center text-[11px] font-semibold text-blue-700">
-                      GL
-                    </div>
+                    <div className="flex justify-center text-blue-700" title={pageTitle}><FontAwesomeIcon icon={faBookOpen} className="text-lg" /></div>
                   )}
                 </div>
 
@@ -2068,37 +2070,40 @@ export default function GLINQ({
           </aside>
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <div className="global-tran-tab-div-ui !m-0 !p-4">
-              <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-                <div className="border-b bg-gradient-to-r from-blue-50 to-white px-4 py-3">
-                  <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <div className="text-base font-semibold text-gray-800">
-                        {activeTabConfig.label}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-gray-500">
-                        {currentContext}
-                      </div>
-                    </div>
+            <section className="overflow-hidden rounded-xl border border-slate-200 border-l-4 border-l-blue-600 bg-white shadow-sm">
+              <div className="flex items-center justify-between gap-3 px-5 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-800">
+                    <FontAwesomeIcon icon={activeTabConfig.icon || faListOl} className="text-sm text-blue-600" />
+                    <span className="truncate">{activeTabConfig.label}</span>
+                  </div>
+                  <div className="mt-0.5 truncate text-xs font-medium text-slate-500">
+                    {currentContext}
                   </div>
                 </div>
 
-                {!['isMTD', 'incStatementYTD', 'incExp'].includes(activeTab) && (
-                  <div className="p-4">
-                    <ContextCards summary={view.summary} activeTab={activeTab} />
-                  </div>
-                )}
               </div>
-            </div>
 
-            <div className="global-tran-tab-div-ui !m-0 !p-4">
+              {!['isMTD', 'incStatementYTD', 'incExp'].includes(activeTab) && (
+                <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+                  <ContextCards summary={view.summary} activeTab={activeTab} />
+                </div>
+              )}
+            </section>
+
+            <div className={`global-tran-tab-div-ui !m-0 !p-4 ${showBlank ? "flex flex-1 flex-col" : ""}`}>
               <div
                 className={
-                  ["isMTD", "incExp"].includes(activeTab)
+                  showBlank
+                    ? "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                    : ["isMTD", "incExp"].includes(activeTab)
                     ? "min-h-0 overflow-hidden"
                     : "global-tran-table-main-div-ui"
                 }
               >
+                {showBlank ? (
+                  <BlankReportState label={activeTabConfig.label} />
+                ) : (
                 <ActiveReport
                   view={view}
                   filters={filters}
@@ -2122,6 +2127,7 @@ export default function GLINQ({
                       : setIncomeStatementMTDView
                   }
                 />
+                )}
               </div>
             </div>
           </div>
@@ -2407,7 +2413,7 @@ const ContextCards = ({ summary, activeTab }) => {
   }
 
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-x-8 gap-y-2">
       {totals.map((item, index) => {
         const isPositive = index === 0;
         const iconClass = item.iconClass || (isPositive
@@ -2420,16 +2426,16 @@ const ContextCards = ({ summary, activeTab }) => {
         return (
             <div
               key={item.label}
-              className="group flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm transition-all duration-200 hover:border-slate-300 hover:shadow-md sm:w-[216px]"
+              className="group flex items-center gap-3 border-l border-slate-200 pl-6 first:border-l-0 first:pl-0"
             >
-              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110 ${iconClass}`}>
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110 ${iconClass}`}>
                 {Icon ? <Icon size={16} /> : <FontAwesomeIcon icon={icon} className="text-sm" />}
               </div>
               <div className="min-w-0">
                 <div className="truncate text-[10px] font-semibold uppercase leading-tight tracking-widest text-slate-400">
                   {item.label}
                 </div>
-                <div className={`mt-0.5 text-sm font-bold tabular-nums ${valueClass}`}>
+                <div className={`mt-0.5 font-mono text-base font-semibold tabular-nums tracking-tight ${valueClass}`}>
                   {item.value}
                 </div>
               </div>
@@ -2451,10 +2457,10 @@ const ReportNavList = ({ activeTab, tabConfigs, handleSelect, collapsed }) => (
           <button
             onClick={() => handleSelect(key)}
             title={collapsed ? config.label || key : undefined}
-            className={`group w-full rounded-xl border text-left transition ${
+            className={`group w-full rounded-xl border text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
               activeTab === key
-                ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
-                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                ? "border-blue-200 border-l-4 border-l-blue-600 bg-blue-50 font-semibold text-blue-700 shadow-sm"
+                : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50/40 hover:text-blue-700"
             } ${
               collapsed
                 ? "flex flex-col items-center justify-center gap-1 px-1 py-2"
@@ -2463,7 +2469,7 @@ const ReportNavList = ({ activeTab, tabConfigs, handleSelect, collapsed }) => (
           >
             <FontAwesomeIcon
               icon={config.icon || faListOl}
-              className={`${collapsed ? "" : "mr-2"} text-[13px] transition-transform duration-200 group-hover:scale-125`}
+              className={`${collapsed ? "" : "mr-2"} text-[13px] transition-transform duration-200 group-hover:scale-125 group-hover:text-blue-600`}
             />
             <span className={collapsed ? "w-full text-center text-[9px] font-medium leading-tight" : "truncate text-xs font-medium sm:text-sm"}>
               {config.label || key}
@@ -2474,7 +2480,6 @@ const ReportNavList = ({ activeTab, tabConfigs, handleSelect, collapsed }) => (
     })}
   </ul>
 );
-
 const MobileNavDrawer = ({
   isOpen,
   onClose,
@@ -2518,11 +2523,82 @@ const MobileNavDrawer = ({
   );
 };
 
+const BlankReportState = ({ label }) => (
+  <div className="relative flex flex-1 flex-col items-center justify-center gap-5 overflow-hidden bg-gradient-to-b from-white via-blue-50/30 to-slate-50 p-8 text-center">
+    <style>{`
+      @keyframes glFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-14px) } }
+      @keyframes glShadow { 0%,100% { transform: scaleX(1); opacity: .45 } 50% { transform: scaleX(.78); opacity: .25 } }
+      @keyframes glTwinkle { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+      @media (prefers-reduced-motion: reduce) { .gl-float,.gl-shadow,.gl-twinkle { animation: none !important } }
+    `}</style>
+
+    <div className="relative">
+      <svg viewBox="0 0 260 220" className="h-56 w-64" role="img" aria-label="No report loaded">
+        <defs>
+          <linearGradient id="glCard" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#ffffff" />
+            <stop offset="1" stopColor="#eaf2ff" />
+          </linearGradient>
+          <linearGradient id="glBar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#60a5fa" />
+            <stop offset="1" stopColor="#2563eb" />
+          </linearGradient>
+          <linearGradient id="glCoin" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#fde68a" />
+            <stop offset="1" stopColor="#f59e0b" />
+          </linearGradient>
+        </defs>
+
+        <ellipse className="gl-shadow" cx="130" cy="204" rx="64" ry="8" fill="#94a3b8" style={{ transformOrigin: "130px 204px", animation: "glShadow 4s ease-in-out infinite" }} />
+
+        <g className="gl-twinkle" style={{ animation: "glTwinkle 3s ease-in-out infinite" }}>
+          <path d="M34 60 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z" fill="#93c5fd" />
+          <path d="M226 36 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5z" fill="#bfdbfe" />
+          <circle cx="222" cy="120" r="4" fill="#93c5fd" />
+          <circle cx="40" cy="132" r="3" fill="#bfdbfe" />
+        </g>
+
+        <g className="gl-float" style={{ animation: "glFloat 4s ease-in-out infinite" }}>
+          <rect x="62" y="30" width="136" height="150" rx="16" fill="url(#glCard)" stroke="#bfdbfe" strokeWidth="2" />
+          <rect x="62" y="30" width="136" height="30" rx="16" fill="#2563eb" />
+          <rect x="62" y="46" width="136" height="14" fill="#2563eb" />
+          <circle cx="78" cy="45" r="4" fill="#bfdbfe" />
+          <circle cx="91" cy="45" r="4" fill="#93c5fd" />
+          <rect x="108" y="41" width="62" height="8" rx="4" fill="#dbeafe" />
+
+          <rect x="78" y="74" width="62" height="6" rx="3" fill="#cbd5e1" />
+          <rect x="78" y="86" width="104" height="5" rx="2.5" fill="#e2e8f0" />
+          <rect x="78" y="97" width="86" height="5" rx="2.5" fill="#e2e8f0" />
+
+          <rect x="80" y="140" width="16" height="26" rx="4" fill="url(#glBar)" opacity=".55" />
+          <rect x="102" y="126" width="16" height="40" rx="4" fill="url(#glBar)" opacity=".75" />
+          <rect x="124" y="112" width="16" height="54" rx="4" fill="url(#glBar)" />
+          <rect x="146" y="132" width="16" height="34" rx="4" fill="url(#glBar)" opacity=".7" />
+          <path d="M80 130 L106 114 L128 120 L166 96" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="166" cy="96" r="4.5" fill="#fff" stroke="#f59e0b" strokeWidth="3" />
+
+          <g transform="translate(176 150)">
+            <circle r="22" fill="url(#glCoin)" stroke="#fff" strokeWidth="4" />
+            <circle r="15" fill="none" stroke="#fffbeb" strokeWidth="2" opacity=".8" />
+            <text y="7" textAnchor="middle" fontSize="20" fontWeight="700" fill="#fff" fontFamily="Roboto, Arial, sans-serif">₱</text>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <div>
+      <div className="text-lg font-semibold tracking-tight text-slate-700">No report to display yet</div>
+      <div className="mt-1.5 text-sm text-slate-500">
+        Click <b className="text-blue-600">Filter</b>, then <b className="text-blue-600">Apply</b> to load <b className="text-slate-700">{label}</b>.
+      </div>
+    </div>
+  </div>
+);
 const NoRecordsState = ({ title, subtitle, hint }) => (
   <div className="flex items-center justify-center p-10">
-    <div className="w-full max-w-xl rounded-2xl border bg-slate-50/60 p-6 shadow-sm">
+    <div className="w-full max-w-xl rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-8 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
           <FontAwesomeIcon icon={faDatabase} />
         </div>
 
@@ -2564,32 +2640,32 @@ const FilterModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 backdrop-blur-[1px] sm:p-3"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 backdrop-blur-sm sm:p-3"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[84vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-lg bg-white shadow-2xl sm:max-h-[88vh] sm:max-w-4xl sm:rounded-xl"
+        className="flex max-h-[84vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[88vh] sm:max-w-4xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b bg-gradient-to-r from-blue-50 to-white px-3 py-2.5 sm:px-4 sm:py-3">
-          <h3 className="flex items-center gap-2 truncate text-sm font-semibold text-gray-800 sm:text-base">
+        <div className="flex items-center justify-between border-b border-slate-200 border-l-4 border-l-blue-600 bg-gradient-to-r from-slate-50 via-blue-50/40 to-white px-4 py-3 sm:px-5 sm:py-3.5">
+          <h3 className="flex items-center gap-2.5 truncate text-sm font-bold tracking-tight text-slate-800 sm:text-base">
             <FontAwesomeIcon
               icon={faFilter}
-              className="text-[13px] text-blue-600 sm:text-sm"
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 p-1.5 text-[13px] text-blue-600 sm:text-sm"
             />
             <span>Filters - {pageTitle}</span>
           </h3>
 
           <button
             onClick={onClose}
-            className="p-1 text-gray-500 transition hover:text-gray-800"
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
             disabled={isLoading}
           >
             <FontAwesomeIcon icon={faTimes} className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </button>
         </div>
 
-        <div className="space-y-2.5 overflow-y-auto p-2.5 sm:space-y-3 sm:p-4">
+        <div className="space-y-3 overflow-y-auto bg-slate-50/50 p-3 sm:space-y-4 sm:p-5">
           {hasBranchAcc && (
             <ModalSection title="Branch & Account">
               {tabConfig.filters.includes("Branch") && (
@@ -2817,11 +2893,11 @@ const FilterModal = ({
           )}
         </div>
 
-        <div className="border-t bg-gray-50 px-3 py-2.5 sm:px-4">
+        <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
           <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
             <button
               onClick={onClose}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border bg-white px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-100 sm:min-w-[110px] sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:min-w-[110px] sm:w-auto"
               disabled={isLoading}
             >
               <FontAwesomeIcon icon={faTimes} className="h-3.5 w-3.5" />
@@ -2830,7 +2906,7 @@ const FilterModal = ({
 
             <button
               onClick={onApply}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-60 sm:min-w-[110px] sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-60 sm:min-w-[110px] sm:w-auto"
               disabled={isLoading}
             >
               <FontAwesomeIcon icon={faMagnifyingGlass} className="h-3.5 w-3.5" />
@@ -2844,8 +2920,8 @@ const FilterModal = ({
 };
 
 const ModalSection = ({ title, children }) => (
-  <div className="rounded-lg border bg-slate-50/60 p-3 shadow-sm">
-    <p className="mb-2 text-sm font-semibold text-gray-700">{title}</p>
+  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <p className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-600 before:h-3.5 before:w-1 before:rounded-full before:bg-blue-600">{title}</p>
     <div className="grid grid-cols-1 gap-2">{children}</div>
   </div>
 );

@@ -84,7 +84,7 @@ const ApprovalAmountMatrix = forwardRef(function ApprovalAmountMatrix(
 
   const query = useQuery({
     queryKey: ["approvalAmountMatrix", docType, scope, currencyCode],
-    enabled: Boolean(docType && currencyCode),
+    enabled: Boolean(docType && docType !== "PR" && currencyCode),
     queryFn: async () => {
       const { data } = await apiClient.get("/approvalAmountMatrix", {
         params: { docCode: docType, appScope: scope, currencyCode },
