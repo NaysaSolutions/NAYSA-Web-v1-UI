@@ -3052,6 +3052,7 @@ const handleActivityOption = async (action) => {
       {vatLookupModalOpen && (
         <VATLookupModal
           isOpen={vatLookupModalOpen}
+          customParam="InputAll"
           onClose={handleCloseVATLookup}
         />
       )}

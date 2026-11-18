@@ -81,6 +81,63 @@ import Header from "@/NAYSA Cloud/Components/Header";
 // SHARED APV FORMATTERS AND PAYLOAD MAPPERS
 // Keep database/API naming conversions outside the component where possible.
 
+const isEnabledApvRequirement = (value) =>
+  ["Y", "YES", "TRUE"].includes(String(value ?? "").trim().toUpperCase());
+
+const getApvRequirement = (sources, keys, fallback) => {
+  for (const source of sources) {
+    for (const key of keys) {
+      if (source?.[key] !== undefined && source[key] !== null && source[key] !== "") {
+        return isEnabledApvRequirement(source[key]);
+      }
+    }
+  }
+  return fallback;
+};
+
+const applyApvGlLookup = (row, field, value, data) => {
+  if (!data || Array.isArray(data) || typeof data !== "object" || !data.acctCode) return null;
+
+  const selected = value && typeof value === "object" ? value : {};
+  const changingAccount = field === "acctCode";
+  const sources = [data, ...(changingAccount ? [selected] : [row])];
+  const requiresSl = getApvRequirement(
+    sources,
+    ["reqSl", "reqSL", "slReq", "recSl", "slRequired"],
+    Boolean(data.slCode),
+  );
+  const requiresRc = getApvRequirement(
+    sources,
+    ["reqRc", "reqRC", "rcReq", "recRc", "rcRequired"],
+    Boolean(data.rcCode),
+  );
+
+  return {
+    ...row,
+    acctCode: data.acctCode,
+    acctName: data.acctName ?? (changingAccount ? selected.acctName || selected.accountName || "" : row.acctName),
+    reqSl: requiresSl ? "Y" : "N",
+    reqRc: requiresRc ? "Y" : "N",
+    slCode: requiresSl ? data.slCode || "REQ SL" : "",
+    slName: requiresSl
+      ? data.slName ?? (field === "slCode" ? selected.slName || "" : changingAccount ? "" : row.slName || "")
+      : "",
+    sltypeCode: requiresSl
+      ? data.sltypeCode ??
+        (field === "slCode" ? selected.sltypeCode || "" : changingAccount ? "" : row.sltypeCode || "")
+      : "",
+    rcCode: requiresRc ? data.rcCode || "REQ RC" : "",
+    rcName: requiresRc
+      ? data.rcName ?? (field === "rcCode" ? selected.rcName || "" : changingAccount ? "" : row.rcName || "")
+      : "",
+    vatCode: data.vatCode ?? row.vatCode,
+    vatName: data.vatName ?? row.vatName,
+    atcCode: data.atcCode ?? row.atcCode,
+    atcName: data.atcName ?? row.atcName,
+    particular: data.particular ?? row.particular,
+  };
+};
+
 const formatSlrefDateInput = (value) => {
   const cleaned = String(value || "")
     .replace(/\D/g, "")
@@ -842,15 +899,17 @@ const APV = () => {
 
   const handleOpenReferenceLCImportation = async (options = false) => {
     const inquiryMode = typeof options === "object" ? options.inquiryMode === true : options === true;
-    const lookupVendCode = String(
-      typeof options === "object" ? options.vendCode ?? vendCode ?? "" : vendCode ?? "",
-    ).trim();
     setShowInvoiceAddDropdown(false);
     if (!inquiryMode) setReferenceInquiryOpen(false);
     const lookupBranchCode = String(
       typeof options === "object"
         ? options.branchCode ?? branchCode ?? assignedUserBranch.branchCode ?? ""
         : branchCode || "",
+    ).trim();
+    const lookupVendCode = String(
+      typeof options === "object"
+        ? options.vendCode ?? vendCode ?? vendName?.vendCode ?? ""
+        : vendCode || vendName?.vendCode || "",
     ).trim();
 
     try {
@@ -864,10 +923,7 @@ const APV = () => {
         branchCode: lookupBranchCode,
         vendCode: lookupVendCode,
       });
-      const rawRows = responseRows.filter((row) => {
-        const rowVendCode = String(row.vendCode ?? row.vendorCode ?? row.supplierCode ?? "").trim();
-        return !lookupVendCode || rowVendCode.toUpperCase() === lookupVendCode.toUpperCase();
-      });
+      const rawRows = responseRows;
       if (!rawRows.length) {
         useSwalErrorAlert("LC Importation Reference", "No open LC Importation reference found.");
         return;
@@ -893,9 +949,14 @@ const APV = () => {
 
 
   const handleCloseLCModal = async (selection) => {
+    const selectedSummaries = Array.isArray(selection?.summary) ? selection.summary : [];
+    const selectedSummary = selectedSummaries[0] || null;
     const selectedDetails = Array.isArray(selection?.details) ? selection.details : [];
     if (referenceInquiryOpen && documentID) return;
-    if (!validateReferencePayees(selectedDetails, !referenceInquiryOpen)) return;
+    if (!selectedSummary) {
+      useSwalErrorAlert("LC Importation Reference", "Select an LC Summary record first.");
+      return;
+    }
     if (!selectedDetails.length) {
       updateState({
         showOpenLCModal: false,
@@ -909,9 +970,9 @@ const APV = () => {
     });
 
     try {
-      const payeeUpdates = referenceInquiryOpen ? await getReferencePayeeHeader(selectedDetails[0]) : {};
-      if (referenceInquiryOpen && !canApplyReferencePayee(payeeUpdates.vendCode)) return;
-      if (referenceInquiryOpen) updateState(payeeUpdates);
+      // The APV header payee follows the selected LC Summary. Each selected LC
+      // Detail row keeps its own payee in Invoice Details.
+      const payeeUpdates = await getReferencePayeeHeader(selectedSummary);
       const foundAtcCode = payeeUpdates.vendName?.atcCode || vendName?.atcCode || "";
       const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
       const mappedRows = await Promise.all(
@@ -952,6 +1013,8 @@ const APV = () => {
             recRc: item.rcCode ? "Y" : "N",
             recSl: "Y",
             sourceId: item.sourceId || item.lcId || "",
+            autoAdv: "N",
+            branchCode: item.branchCode || branchCode || "",
             lcId: item.lcId || "",
             lcNo: item.lcNo || "",
           };
@@ -2865,14 +2928,15 @@ const APV = () => {
     const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
     if (!itemsArray.length) return;
     if (referenceInquiryOpen && documentID) return;
-    if (!validateReferencePayees(itemsArray, !referenceInquiryOpen)) return;
+    if (!isLCImportationFlow && !validateReferencePayees(itemsArray, !referenceInquiryOpen)) return;
     if (isRFPFlow && !validateRfpReferences(itemsArray)) return;
     updateState({ isLoading: true, showSpinner: true });
 
     try {
-      const payeeUpdates = referenceInquiryOpen ? await getReferencePayeeHeader(itemsArray[0]) : {};
-      if (referenceInquiryOpen && !canApplyReferencePayee(payeeUpdates.vendCode)) return;
-      if (referenceInquiryOpen) updateState(payeeUpdates);
+      const shouldSetReferencePayee = referenceInquiryOpen && (isLCImportationFlow ? !vendCode : true);
+      const payeeUpdates = shouldSetReferencePayee ? await getReferencePayeeHeader(itemsArray[0]) : {};
+      if (referenceInquiryOpen && !isLCImportationFlow && !canApplyReferencePayee(payeeUpdates.vendCode)) return;
+      if (shouldSetReferencePayee) updateState(payeeUpdates);
       const effectiveVendCode = payeeUpdates.vendCode || vendCode;
       const effectiveVendName = payeeUpdates.vendName || vendName;
       if (isRFPFlow) {
@@ -3082,6 +3146,8 @@ const APV = () => {
               recRc: item.rcCode ? "Y" : "N",
               recSl: "Y",
               sourceId: item.sourceId || item.lcId || selectedLcId,
+              autoAdv: "N",
+              branchCode: item.branchCode || selectedLC.branchCode || branchCode || "",
               lcId: item.lcId || selectedLcId,
               lcNo: item.lcNo || selectedLC.lcNo || "",
             };
@@ -3929,7 +3995,7 @@ const APV = () => {
   };
 
 
-  const commitManualAdvanceAmount = (index, field, value) => {
+  const commitManualAdvanceAmount = async (index, field, value) => {
     const row = detailRows[index] || {};
     const amount = parseFormattedNumber(value);
     const rules = {
@@ -3942,18 +4008,18 @@ const APV = () => {
 
     if (normalizedAmount < 0) {
       useSwalErrorAlert("Invalid Advances Amount", `${rule.label} cannot be negative.`);
-      handleDetailChange(index, field, "0.00", false);
+      await handleDetailChange(index, field, "0.00", false);
       return false;
     }
 
     const limit = Math.max(parseFormattedNumber(row[rule.limitField]) || 0, 0);
     if (normalizedAmount > limit) {
       useSwalErrorAlert("Invalid Advances Amount", `${rule.label} cannot exceed the ${rule.limitLabel} of ${formatNumber(limit)}.`);
-      handleDetailChange(index, field, "0.00", false);
+      await handleDetailChange(index, field, "0.00", false);
       return false;
     }
 
-    handleDetailChange(index, field, formatNumber(normalizedAmount), false);
+    await handleDetailChange(index, field, formatNumber(normalizedAmount), false);
     return true;
   };
 
@@ -4002,41 +4068,12 @@ const APV = () => {
     let row = { ...currentRows[index] };
     if (["acctCode", "slCode", "rcCode", "sltypeCode", "vatCode", "atcCode"].includes(field)) {
       const data = await useUpdateRowGLEntries(row, field, value, vendCode, docType);
-      if (data) {
-        const selectedRequirement = typeof value === "object" ? value : {};
-        const rawRcReq = data.reqRc || data.rcReq || data.recRc || selectedRequirement.reqRc || selectedRequirement.rcReq || selectedRequirement.recRc || "N";
-        const rawSlReq = data.reqSl || data.slReq || data.recSl || selectedRequirement.reqSl || selectedRequirement.slReq || selectedRequirement.recSl || "N";
-        const isRcReq = rawRcReq === "Y" || rawRcReq === "Yes";
-        const isSlReq = rawSlReq === "Y" || rawSlReq === "Yes";
-
-        row.acctCode = data.acctCode || selectedRequirement.acctCode || selectedRequirement.accountCode || "";
-        row.sltypeCode = isSlReq ? data.sltypeCode || vendName?.sltypeCode || "SU" : "";
-        if (isRcReq) {
-          row.rcCode = data.rcCode && data.rcCode !== "" ? data.rcCode : "REQ RC";
-          row.rcName = data.rcName || "";
-        } else {
-          row.rcCode = "";
-          row.rcName = "";
-        }
-
-        if (isSlReq) {
-          row.slCode = data.slCode && data.slCode !== "REQ SL" ? data.slCode : vendCode || "REQ SL";
-          row.slName = data.slName || vendName?.vendName || "";
-        } else {
-          row.sltypeCode = "";
-          row.slCode = "";
-          row.slName = "";
-        }
-
-        row.vatCode = data.vatCode || "";
-        row.vatName = data.vatName || "";
-        row.atcCode = data.atcCode || "";
-        row.atcName = data.atcName || "";
-        row.particular = data.particular || "";
-
-        row.reqRc = isRcReq ? "Y" : "N";
-        row.reqSl = isSlReq ? "Y" : "N";
+      const updatedRow = applyApvGlLookup(row, field, value, data);
+      if (!updatedRow) {
+        useSwalErrorAlert("GL Lookup", "Unable to update this entry. Please select the code again.");
+        return;
       }
+      row = updatedRow;
     }
 
     // Amount logic - ensures we only touch index [index]
@@ -4209,7 +4246,7 @@ const APV = () => {
 
   const handleCloseSlModalGL = async (selectedSl) => {
     if (selectedSl && selectedRowIndex !== null) {
-      handleDetailChangeGL(selectedRowIndex, "slCode", selectedSl);
+      await handleDetailChangeGL(selectedRowIndex, "slCode", selectedSl);
     }
     updateState({
       showSlModal: false,
@@ -4615,7 +4652,7 @@ const APV = () => {
     { key: "atcAmount", label: "ATC Amount", width: 130 },
     { key: "paytermCode", label: "Payment Terms", width: 130 },
     { key: "dueDate", label: "Due Date", width: 130 },
-    ...(isPurchasesAPType ? [{ key: "autoAdv", label: "Auto Apply Advances", width: 145 }] : []),
+    ...(showAppliedAdvancesColumns ? [{ key: "autoAdv", label: "Auto Apply Advances", width: 145 }] : []),
 
     ...(showAppliedAdvancesColumns
       ? [
@@ -5674,8 +5711,17 @@ const APV = () => {
                               </div>
                             </td>
 
-                            {isPurchasesAPType && (
+                            {showAppliedAdvancesColumns && (
                               <td data-apv-column-key="autoAdv" className="global-tran-td-ui">
+                                {isImportationAPType ? (
+                                  <button
+                                    type="button"
+                                    className="w-full h-7 rounded-full border border-slate-300 bg-white text-[11px] font-semibold text-slate-600 cursor-default"
+                                    disabled
+                                  >
+                                    No
+                                  </button>
+                                ) : (
                                 <button
                                   type="button"
                                   className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.autoAdv !== "N" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
@@ -5684,6 +5730,7 @@ const APV = () => {
                                 >
                                   {row.autoAdv !== "N" ? "Yes" : "No"}
                                 </button>
+                                )}
                               </td>
                             )}
 
@@ -5697,7 +5744,7 @@ const APV = () => {
                                     value={row.advpoNo || ""}
                                     maxLength={50}
                                     onChange={(e) => handleDetailChange(index, "advpoNo", e.target.value, false)}
-                                    disabled={isFormDisabled || row.autoAdv !== "N"}
+                                    disabled={isFormDisabled || (!isImportationAPType && row.autoAdv !== "N")}
                                   />
                                 </td>
 
@@ -5721,18 +5768,18 @@ const APV = () => {
                                       }
                                       setTimeout(() => e.target.select(), 0);
                                     }}
-                                    onBlur={(e) => {
+                                    onBlur={async (e) => {
                                       if (isFormDisabled) return;
-                                      commitManualAdvanceAmount(index, "advpoAmount", e.target.value);
+                                      await commitManualAdvanceAmount(index, "advpoAmount", e.target.value);
                                     }}
                                     onKeyDown={async (e) => {
                                       if (e.key !== "Enter") return;
                                       e.preventDefault();
-                                      if (commitManualAdvanceAmount(index, "advpoAmount", e.currentTarget.value)) {
+                                      if (await commitManualAdvanceAmount(index, "advpoAmount", e.currentTarget.value)) {
                                         advanceAmountRefs.current[index + 1]?.focus();
                                       }
                                     }}
-                                    disabled={isFormDisabled || row.autoAdv !== "N"}
+                                    disabled={isFormDisabled || (!isImportationAPType && row.autoAdv !== "N")}
                                   />
                                 </td>
 
@@ -5756,18 +5803,18 @@ const APV = () => {
                                       }
                                       setTimeout(() => e.target.select(), 0);
                                     }}
-                                    onBlur={(e) => {
+                                    onBlur={async (e) => {
                                       if (isFormDisabled) return;
-                                      commitManualAdvanceAmount(index, "advpoVatAmount", e.target.value);
+                                      await commitManualAdvanceAmount(index, "advpoVatAmount", e.target.value);
                                     }}
                                     onKeyDown={async (e) => {
                                       if (e.key !== "Enter") return;
                                       e.preventDefault();
-                                      if (commitManualAdvanceAmount(index, "advpoVatAmount", e.currentTarget.value)) {
+                                      if (await commitManualAdvanceAmount(index, "advpoVatAmount", e.currentTarget.value)) {
                                         advanceVatRefs.current[index + 1]?.focus();
                                       }
                                     }}
-                                    disabled={isFormDisabled || row.autoAdv !== "N"}
+                                    disabled={isFormDisabled || (!isImportationAPType && row.autoAdv !== "N")}
                                   />
                                 </td>
                                 {/* Applied Advances EWT */}
@@ -5790,18 +5837,18 @@ const APV = () => {
                                       }
                                       setTimeout(() => e.target.select(), 0);
                                     }}
-                                    onBlur={(e) => {
+                                    onBlur={async (e) => {
                                       if (isFormDisabled) return;
-                                      commitManualAdvanceAmount(index, "advpoAtcAmount", e.target.value);
+                                      await commitManualAdvanceAmount(index, "advpoAtcAmount", e.target.value);
                                     }}
                                     onKeyDown={async (e) => {
                                       if (e.key !== "Enter") return;
                                       e.preventDefault();
-                                      if (commitManualAdvanceAmount(index, "advpoAtcAmount", e.currentTarget.value)) {
+                                      if (await commitManualAdvanceAmount(index, "advpoAtcAmount", e.currentTarget.value)) {
                                         advanceAtcRefs.current[index + 1]?.focus();
                                       }
                                     }}
-                                    disabled={isFormDisabled || row.autoAdv !== "N"}
+                                    disabled={isFormDisabled || (!isImportationAPType && row.autoAdv !== "N")}
                                   />
                                 </td>
                               </>
@@ -6705,9 +6752,9 @@ const APV = () => {
           summarySelectionMode="multiple"
           detailSelectionMode="multiple"
           viewOnly={referenceInquiryOpen && Boolean(documentID)}
-          // LC summary payee is the broker; validate the actual payee on detail selection.
+          // LC importation may contain charges from different payees.
           selectionValidator={() => true}
-          detailSelectionValidator={(rows) => validateReferencePayees(rows, !referenceInquiryOpen)}
+          detailSelectionValidator={() => true}
           summaryColumns={state.openLcSummaryColumns}
           detailColumns={state.openLcDetailColumns}
           summaryData={state.openLcSummaryData}

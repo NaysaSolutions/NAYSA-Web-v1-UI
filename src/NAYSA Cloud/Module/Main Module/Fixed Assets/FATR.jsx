@@ -774,6 +774,13 @@ const FATR = () => {
             setGlRows([]);
             updateState({ isGeneratingGL: false });
             console.error(error);
+            useSwalErrorAlert(
+              "Generate GL Entries",
+              error?.response?.data?.details ||
+                error?.response?.data?.message ||
+                error?.message ||
+                "Unable to generate the FATR General Ledger entries."
+            );
           }
           return;
         }
@@ -792,7 +799,10 @@ const FATR = () => {
             );
 
             if (!newGlEntries || newGlEntries.length === 0) {
-              console.warn("GL entries generation failed or returned no data.");
+              useSwalErrorAlert(
+                "Save FATR",
+                "No General Ledger entries were generated. Please check the Department/Employee transfer account setup and the database validation message."
+              );
               return;
             }
 
@@ -830,6 +840,13 @@ const FATR = () => {
         }
       } catch (error) {
         console.error(`Error during ${action}:`, error);
+        useSwalErrorAlert(
+          action === "Upsert" ? "Save FATR" : "Generate GL Entries",
+          error?.response?.data?.details ||
+            error?.response?.data?.message ||
+            error?.message ||
+            "Unable to complete the FATR transaction."
+        );
       } finally {
         updateState({ isLoading: false });
       }
@@ -1623,8 +1640,22 @@ const FATR = () => {
   const handleClosePayeeModal = async (selectedPayee) => {
     if (selectedPayee && selectedRowIndex !== null) {
       await applyDetailTransferChange(selectedRowIndex, {
-        toEmpCode: selectedPayee.vendCode || selectedPayee.vend_code || selectedPayee.empCode || selectedPayee.emp_code || "",
-        toEmpName: selectedPayee.vendName || selectedPayee.vend_name || selectedPayee.empName || selectedPayee.emp_name || "",
+        toEmpCode:
+          selectedPayee.empNo ||
+          selectedPayee.emp_no ||
+          selectedPayee.empCode ||
+          selectedPayee.emp_code ||
+          selectedPayee.vendCode ||
+          selectedPayee.vend_code ||
+          "",
+        toEmpName:
+          selectedPayee.empName ||
+          selectedPayee.emp_name ||
+          selectedPayee.employeeName ||
+          selectedPayee.employee_name ||
+          selectedPayee.vendName ||
+          selectedPayee.vend_name ||
+          "",
       }, {}, { fromKey: "fromEmpCode", toKey: "toEmpCode", label: "Employee" });
     }
     updateState({ payeeModalOpen: false, accountModalSource: null });

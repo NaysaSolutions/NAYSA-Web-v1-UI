@@ -535,7 +535,7 @@ export const useHandlePostTran = async (
       },
     };
 
-    console.log(JSON.stringify(payload))
+
  
     const { data: res } = await apiClient.post("/finalize"+docCode, payload);
 
@@ -553,7 +553,7 @@ export const useHandlePostTran = async (
 
 
     // 200 but success=false
-    Swal.fire("Posting failed", res?.message ?? "Finalize failed.", "error");
+    useSwalErrorAlert("Posting failed", res?.message ?? "Finalize failed.");
 
   } catch (err) {
 
@@ -578,7 +578,7 @@ export const useHandlePostTran = async (
         return { success: false, code, message: msg };
       }
       if (code === "MISSING_CREDENTIALS" || code === "VALIDATION_ERROR" || !data?.error) {
-        Swal.fire("Missing credentials", msg, "info");
+        useSwalErrorAlert("Missing credentials", msg);
         return { success: false, code: code || "MISSING_CREDENTIALS", message: msg };
       }
     }
@@ -588,11 +588,11 @@ export const useHandlePostTran = async (
         code === "USER_INACTIVE"
           ? (msg || "User is inactive.")
           : "Authenticated user does not match userCode.";
-      Swal.fire("Blocked", text, "warning");
+      useSwalErrorAlert("Blocked", text);
       return { success: false, code, message: text };
     }
 
-    Swal.fire("Error", msg, "error");
+    useSwalErrorAlert("Error", msg);
     return { success: false, code: code || "UNKNOWN", message: msg };
 
   } finally {

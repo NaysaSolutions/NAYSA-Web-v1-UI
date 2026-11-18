@@ -5,7 +5,7 @@ import { fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import { useHandlePostTran } from "@/NAYSA Cloud/Global/procedure";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
-import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { useSwalErrorAlert as showErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 const PostFATR = ({ isOpen, onClose, userCode = "" }) => {
   const [data, setData] = useState([]);
@@ -33,11 +33,7 @@ const PostFATR = ({ isOpen, onClose, userCode = "" }) => {
           : [];
 
         if (postingRows.length === 0 && !alertFired.current) {
-          useSwalValidationAlert({
-            icon: "info",
-            title: "No Transactions to Post",
-            message: "There are no FA Transfer Location records to post.",
-          });
+          showErrorAlert("No Transactions to Post", "There are no FA Transfer Location records to post.");
 
           alertFired.current = true;
           onClose?.();
@@ -54,11 +50,7 @@ const PostFATR = ({ isOpen, onClose, userCode = "" }) => {
       } catch (error) {
         console.error("Error fetching FATR posting data:", error);
 
-        useSwalValidationAlert({
-          icon: "error",
-          title: "Posting Load Error",
-          message: "Unable to load FA Transfer Location records for posting.",
-        });
+        showErrorAlert("Posting Load Error", "Unable to load FA Transfer Location records for posting.");
 
         onClose?.();
       } finally {
@@ -98,11 +90,7 @@ const PostFATR = ({ isOpen, onClose, userCode = "" }) => {
     const { docNo, branchCode } = pickDocAndBranch(row);
 
     if (!docNo || !branchCode) {
-      useSwalValidationAlert({
-        icon: "warning",
-        title: "Missing Keys",
-        message: "Cannot determine FATR No. or Branch Code.",
-      });
+      showErrorAlert("Missing Keys", "Cannot determine FATR No. or Branch Code.");
       return;
     }
 

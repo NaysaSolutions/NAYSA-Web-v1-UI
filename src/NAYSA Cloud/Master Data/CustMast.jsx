@@ -34,7 +34,9 @@ import {
     useSwalErrorAlertAPI,
     useSwalDeleteConfirm,
     useSwalDeleteRecord,
-    useSwalProceedConfirm // Added for duplicate name check
+    useSwalProceedConfirm, // Added for duplicate name check
+    formatNumber,
+    parseFormattedNumber
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import CustSetupTab from "./CustSetupTab";
@@ -120,7 +122,8 @@ const emptyForm = {
     updatedBy: "",
     updatedDate: "",
     creditInvestigator: "",
-    creditLimit: "0",
+    creditLimit: "0.00",
+    deliveryAddresses: [],
     totalAR: "",
     creditBalance: "0",
     customerRemarks: "",
@@ -145,6 +148,7 @@ const emptyForm = {
 const CustMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
     const [isLoading, setIsLoading] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // SL Types are loaded from SL Master Data instead of being hardcoded.
     // allSltypeOptions: complete SL Type reference used to display existing records,
@@ -388,6 +392,32 @@ const CustMast = () => {
 
     const [form, setForm] = useState({ ...emptyForm });
     const [selectedCustCode, setSelectedCustCode] = useState("");
+    useEffect(() => {
+        let active = true;
+        if (!selectedCustCode) {
+            setForm((prev) => ({ ...prev, arBalance: 0, totalAR: 0, arBalanceUnavailable: false }));
+            return;
+        }
+        setForm((prev) => ({ ...prev, arBalance: null, totalAR: null, arBalanceUnavailable: false }));
+        const today = new Date();
+        const refDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        fetchData("getARAging", { json_data: { json_data: { custCode: selectedCustCode, branchCode: "", refDate, acctCode: "" } } })
+            .then((response) => {
+                if (response?.success === false) throw new Error(response.message || "Unable to load AR balance.");
+                const raw = response?.data?.[0]?.result;
+                const result = typeof raw === "string" ? JSON.parse(raw) : raw;
+                if (!Array.isArray(result)) throw new Error("Invalid AR Aging response.");
+                const rows = result[0]?.dt2 ?? [];
+                const total = rows.reduce((sum, row) => sum + ["dayCurrent", "day30", "day60", "day90", "day120", "day150", "over150"].reduce((amount, key) => amount + (Number(row[key]) || 0), 0), 0);
+                if (active) setForm((prev) => ({ ...prev, arBalance: total, totalAR: total }));
+            }).catch((error) => {
+                if (active) {
+                    setForm((prev) => ({ ...prev, arBalanceUnavailable: true }));
+                    useSwalErrorAlert("Customer AR Balance", error?.response?.data?.message || error.message);
+                }
+            });
+        return () => { active = false; };
+    }, [selectedCustCode]);
     const [isEditing, setIsEditing] = useState(false);
 
     const [isAttachOpen, setIsAttachOpen] = useState(false);
@@ -768,7 +798,8 @@ const CustMast = () => {
                 active: row?.active ?? "Y",
                 oldCode: row?.oldcode ?? row?.oldCode ?? "",
                 creditInvestigator: row?.creditInvestigator ?? "",
-                creditLimit: row?.creditLimit ?? "0",
+                deliveryAddresses: (Array.isArray(row?.deliveryAddresses) ? row.deliveryAddresses : []).map((item) => ({ ...item, _deliveryKey: crypto.randomUUID() })),
+                creditLimit: formatNumber(parseFormattedNumber(row?.creditLimit), 2),
                 totalAR: row?.totalAR ?? "",
                 creditBalance: row?.creditBalance ?? "0",
                 customerRemarks: row?.customerRemarks ?? "",
@@ -1015,7 +1046,7 @@ const CustMast = () => {
             }
         }
 
-        setIsLoading(true);
+        setIsSaving(true);
         try {
             const jsonData = {
                 json_data: {
@@ -1074,7 +1105,8 @@ const CustMast = () => {
                     active: form.active || "Y",
                     oldCode: form.oldCode || "",
                     creditInvestigator: form.creditInvestigator || "",
-                    creditLimit: form.creditLimit || 0,
+                    deliveryAddresses: (form.deliveryAddresses || []).map((item) => ({ deliveryArea: item.deliveryArea || "", deliveryAddress: item.deliveryAddress || "" })),
+                    creditLimit: parseFormattedNumber(form.creditLimit) || 0,
                     customerRemarks: form.customerRemarks || "",
                     customizedDrForm: form.customizedDrForm || "",
                     customizedSiForm: form.customizedSiForm || "",
@@ -1112,13 +1144,13 @@ const CustMast = () => {
 
             const finalCode = sprocValidation?.generatedCode || code;
 
-            await useSwalSuccessAlert("Success!", "Customer saved successfully.");
             setSelectedCustCode(finalCode);
             await loadMasterList({ force: true });
             await fetchCustomerByCode(finalCode);
 
             // Keep the saved record editable after refresh.
             setIsEditing(canEdit);
+            await useSwalSuccessAlert("Success!", "Customer saved successfully.");
         } catch (e) {
             console.error(e);
             const sprocValidation = extractSprocValidation(e?.response);
@@ -1129,7 +1161,7 @@ const CustMast = () => {
             const msg = e?.response?.data?.message || e?.message || "Failed to save customer.";
             await useSwalErrorAlert("Save Failed", msg);
         } finally {
-            setIsLoading(false);
+            setIsSaving(false);
         }
     };
 
@@ -1377,7 +1409,7 @@ const CustMast = () => {
 
     return (
         <div className="global-ref-main-div-ui">
-            {isLoading && <LoadingSpinner />}
+            {(isLoading || isSaving) && <LoadingSpinner />}
             <div className="global-ref-header-ui">
                 <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-3">
                     {/* LEFT: title + tabs grouped together */}

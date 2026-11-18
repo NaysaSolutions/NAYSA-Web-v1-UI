@@ -38,6 +38,7 @@ export default function ARINQActionBar({ activeTab, onAction, help = {}, busy = 
 
         aging: [
             { id: "reprocess", label: "Find", icon: faMagnifyingGlass, color: "bg-blue-600" },
+            { id: "print", label: "Print", icon: faPrint, color: "bg-blue-600" },
             { id: "reset", label: "Reset", icon: faUndo, color: "bg-blue-600" },
             // { id: "print", label: "Print", icon: faPrint, color: "bg-blue-600" },
             // { id: "export", label: "Export", icon: faFileExport, color: "bg-blue-600" },

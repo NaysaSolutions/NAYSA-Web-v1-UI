@@ -3616,9 +3616,10 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner, faSearch, faFileImport, faChevronDown } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner, faSearch, faFileImport, faChevronDown, faPen } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
+import DeliveryAddressLookupModal from "../../../Lookup/SearchDeliveryAddress.jsx";
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
 import CustomerMastLookupModal from "../../../Lookup/SearchCustMast";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
@@ -3726,6 +3727,9 @@ const DR = () => {
 
   const isViewDocumentUrl = isViewDocument;
 
+  const [deliveryLookupOpen, setDeliveryLookupOpen] = useState(false);
+  const [addressEditorOpen, setAddressEditorOpen] = useState(false);
+  const [addressDraft, setAddressDraft] = useState("");
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const { resetFlag } = useReset();
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
@@ -3781,6 +3785,7 @@ const DR = () => {
     deliveryToCode: "",
     deliveryToName: "",
     shipToAddress: "",
+    deliveryArea: "",
 
     tblFieldArray :[],
     drTranType: "DR01",
@@ -4270,6 +4275,7 @@ useEffect(() => {
       deliveryToCode: "",
       deliveryToName: "",
       shipToAddress: "",
+      deliveryArea: "",
       documentNo: "",
       documentID: "",
       detailRows: [],
@@ -4404,6 +4410,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       deliveryToCode: data.shipToCode || data.custCode || "",
       deliveryToName: data.shipToName || data.custName || "",
       shipToAddress:data.shipToAddr,
+      deliveryArea: data.deliveryArea || "",
       whseCode: data.whouseCode || "",
       whseName: data.whouseName || "",
       locCode: data.locCode || "",
@@ -4513,6 +4520,7 @@ const handleActivityOption = async (action, options = {}) => {
         shipToCode: deliveryToCode,
         shipToName: deliveryToName,
         shipToAddr: shipToAddress,
+        deliveryArea: state.deliveryArea || "",
         refDrNo1: refDocNo1,
         refDrNo2: refDocNo2,
         whouseCode: whseCode,
@@ -4938,6 +4946,7 @@ useEffect(() => {
       deliveryToCode: selectedShipToCode,
       deliveryToName: selectedShipToName,
       shipToAddress: selectedShipToAddress,
+      deliveryArea: shipToSource.deliveryArea || "",
       remarks: nextRemarks,
       showOpenSOModal: false,
       openSODR_Data_Summary: [],
@@ -5980,6 +5989,7 @@ const handleSaveAndPrint = async (documentID) => {
                     deliveryToCode: finalCode,
                     deliveryToName: finalName,
                     shipToAddress: finalAddress,
+                    deliveryArea: "",
                   }
                 : {
                     shipToName: finalName,
@@ -5987,6 +5997,7 @@ const handleSaveAndPrint = async (documentID) => {
                     deliveryToCode: finalCode,
                     deliveryToName: finalName,
                     shipToAddress: finalAddress,
+                    deliveryArea: "",
                     whseCode: selectedWarehouse?.whouseCode || finalWhseCode || "",
                     whseName: selectedWarehouse?.whouseName || "",
                     locCode: "",
@@ -6561,6 +6572,38 @@ const selectedPickingRow = itemPickingRowIndex !== null && itemPickingRowIndex !
 
 return (
 <>
+{deliveryLookupOpen && <DeliveryAddressLookupModal
+  isOpen={deliveryLookupOpen}
+  custCode={deliveryToCode || shipToCode || ""}
+  onClose={(row) => {
+    setDeliveryLookupOpen(false);
+    if (row && !isFormDisabled) updateState({ shipToAddress: row.deliveryAddress || "", deliveryArea: row.deliveryArea || "" });
+  }}
+/>}
+{addressEditorOpen && (
+  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/60 p-4">
+    <div role="dialog" aria-modal="true" aria-labelledby="delivery-address-title" className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      <div className="flex items-center justify-between px-6 pt-5 pb-2">
+        <h2 id="delivery-address-title" className="text-lg font-bold tracking-tight text-gray-900">Edit Delivery Address</h2>
+        <button type="button" aria-label="Close" onClick={() => setAddressEditorOpen(false)} className="text-gray-400 transition-colors hover:text-gray-600"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+      </div>
+      <div className="space-y-4 px-6 pt-2 pb-6">
+        <div className="flex items-start gap-3 rounded-r-md border-l-4 border-blue-500 bg-blue-50 p-3">
+          <FontAwesomeIcon icon={faPen} className="mt-0.5 shrink-0 text-blue-500" />
+          <p className="text-sm font-medium leading-snug text-blue-800">Update the delivery address for this Delivery Receipt.</p>
+        </div>
+        <div>
+          <label htmlFor="delivery-address-draft" className="mb-1.5 block text-sm font-medium text-gray-700">Delivery Address</label>
+          <textarea id="delivery-address-draft" autoFocus maxLength={1000} rows={4} value={addressDraft} disabled={isFormDisabled} onChange={(e) => setAddressDraft(e.target.value)} className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 border-t bg-gray-50 px-6 py-4">
+        <button type="button" onClick={() => setAddressEditorOpen(false)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100">Cancel</button>
+        <button type="button" disabled={isFormDisabled} onClick={() => { updateState({ shipToAddress: addressDraft }); setAddressEditorOpen(false); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-40"><FontAwesomeIcon icon={faPen} className="text-xs" />Apply Address</button>
+      </div>
+    </div>
+  </div>
+)}
 <div className="global-tran-main-div-ui"> 
 
       {showSpinner && <LoadingSpinner />}
@@ -6809,24 +6852,21 @@ return (
                   id="shipToAddress"
                   type="text"
                   value={shipToAddress || ""}
-                  disabled={isFormDisabled}
-                  onChange={(e) => updateState({ shipToAddress: e.target.value })} 
-                  className={`peer w-full h-8 sm:h-8 global-ref-textbox-ui !px-2 !font-normal rounded-lg pr-12 ${
-                    !isFormDisabled
-                      ? "global-ref-textbox-enabled"
-                      : "global-ref-textbox-disabled"
-                  } focus-visible:ring-0 focus-visible:ring-offset-0 border shadow-none transition-all`}
+                  disabled
+                  readOnly
+                  className="peer w-full h-8 sm:h-8 global-ref-textbox-ui global-ref-textbox-disabled !px-2 !font-normal rounded-lg !pr-20 border shadow-none"
                 />
+                <button type="button" disabled={isFormDisabled} title="Edit delivery address" className="absolute right-10 top-0 flex h-8 w-8 flex-col items-center justify-center rounded text-blue-600 hover:bg-blue-100 disabled:opacity-40" onClick={() => { setAddressDraft(shipToAddress || ""); setAddressEditorOpen(true); }}><FontAwesomeIcon icon={faPen} className="text-[10px]" /><span className="text-[8px] leading-none">Edit</span></button>
                 <button
                   type="button" 
                   onClick={() =>
-                    canChangeCustomer &&
-                    updateState({ custModalOpen: true, modalContext: "shipTo" })
+                    !isFormDisabled &&
+                    setDeliveryLookupOpen(true)
                   }
-                  disabled={!canChangeCustomer}
+                  disabled={isFormDisabled}
                   title="Search"
                   className={`absolute right-0 top-0 h-8 sm:h-8 w-10 flex items-center justify-center rounded-r-lg border border-l-0 transition-colors ${ 
-                    canChangeCustomer
+                    !isFormDisabled
                       ? "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white"
                       : "bg-gray-100 text-gray-400"
                   }`}

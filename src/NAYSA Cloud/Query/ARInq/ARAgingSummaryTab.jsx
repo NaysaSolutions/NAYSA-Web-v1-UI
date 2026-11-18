@@ -29,7 +29,25 @@ import {
 
 const ENDPOINT = "getARAging";
 const COLS_KEY_BOTTOM = "getARAging";    // detail columns
-const COLS_KEY_TOP    = "getARInquiryS"; // summary columns (for totals)
+const COLS_KEY_TOP    = "getARAgingS"; // Aging-specific summary, including PDC
+
+function orderAgingColumns(columns, summary = false) {
+  if (!Array.isArray(columns)) return [];
+  const ordered = columns.map((column) => ({ ...column }));
+  if (summary) {
+    const keys = ["amountDue", "pdcAmount", "dayCurrent"];
+    const totals = keys.map((key) => ordered.find((column) => column.key === key)).filter(Boolean);
+    const remaining = ordered.filter((column) => !keys.includes(column.key));
+    const customerIndex = remaining.findIndex((column) => column.key === "custName");
+    remaining.splice(customerIndex < 0 ? remaining.length : customerIndex + 1, 0, ...totals);
+    return remaining;
+  }
+  const pdcIndex = ordered.findIndex((column) => column.key === "pdcAmount");
+  if (pdcIndex < 0 || !ordered.some((column) => column.key === "amountDue")) return ordered;
+  const [pdc] = ordered.splice(pdcIndex, 1);
+  ordered.splice(ordered.findIndex((column) => column.key === "amountDue") + 1, 0, pdc);
+  return ordered;
+}
 
 /** Light global cache */
 function getGlobalCache() {
@@ -100,7 +118,7 @@ function useRequestCoalescer() {
 
 const ARAgingSummaryTab = forwardRef(function ARAgingSummaryTab({ registerActions }, ref) {
   const { user,companyInfo, currentUserRow, refsLoaded, refsLoading } = useAuth();
-  const baseKey = "AR_AGING";
+  const baseKey = "AR_AGING_PDC_V4";
   const hydratedRef = useRef(false);
 
   const [state, setState] = useState({
@@ -177,8 +195,8 @@ const ARAgingSummaryTab = forwardRef(function ARAgingSummaryTab({ registerAction
 
         setState(prev => ({
           ...prev,
-          columnConfig:  Array.isArray(colsBottom) ? colsBottom.map(c => ({ ...c })) : [],
-          columnConfigS: Array.isArray(colsTop)    ? colsTop.map(c => ({ ...c }))    : [],
+          columnConfig: orderAgingColumns(colsBottom),
+          columnConfigS: orderAgingColumns(colsTop, true),
         }));
 
         loadedColsOnceRef.current = true;
@@ -289,8 +307,8 @@ const ARAgingSummaryTab = forwardRef(function ARAgingSummaryTab({ registerAction
             acctName: snap.acctName ?? prev.acctName,
             arAgingData:  Array.isArray(snap.arAgingData)  ? snap.arAgingData  : prev.arAgingData,
             arAgingDataS: Array.isArray(snap.arAgingDataS) ? snap.arAgingDataS : prev.arAgingDataS,
-            columnConfig:  Array.isArray(snap.columnConfig)  ? snap.columnConfig  : prev.columnConfig,
-            columnConfigS: Array.isArray(snap.columnConfigS) ? snap.columnConfigS : prev.columnConfigS,
+            columnConfig: orderAgingColumns(snap.columnConfig ?? prev.columnConfig),
+            columnConfigS: orderAgingColumns(snap.columnConfigS ?? prev.columnConfigS, true),
           }));
           tableStateTopRef.current    = snap.tableTop    || tableStateTopRef.current;
           tableStateBottomRef.current = snap.tableBottom || tableStateBottomRef.current;
@@ -445,16 +463,22 @@ const ARAgingSummaryTab = forwardRef(function ARAgingSummaryTab({ registerAction
     }
   }, [arAgingDataUnfiltered, arAgingDataS, columnConfig, columnConfigS, branchCode, refDate, user]);
 
+  const handlePrintStatement = useCallback(() => {
+    const query = new URLSearchParams({ viewDocument: "true", branchCode: branchCode || "", custCode: custCode || "", refDate, acctCode: acctCode || "" });
+    const baseUrl = import.meta.env.BASE_URL || "/";
+    window.open(`${baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`}page/ARStatementOfAccount?${query.toString()}`, "_blank", "noopener,noreferrer");
+  }, [branchCode, custCode, refDate, acctCode]);
+
   // register actions
   useEffect(() => {
     registerActions?.({
       onFind: fetchRecord,
       onReset: handleReset,
-      onPrint: () => window.print(),
+      onPrint: handlePrintStatement,
       onExport: handleExport,
       onViewDoc: undefined,
     });
-  }, [registerActions, fetchRecord, handleReset, handleExport]);
+  }, [registerActions, fetchRecord, handleReset, handleExport, handlePrintStatement]);
 
   const handleViewTop = useCallback((row) => {
     fetchRecordperCustomer(row.custCode);

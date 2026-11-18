@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import SignatureModal from "@/NAYSA Cloud/Components/SignatureModal.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // Import Lookup Modals
@@ -216,6 +217,28 @@ const Company = () => {
   const [rcType, setRcType] = useState(null);
   const [isOpenGuide, setOpenGuide] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showSignature, setShowSignature] = useState(false);
+  const [signature, setSignature] = useState(null);
+  const [signatureChanged, setSignatureChanged] = useState(false);
+  const signatureDirty = useRef(false);
+  const [signatureLoading, setSignatureLoading] = useState(true);
+  const [savingSignature, setSavingSignature] = useState(false);
+  const saveSignature = async (image) => {
+    if (savingSignature) return;
+    setSavingSignature(true);
+    signatureDirty.current = true;
+    try {
+      const { data } = await apiClient.post("/saveCompany2307Signature", { signature: image });
+      if (data.signatureSaved !== true) throw new Error("The server did not confirm the signature save.");
+      setSignature(image);
+      setSignatureChanged(false);
+      signatureDirty.current = false;
+      setShowSignature(false);
+      useSwalSuccessAlert("Signature", image ? "Signature saved successfully." : "Signature removed successfully.");
+    } catch (error) {
+      useSwalErrorAlert("Signature", error?.response?.data?.message || error.message || "Unable to save signature.");
+    } finally { setSavingSignature(false); }
+  };
   const [tblFieldArray, setTblFieldArray] = useState([]);
 
   const { user } = useAuth();
@@ -231,6 +254,17 @@ const Company = () => {
       return rawResult ? JSON.parse(rawResult)[0] : null;
     },
   });
+
+  useEffect(() => {
+    let active = true;
+    if (!fetchedData) return;
+    setSignatureLoading(true);
+    apiClient.get("/getCompany2307Signature").then(({ data }) => {
+      if (active && !signatureDirty.current) { setSignature(data.signature || null); setSignatureChanged(false); }
+    }).catch(() => { if (active) useSwalErrorAlert("Signature", "Unable to load the saved signature."); })
+      .finally(() => { if (active) setSignatureLoading(false); });
+    return () => { active = false; };
+  }, [fetchedData]);
 
   // Update form when data changes
   useEffect(() => {
@@ -298,13 +332,13 @@ const Company = () => {
   const getMax = (col) => useGetFieldLength(tblFieldArray, col);
 
   // --- TANSTACK QUERY: Save Mutation ---
-  const { mutate: saveCompany, isLoading: isSaving } = useMutation({
+  const { mutate: saveCompany, isPending: isSaving } = useMutation({
     mutationFn: async (payload) => {
       const response = await apiClient.post("/upsertCompany", payload);
       return response;
     },
 
-    onSuccess: (response) => {
+    onSuccess: (response, variables) => {
       console.log("API Response:", response);
 
       const sqlRow = response?.data?.data?.[0];
@@ -320,6 +354,14 @@ const Company = () => {
         useSwalErrorAlert("Missing Required Field(s):", sqlerrormsg);
         return;
       }
+
+      const submitted = JSON.parse(variables.json_data).json_data;
+      if (Object.prototype.hasOwnProperty.call(submitted, "payor2307Signature") && response.data.signatureSaved !== true) {
+        useSwalErrorAlert("Signature Not Saved", "The server did not confirm the signature save. Please reload the updated API and try again.");
+        return;
+      }
+      signatureDirty.current = false;
+      setSignatureChanged(false);
 
       queryClient.invalidateQueries(["companyData"]);
       useSwalSuccessAlert("Success!", "Changes has been saved!");
@@ -340,11 +382,13 @@ const Company = () => {
   });
 
   const handleSave = () => {
+    if (isSaving || savingSignature) return;
     if (!formData.compCode)
       return useSwalErrorAlert("Error", "Company Code is required.");
 
     const cleanData = {
       ...formData,
+      ...(signatureChanged ? { payor2307Signature: signature } : {}),
       birAcDateIssued:
         formData.birAcDateIssued === "" ? null : formData.birAcDateIssued,
       depBankcode: formData.depositBankCode,
@@ -384,11 +428,11 @@ const Company = () => {
       window.removeEventListener("keydown", handleKey);
       document.removeEventListener("mousedown", handleClick);
     };
-  }, [formData]);
+  }, [formData, signature, signatureChanged, isSaving, savingSignature]);
 
   return (
     <div className="global-ref-main-div-ui">
-      {(isFetching || isSaving) && <LoadingSpinner />}
+      {(isFetching || isSaving || savingSignature) && <LoadingSpinner />}
 
       {/* Lookup Modals Logic stays similar but triggers toggleModal */}
       <BranchLookupModal isOpen={modals.branch} onClose={(v) => { toggleModal("branch", false); if(v) updateForm({ branchCode: v.branchCode, branchName: v.branchName }) }} />
@@ -442,7 +486,7 @@ const Company = () => {
                 key: "reset",
                 label: <span className="hidden lg:inline ml-2">Reset</span>,
                 icon: faUndo,
-                onClick: () => queryClient.resetQueries(["companyData"]),
+                onClick: () => { signatureDirty.current = false; setSignatureChanged(false); queryClient.resetQueries(["companyData"]); },
                 className:
                   "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[10px] sm:text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
               },
@@ -722,6 +766,14 @@ const Company = () => {
             maxLength={getMax("PAYOR_2307_POSITION")}
           />
         </div>
+        <div className="mt-4 flex items-center gap-3">
+          <button type="button" aria-busy={signatureLoading} disabled={isFetching || isSaving || savingSignature || signatureLoading} onClick={() => setShowSignature(true)} className="inline-flex h-8 min-w-[110px] items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-[10px] font-medium text-white sm:text-xs disabled:opacity-50">
+            {signatureLoading && <FontAwesomeIcon icon={faSpinner} spin className="h-3.5 w-3.5" aria-hidden="true" />}
+            {signatureLoading ? "Loading…" : "Signature"}
+          </button>
+          <span className="text-xs text-slate-500">Use Signature saves immediately. Used on BIR 2307.</span>
+        </div>
+        {showSignature && <SignatureModal initialImage={signature} busy={savingSignature} onClose={() => { if (!savingSignature) setShowSignature(false); }} onUse={saveSignature} />}
       </div>
     </div>
   );

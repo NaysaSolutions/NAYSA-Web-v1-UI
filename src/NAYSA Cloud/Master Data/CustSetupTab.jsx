@@ -7,6 +7,9 @@ import React, {
   useState,
 } from "react";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
+import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
+import { MapPin, Plus, Trash2 } from "lucide-react";
+import { formatNumber, parseFormattedNumber } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import SearchCusMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
 import SearchBranchRef from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
@@ -68,6 +71,11 @@ const TABS = [
         <path d="M2 14c0-3.314 2.686-5 6-5s6 1.686 6 5" />
       </svg>
     ),
+  },
+  {
+    id: "delivery",
+    label: "Delivery Address",
+    icon: <MapPin size={16} />,
   },
   {
     id: "accounting",
@@ -136,6 +144,14 @@ const CustSetupTab = forwardRef(
     const isNewRecord = form.__isNew;
     const isReadOnly = !isEditing;
     const isDisabled = isReadOnly || isLoading;
+    const deliveryRows = Array.isArray(form.deliveryAddresses) ? form.deliveryAddresses : [];
+    const updateDelivery = (row, field, value) => onChangeForm({ deliveryAddresses: deliveryRows.map((item) => item._deliveryKey === row._deliveryKey ? { ...item, [field]: value } : item) });
+    const deliveryColumns = [
+      { key: "lineNo", label: "LN", width: 60, render: (row) => deliveryRows.findIndex((item) => item._deliveryKey === row._deliveryKey) + 1 },
+      { key: "deliveryArea", label: "Delivery Area", width: 240, render: (row) => <input aria-label="Delivery Area" value={row.deliveryArea || ""} maxLength={100} disabled={isDisabled} onChange={(e) => updateDelivery(row, "deliveryArea", e.target.value)} className="w-full bg-transparent px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-400 disabled:text-slate-500" /> },
+      { key: "deliveryAddress", label: "Delivery Address", width: 500, render: (row) => <input aria-label="Delivery Address" value={row.deliveryAddress || ""} maxLength={1000} disabled={isDisabled} onChange={(e) => updateDelivery(row, "deliveryAddress", e.target.value)} className="w-full bg-transparent px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-400 disabled:text-slate-500" /> },
+      ...(!isDisabled ? [{ key: "actions", label: "Actions", width: 80, render: (row) => <button type="button" aria-label="Remove delivery address" onClick={() => onChangeForm({ deliveryAddresses: deliveryRows.filter((item) => item._deliveryKey !== row._deliveryKey) })} className="rounded border border-red-100 bg-red-50 p-1.5 text-red-600"><Trash2 size={14} /></button> }] : []),
+    ];
 
     const [tblFieldArray, setTblFieldArray] = useState([]);
     const [activeTab, setActiveTab] = useState("contact");
@@ -1034,6 +1050,11 @@ const CustSetupTab = forwardRef(
                 )}
 
                 {/* ── CREDIT & COLLECTION ── */}
+                {activeTab === "delivery" && <>
+                  <SectionHeader title="DELIVERY ADDRESSES" />
+                  <SearchGlobalReferenceTable docType="CUST_DELIV" columns={deliveryColumns} data={deliveryRows} showPagination={false} showFilters={false} showGlobalSearch={false} showGroupBy={false} adaptiveHeight totalExemptions={["lineNo"]} />
+                  {!isDisabled && <button type="button" onClick={() => onChangeForm({ deliveryAddresses: [...deliveryRows, { _deliveryKey: crypto.randomUUID(), deliveryArea: "", deliveryAddress: "" }] })} className="mt-3 inline-flex h-8 items-center gap-2 rounded-md bg-blue-600 px-3 text-xs font-medium text-white"><Plus size={14} />Add Address</button>}
+                </>}
                 {activeTab === "cc" && (
                   <>
                     <SectionHeader title="CREDIT & COLLECTION INFORMATION" />
@@ -1049,16 +1070,22 @@ const CustSetupTab = forwardRef(
                       />
                       <FieldRenderer
                         label="Credit Limit"
-                        type="number"
-                        value={form?.creditLimit || "0"}
+                        hideClearButton={true}
+                        type="text"
+                        inputMode="decimal"
+                        style={{ textAlign: "right" }}
+                        value={form?.creditLimit ?? "0.00"}
                         onChange={(v) => onChangeForm({ creditLimit: getValue(v) })}
+                        onBlur={() => onChangeForm({ creditLimit: formatNumber(parseFormattedNumber(form?.creditLimit), 2) })}
+                        onClear={() => onChangeForm({ creditLimit: "0.00" })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
                       <FieldRenderer
                         label="Total AR"
-                        type="number"
-                        value={form?.arBalance ?? form?.totalAR ?? "0"}
+                        type="text"
+                        style={{ textAlign: "right" }}
+                        value={form?.arBalanceUnavailable ? "Unavailable" : form?.arBalance === null ? "Loading…" : formatNumber(form?.arBalance ?? form?.totalAR ?? 0, 2)}
                         readOnly={true}
                         disabled={true}
                       />
@@ -1067,8 +1094,9 @@ const CustSetupTab = forwardRef(
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="Credit Balance"
-                        type="number"
-                        value={form?.creditBalance || "0"}
+                        type="text"
+                        style={{ textAlign: "right" }}
+                        value={form?.arBalanceUnavailable ? "Unavailable" : form?.arBalance === null ? "Loading…" : formatNumber((parseFormattedNumber(form?.creditLimit) || 0) - Number(form?.arBalance ?? form?.totalAR ?? 0), 2)}
                         readOnly={true}
                         disabled={true}
                       />

@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import bir2307Page1 from "./bir-2307-page1.svg";
-import { postRequest } from "../../../Configuration/BaseURL.jsx";
+import { postRequest, apiClient } from "../../../Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 
@@ -1165,6 +1165,7 @@ function BIR2307Page({ form, backgroundSrc, stretchMode = false }) {
             fontWeight={700}
           />
 
+          {form.signatureImage && <image href={form.signatureImage} x={148} y={708} width={320} height={40} preserveAspectRatio="xMidYMid meet" />}
           <SignatureValue
             text={form.payorSignatory?.displayText || form.payor.registeredName}
             y={744.0}
@@ -1232,6 +1233,36 @@ export default function APV2307({
   const [paperSize, setPaperSize] = useState("long");
   const [fitMode, setFitMode] = useState("fit");
   const [outputMode, setOutputMode] = useState("print");
+  const [signatureImage, setSignatureImage] = useState(null);
+  const [signatureLoading, setSignatureLoading] = useState(true);
+  const [assetsLoading, setAssetsLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    setAssetsLoading(true);
+    if (isLoading || signatureLoading) return () => { active = false; };
+    const loadImage = (source) => new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("Unable to load a BIR 2307 image. Please reload the preview."));
+      image.src = source;
+    });
+    Promise.all([
+      loadImage(backgroundSrc),
+      ...(signatureImage ? [loadImage(signatureImage)] : []),
+      document.fonts?.ready || Promise.resolve(),
+    ]).then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      .catch((error) => { if (active) setErrorMessage(error.message); })
+      .finally(() => { if (active) setAssetsLoading(false); });
+    return () => { active = false; };
+  }, [isLoading, signatureLoading, backgroundSrc, signatureImage]);
+  useEffect(() => {
+    let active = true;
+    apiClient.get("/getCompany2307Signature").then(({ data: response }) => {
+      if (active) setSignatureImage(response.signature || null);
+    }).catch(() => { if (active) setErrorMessage("Unable to load the company signature. Reload before printing."); })
+      .finally(() => { if (active) setSignatureLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const requestParams = useMemo(() => {
     const query = new URLSearchParams(location.search);
@@ -1348,11 +1379,11 @@ export default function APV2307({
   const normalizedForms = useMemo(() => {
     if (data) {
       const source = Array.isArray(data) ? data : [data];
-      return source.map((item) => normalize2307Data(item));
+      return source.map((item) => ({ ...normalize2307Data(item), signatureImage }));
     }
 
-    return apiForms;
-  }, [apiForms, data]);
+    return apiForms.map((item) => ({ ...item, signatureImage }));
+  }, [apiForms, data, signatureImage]);
 
   const printPages = useMemo(() => expandFormPages(normalizedForms), [normalizedForms]);
   const paperLayout = useMemo(
@@ -1860,7 +1891,7 @@ export default function APV2307({
         }
       `}</style>
 
-      {isLoading || isGeneratingPdf ? <LoadingSpinner /> : null}
+      {isLoading || signatureLoading || assetsLoading || isGeneratingPdf ? <LoadingSpinner /> : null}
 
       {showToolbar ? (
         <div className="ap2307-toolbar">
@@ -1945,7 +1976,7 @@ export default function APV2307({
               type="button"
               className="ap2307-output-button"
               onClick={handlePrimaryOutput}
-              disabled={isLoading || isGeneratingPdf || printPages.length === 0}
+              disabled={isLoading || signatureLoading || assetsLoading || isGeneratingPdf || printPages.length === 0}
             >
               {isGeneratingPdf
                 ? "Generating PDF..."

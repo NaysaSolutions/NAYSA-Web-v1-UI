@@ -9,6 +9,7 @@ import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpi
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
+import DeliveryAddressLookupModal from "../../../Lookup/SearchDeliveryAddress.jsx";
 import CurrLookupModal from "../../../Lookup/SearchCurrRef.jsx";
 import CustomerMastLookupModal from "../../../Lookup/SearchCustMast";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
@@ -146,6 +147,10 @@ const allocateDiscountCents = (grossAmounts, discountAmount) => {
 };
 
 const SI = () => {
+  const [deliveryLookupOpen, setDeliveryLookupOpen] = useState(false);
+  const [shipCustomerLookupOpen, setShipCustomerLookupOpen] = useState(false);
+  const [addressEditorOpen, setAddressEditorOpen] = useState(false);
+  const [addressDraft, setAddressDraft] = useState("");
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -226,6 +231,11 @@ const SI = () => {
     // Customer information
     billToCustCode: "",
     billToCustName: "",
+    shipToCode: "",
+    shipToName: "",
+    shipToAddress: "",
+    deliveryArea: "",
+    deliveryDate: null,
     contactPerson: "",
     customerPoNo: "",
     customerPoDate: null,
@@ -521,6 +531,14 @@ const SI = () => {
       : salesDiscountMode;
   const isOverallDiscountMode = effectiveDiscountMode === "OVERALL";
   const isProvisionalSI = String(siTranType || "").toUpperCase() === "SI04";
+  const isDeliverySI = ["SI02", "SI05"].includes(String(siTranType || "").toUpperCase());
+
+  useEffect(() => {
+    if (!isDeliverySI && activeTab === "delivery") updateState({ activeTab: "basic" });
+    if (isDeliverySI && !documentID && !state.shipToCode && billToCustCode) {
+      updateState({ shipToCode: billToCustCode, shipToName: billToCustName });
+    }
+  }, [isDeliverySI, activeTab, documentID, billToCustCode, billToCustName, state.shipToCode]);
 
   useEffect(() => {
     if (!isProvisionalSI && activeTab === "provisional") {
@@ -1253,6 +1271,11 @@ useEffect(() => {
       noReprints:"0",
       billToCustCode:"",
       billToCustName:"",
+      shipToCode: "",
+      shipToName: "",
+      shipToAddress: "",
+      deliveryArea: "",
+      deliveryDate: null,
       customerPoNo: "",
       customerPoDate: null,
       contactPerson: "",
@@ -1394,6 +1417,11 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       branchName:data.branchName,
       documentDate: useformatToDatev2(data.siDate),
       siTranType: data.siTranType,
+      shipToCode: data.shipToCode || "",
+      shipToName: data.shipToName || "",
+      shipToAddress: data.shipToAddress || "",
+      deliveryArea: data.deliveryArea || "",
+      deliveryDate: data.deliveryDate ? useformatToDatev2(data.deliveryDate) : null,
       billToCustCode: data.custCode,
       billToCustName: data.custName,
       customerPoNo: data.customerPoNo || "",
@@ -1571,6 +1599,11 @@ const handleActivityOption = async (action) => {
         prsiInfo: String(siTranType || "").toUpperCase() === "SI04"
           ? prsiInfo
           : null,
+        shipToCode: isDeliverySI ? state.shipToCode : "",
+        shipToName: isDeliverySI ? state.shipToName : "",
+        shipToAddress: isDeliverySI ? state.shipToAddress : "",
+        deliveryArea: isDeliverySI ? state.deliveryArea : "",
+        deliveryDate: isDeliverySI ? state.deliveryDate || null : null,
         dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
           pickStat: row.siStat || "F",
@@ -3288,6 +3321,12 @@ const handleSaveAndPrint = async (documentID) => {
             {
                 billToCustName: selectedData.custName,
                 billToCustCode: selectedData.custCode,
+                ...(!documentID ? {
+                  shipToCode: selectedData.custCode,
+                  shipToName: selectedData.custName,
+                  shipToAddress: address,
+                  deliveryArea: "",
+                } : {}),
                 vatCode: selectedVatCode,
                 vatName: selectedVatName,
                 atcCode: selectedAtcCode,
@@ -4949,6 +4988,32 @@ const selectedPickingRow = itemPickingRowIndex !== null && itemPickingRowIndex !
 
 return (
 <>
+{isDeliverySI && shipCustomerLookupOpen && <CustomerMastLookupModal isOpen onClose={(row) => { setShipCustomerLookupOpen(false); if (row && !isFormDisabled) updateState({ shipToCode: row.custCode || "", shipToName: row.custName || "", shipToAddress: row.addr || "", deliveryArea: "" }); }} />}
+{isDeliverySI && deliveryLookupOpen && <DeliveryAddressLookupModal isOpen custCode={state.shipToCode || ""} onClose={(row) => { setDeliveryLookupOpen(false); if (row && !isFormDisabled) updateState({ shipToAddress: row.deliveryAddress || "", deliveryArea: row.deliveryArea || "" }); }} />}
+{isDeliverySI && addressEditorOpen && (
+  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/60 p-4">
+    <div role="dialog" aria-modal="true" aria-labelledby="delivery-address-title" className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      <div className="flex items-center justify-between px-6 pt-5 pb-2">
+        <h2 id="delivery-address-title" className="text-lg font-bold tracking-tight text-gray-900">Edit Delivery Address</h2>
+        <button type="button" aria-label="Close" onClick={() => setAddressEditorOpen(false)} className="text-gray-400 transition-colors hover:text-gray-600"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+      </div>
+      <div className="space-y-4 px-6 pt-2 pb-6">
+        <div className="flex items-start gap-3 rounded-r-md border-l-4 border-blue-500 bg-blue-50 p-3">
+          <FontAwesomeIcon icon={faPen} className="mt-0.5 shrink-0 text-blue-500" />
+          <p className="text-sm font-medium leading-snug text-blue-800">Update the delivery address for this Sales Invoice.</p>
+        </div>
+        <div>
+          <label htmlFor="delivery-address-draft" className="mb-1.5 block text-sm font-medium text-gray-700">Delivery Address</label>
+          <textarea id="delivery-address-draft" autoFocus maxLength={1000} rows={4} value={addressDraft} disabled={isFormDisabled} onChange={(e) => setAddressDraft(e.target.value)} className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 border-t bg-gray-50 px-6 py-4">
+        <button type="button" onClick={() => setAddressEditorOpen(false)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100">Cancel</button>
+        <button type="button" disabled={isFormDisabled} onClick={() => { updateState({ shipToAddress: addressDraft }); setAddressEditorOpen(false); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-40"><FontAwesomeIcon icon={faPen} className="text-xs" />Apply Address</button>
+      </div>
+    </div>
+  </div>
+)}
 <div className="global-tran-main-div-ui">
 
       {showSpinner && <LoadingSpinner />}
@@ -5017,6 +5082,7 @@ return (
           >
             Basic Information
           </button>
+          {isDeliverySI && <button type="button" className={`global-tran-tab-padding-ui ${activeTab === "delivery" ? "global-tran-tab-text_active-ui" : "global-tran-tab-text_inactive-ui"}`} onClick={() => updateState({ activeTab: "delivery" })}>Delivery Information</button>}
           {isProvisionalSI && (
             <button
               type="button"
@@ -5521,6 +5587,30 @@ return (
           </div>
         </div>
 
+        {isDeliverySI && (
+          <div className={`${activeTab === "delivery" ? "grid" : "hidden"} grid-cols-1 items-start gap-x-6 gap-y-5 rounded-lg px-2 py-3 md:grid-cols-4`}>
+            <div className="md:col-span-1">
+              <FieldRenderer id="shipToCode" label="Ship To Customer Code" type="lookup" value={state.shipToCode || ""} readOnly disabled={isFormDisabled} onLookup={() => setShipCustomerLookupOpen(true)} />
+            </div>
+            <div className="md:col-span-1 md:col-start-1 md:row-start-2">
+              <FieldRenderer id="shipToName" label="Ship To Customer Name" type="text" value={state.shipToName || ""} readOnly disabled />
+            </div>
+            <div className="md:col-span-1 md:col-start-2 md:row-start-1">
+              <div className="relative w-full">
+                <input id="siDeliveryAddress" value={state.shipToAddress || ""} disabled readOnly placeholder=" " className="peer w-full h-8 sm:h-8 global-ref-textbox-ui global-ref-textbox-disabled !px-2 !pr-20 !font-normal rounded-lg" />
+                <button type="button" title="Edit delivery address" disabled={isFormDisabled} onClick={() => { setAddressDraft(state.shipToAddress || ""); setAddressEditorOpen(true); }} className="absolute right-10 top-0 flex h-full w-8 flex-col items-center justify-center rounded text-blue-600 hover:bg-blue-100 disabled:opacity-40"><FontAwesomeIcon icon={faPen} className="text-[10px]" /><span className="text-[8px] leading-none">Edit</span></button>
+                <button type="button" title="Search delivery address" disabled={isFormDisabled} onClick={() => setDeliveryLookupOpen(true)} className="absolute right-0 top-0 flex h-full w-10 items-center justify-center rounded-r-lg border bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white disabled:bg-gray-100 disabled:text-gray-400"><FontAwesomeIcon icon={faMagnifyingGlass} className="text-sm" /></button>
+                <label htmlFor="siDeliveryAddress" className="global-ref-floating-label">Delivery Address</label>
+              </div>
+            </div>
+            <div className="md:col-span-1 md:col-start-2 md:row-start-2">
+              <div className="relative w-full">
+                <div className={`flex h-8 items-stretch global-ref-textbox-ui ${isFormDisabled ? "global-ref-textbox-disabled" : "global-ref-textbox-enabled"}`}><DateFormatInput id="deliveryDate" value={state.deliveryDate} disabled={isFormDisabled} updateState={updateState} className="peer min-w-0 flex-grow border-none bg-transparent px-3 focus:outline-none" /></div>
+                <label htmlFor="deliveryDate" className="global-ref-floating-label">Delivery Date</label>
+              </div>
+            </div>
+          </div>
+        )}
         {isProvisionalSI && (
           <div className={`${activeTab === "provisional" ? "grid" : "hidden"} grid-cols-1 gap-4 rounded-lg md:grid-cols-2 lg:grid-cols-3`} id="si_prsi">
             <div className="global-tran-textbox-group-div-ui">
