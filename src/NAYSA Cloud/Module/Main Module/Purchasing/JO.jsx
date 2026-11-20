@@ -24,6 +24,7 @@ import PostTranModal from "../../../Lookup/SearchPostRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
+import SearchGlobalEmail from "../../../Lookup/SearchGlobalEmail.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
@@ -36,7 +37,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
 
 // Configuration
-import { postRequest,fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import { apiClient,postRequest,fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
@@ -133,6 +134,10 @@ const JO = () => {
     const navigate = useNavigate();
     const location = useLocation(); 
     const [isViewDocument, setIsViewDocument] = useState(false);
+  const [joEmail, setJoEmail] = useState(null);
+  const [sendingJOEmail, setSendingJOEmail] = useState(false);
+  const [savingJOEmailBody, setSavingJOEmailBody] = useState(false);
+
     const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getReplacementVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
     const decUPrice = companyInfo?.pur_decuprice ?? 2;
   
@@ -443,6 +448,11 @@ const JO = () => {
       ? "text-rose-500 dark:text-rose-400 animate-pulse"
       : statusColor;
   const isApprovalComplete = ["A", "NA"].includes(currentApprovalStatus);
+  const canEmailJO = Boolean(documentID)
+    && ["O", "OPEN"].includes(String(status || "").toUpperCase())
+    && !["Y", "1", "TRUE"].includes(String(state.joCancelled || "").toUpperCase())
+    && isApprovalComplete && detailRows.length > 0;
+
   const isDocumentLocked = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
@@ -1277,6 +1287,44 @@ const handleDeleteRow = (index) => {
 
 
   
+  const openJOEmail = async () => {
+    if (!canEmailJO) return;
+    updateState({showSpinner: true});
+    try {
+      const {data} = await apiClient.get('/jo/email', {params: {joId: documentID}});
+      if (!data.success) throw new Error(data.message);
+      setJoEmail({...data.data, joId: documentID});
+    } catch (error) {
+      useSwalErrorAlert('Email JO', error.response?.data?.message || error.message);
+    } finally { updateState({showSpinner: false}); }
+  };
+
+  const sendJOEmail = async (message) => {
+    if (sendingJOEmail || savingJOEmailBody || !joEmail) return;
+    setSendingJOEmail(true);
+    try {
+      const {data} = await apiClient.post('/jo/email', {...message, joId: joEmail.joId}, {timeout: 180000});
+      if (!data.success) throw new Error(data.message);
+      setJoEmail(null);
+      useSwalSuccessAlert('Email JO', data.message);
+    } catch (error) {
+      useSwalErrorAlert('Email JO', error.response?.data?.message || 'Unable to confirm sending. Check the mail server before retrying.');
+    } finally { setSendingJOEmail(false); }
+  };
+
+  const saveJOEmailBody = async (body) => {
+    if (!joEmail || sendingJOEmail || savingJOEmailBody) return;
+    setSavingJOEmailBody(true);
+    updateState({showSpinner: true});
+    try {
+      const {data} = await apiClient.put('/jo/email-body', {joId: joEmail.joId, body});
+      if (!data.success) throw new Error(data.message);
+      useSwalSuccessAlert('Email JO', 'Default email body saved.');
+    } catch (error) {
+      useSwalErrorAlert('Email JO', error.response?.data?.message || error.message);
+    } finally { setSavingJOEmailBody(false); updateState({showSpinner: false}); }
+  };
+
   const handlePrint = async () => {
     if (!documentID) return;
     updateState({ showSignatoryModal: true });
@@ -1916,13 +1964,33 @@ const renderJoDetailColumn = (columnKey, row, index) => {
   return (
     <div className="global-tran-main-div-ui">
       {showSpinner && <LoadingSpinner />}
+      <SearchGlobalEmail
+        isOpen={Boolean(joEmail)}
+        title="Email Job Order"
+        subtitle="The FINAL JO PDF will be generated and attached automatically."
+        attachmentNote="Attachment: FINAL Job Order PDF."
+        defaultTo={joEmail?.to || ""}
+        defaultCc={joEmail?.cc || ""}
+        defaultSubject={joEmail?.subject || ""}
+        defaultBody={joEmail?.body || ""}
+        includeExcel={false}
+        sendingMessage="Generating FINAL JO PDF, then sending email..."
+        isSending={sendingJOEmail}
+        savingBody={savingJOEmailBody}
+        onSaveBody={saveJOEmailBody}
+        onSend={sendJOEmail}
+        onClose={() => { if (!sendingJOEmail && !savingJOEmailBody) setJoEmail(null); }}
+      />
 
       <div className="global-tran-headerToolbar-ui">
         <Header
           docType={docType} 
           pdfLink={pdfLink} 
           videoLink={videoLink}
-          onPrint={handlePrint} 
+          onPrint={handlePrint}
+          showEmail={true}
+          onEmail={openJOEmail}
+          isEmailDisabled={!canEmailJO || isLoading || sendingJOEmail || savingJOEmailBody}
           onPost={handlePost} 
           printData={printData} 
           onReset={handleReset}

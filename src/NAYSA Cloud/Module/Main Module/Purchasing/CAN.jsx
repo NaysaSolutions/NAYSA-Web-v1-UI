@@ -3,6 +3,7 @@ import Swal from "sweetalert2";
 import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faArrowRight,
   faChevronDown,
   faChevronRight,
   faCircleInfo,
@@ -291,6 +292,17 @@ export const CAN = () => {
   const [selectedPrIds, setSelectedPrIds] = useState([]);
   const [expandedItemLn, setExpandedItemLn] = useState(null);
   const [activeSupplierForAttachment, setActiveSupplierForAttachment] = useState(null);
+  const [approvalScope, setApprovalScope] = useState("");
+  const [itemApprovalComments, setItemApprovalComments] = useState([]);
+  const [historyItems, setHistoryItems] = useState(null);
+  const historyItemsDialogRef = useRef(null);
+  useEffect(() => {
+    const dialog = historyItemsDialogRef.current;
+    if (historyItems && dialog && !dialog.open) dialog.showModal();
+    if (!historyItems && dialog?.open) dialog.close();
+  }, [historyItems]);
+  const approverComments = useMemo(() => itemApprovalComments.filter((comment) =>
+    ["APPROVE", "DISAPPROVE", "RECOMMEND"].includes(String(comment.action || "").toUpperCase())), [itemApprovalComments]);
   const [poSelectionTouched, setPoSelectionTouched] = useState(false);
   const [selectedPOItemKeys, setSelectedPOItemKeys] = useState([]);
   const [generatePOGroupBy, setGeneratePOGroupBy] = useState("supplier");
@@ -513,8 +525,13 @@ export const CAN = () => {
      Each row carries prId/prGroupId information from the canvass breakdown so
      PO references can be tracked per original PR line.
   --------------------------------------------------------------------------- */
+  const lineAwardEnabled = approvalScope === "LINE";
+  const poAwardedSuppliers = useMemo(() => lineAwardEnabled
+    ? normalizeRows(supplierRows).filter((supplier) => normalizeRows(supplier.detailRows).some((row) => Boolean(row.finalAwarded)))
+    : awardedSupplier ? [awardedSupplier] : [], [lineAwardEnabled, supplierRows, awardedSupplier]);
+
   const poAllDetailRows = useMemo(() => {
-    if (!awardedSupplier) return [];
+    if (!poAwardedSuppliers.length) return [];
 
     const canvasDetailByLn = new Map(
       normalizeRows(detailRows).map((row) => [String(row?.canLn || ""), row])
@@ -522,8 +539,8 @@ export const CAN = () => {
 
     let runningLn = 0;
 
-    return normalizeRows(awardedSupplier.detailRows)
-      .filter((row) => String(row?.itemCode || "").trim())
+    return poAwardedSuppliers.flatMap((sourceSupplier) => normalizeRows(sourceSupplier.detailRows)
+      .filter((row) => String(row?.itemCode || "").trim() && (!lineAwardEnabled || Boolean(row.finalAwarded)))
       .flatMap((row, supplierDetailIndex) => {
         const canvasDetail = canvasDetailByLn.get(String(row?.canLn || "")) || {};
         const breakdownRows = normalizeRows(canvasDetail.prBreakdown);
@@ -597,6 +614,8 @@ export const CAN = () => {
 
           return {
             ...row,
+            sourceSupplier,
+            approvalEligible: !approvalEnabled || ["A", "NA"].includes(String(canvasDetail.appStat || "P").toUpperCase()),
             poKey: rowKey,
             poLn: runningLn,
             poLineKey: rowKey,
@@ -606,8 +625,8 @@ export const CAN = () => {
             rcCode: breakdown?.rcCode || row?.rcCode || "",
             rcName: breakdown?.rcName || row?.rcName || "",
             dateNeeded: breakdown?.dateNeeded || row?.dateNeeded || "",
-            supplierCode: awardedSupplier.supplierCode || selectedSupplierCode || "",
-            supplierName: awardedSupplier.supplierName || selectedSupplierName || "",
+            supplierCode: sourceSupplier.supplierCode || "",
+            supplierName: sourceSupplier.supplierName || "",
             poNo: linePoNo,
             poId: linePoId,
             poGenerated: Boolean(linePoNo || linePoId || matchingPOReference.poGenerated),
@@ -619,11 +638,11 @@ export const CAN = () => {
             netAmount: money(netAmount),
           };
         });
-      });
-  }, [awardedSupplier, detailRows, selectedSupplierCode, selectedSupplierName, canId, canNo, decQty, decUPrice, getCanVatAmount]);
+      }));
+  }, [poAwardedSuppliers, lineAwardEnabled, detailRows, selectedSupplierCode, selectedSupplierName, canId, canNo, decQty, decUPrice, getCanVatAmount, approvalEnabled]);
 
   const poCandidateRows = useMemo(
-    () => poAllDetailRows.filter((row) => !(row.poNo || row.poId || row.poGenerated)),
+    () => poAllDetailRows.filter((row) => row.approvalEligible && !(row.poNo || row.poId || row.poGenerated)),
     [poAllDetailRows]
   );
 
@@ -633,7 +652,7 @@ export const CAN = () => {
   );
 
   const hasGeneratedPOLines = generatedPODetailRows.length > 0;
-  const allPOLinesGenerated = poAllDetailRows.length > 0 && poCandidateRows.length === 0;
+  const allPOLinesGenerated = poAllDetailRows.length > 0 && poAllDetailRows.every((row) => row.poNo || row.poId || row.poGenerated);
 
   const activePOSelectedKeys = poSelectionTouched
     ? selectedPOItemKeys
@@ -727,7 +746,7 @@ export const CAN = () => {
     }
   }, [showGeneratePOSummary, generatePOActiveTab]);
 
-  const generatedPOCount = useMemo(() => selectedPORows.length > 0 ? 1 : 0, [selectedPORows]);
+  const generatedPOCount = useMemo(() => new Set(selectedPORows.map((row) => row.sourceSupplier?.canSupplierId)).size, [selectedPORows]);
 
   const existingGeneratedPOInfo = useMemo(() => {
     if (generatedPOInfo?.poNo || generatedPOInfo?.poId) {
@@ -841,6 +860,9 @@ export const CAN = () => {
      selections, generated PO UI state, and comparison modal state.
   --------------------------------------------------------------------------- */
   const handleReset = () => {
+    setApprovalScope("");
+    setItemApprovalComments([]);
+    setHistoryItems(null);
     setOpenPrRows([]);
     setSelectedPrIds([]);
     setExpandedItemLn(null);
@@ -948,6 +970,8 @@ export const CAN = () => {
         return;
       }
 
+      setApprovalScope(String(data.approvalScope || "DOC").toUpperCase());
+      setItemApprovalComments(normalizeRows(data.itemApprovalComments));
       const nextDetailRows = normalizeRows(data.detailRows).map((row) => ({
         ...row,
         totalQtyNeeded: qty(row.totalQtyNeeded, decQty),
@@ -1005,9 +1029,9 @@ export const CAN = () => {
         nextApprovalLevel: Number(data.nextApprovalLevel || 0),
         approvalData: data.approvalData || {},
         branchCode: data.branchCode || fetchBranchCode,
-        selectedSupplierCode: awarded?.supplierCode || data.selectedSupplierCode || "",
-        selectedSupplierName: awarded?.supplierName || data.selectedSupplierName || "",
-        selectedOfferAmount: money(awarded?.netAmount || data.selectedOfferAmount || 0),
+        selectedSupplierCode: data.approvalScope === "LINE" ? "" : awarded?.supplierCode || data.selectedSupplierCode || "",
+        selectedSupplierName: data.approvalScope === "LINE" ? nextSuppliers.filter((supplier) => normalizeRows(supplier.detailRows).some((row) => row.finalAwarded)).map((supplier) => supplier.supplierName).join(", ") : awarded?.supplierName || data.selectedSupplierName || "",
+        selectedOfferAmount: money(data.approvalScope === "LINE" ? data.selectedOfferAmount || 0 : awarded?.netAmount || data.selectedOfferAmount || 0),
         remarks: data.remarks || "",
         userCode: data.userCode || currentUserRow?.userCode || "",
         prRows: normalizeRows(data.prRows),
@@ -2114,6 +2138,27 @@ export const CAN = () => {
      Validates supplier offer totals, saves the awarded supplier in CAN, and
      refreshes the transaction to display the latest status and selected offer.
   --------------------------------------------------------------------------- */
+  const awardItem = async (supplier, row) => {
+    if (!canId || !row.canSupplierDt1Id) return useSwalInfoAlert("Award Item", "Save the Canvass first.");
+    const removing = Boolean(row.finalAwarded);
+    let reason = "";
+    if (removing) {
+      const confirmation = await Swal.fire({title: "Remove item award?", input: "textarea", inputLabel: "Reason", showCancelButton: true, confirmButtonText: "Remove Award", inputValidator: (value) => !String(value || "").trim() ? "Reason is required." : undefined});
+      if (!confirmation.isConfirmed) return;
+      reason = String(confirmation.value).trim();
+    } else {
+      const confirmation = await useSwalProceedConfirm("Award Item?", `Award ${row.itemCode} to ${supplier.supplierName}?`, "Award Item");
+      if (!confirmation?.isConfirmed) return;
+    }
+    updateState({isLoading: true});
+    try {
+      await callCAN("award", {canId, userCode, awardMode: "LINE", awardAction: removing ? "CLEAR" : "AWARD", canSupplierDt1Id: row.canSupplierDt1Id, selectedSupplierCode: supplier.supplierCode, reason});
+      await fetchCAN({canId, canNo, branchCode});
+      await useSwalSuccessAlert("Item Award", removing ? "Item award removed." : "Item awarded successfully.");
+    } catch (error) { useSwalErrorAlert("Item Award", errorMessage(error)); }
+    finally { updateState({isLoading: false}); }
+  };
+
   const awardSupplier = async (supplier) => {
     if (!supplier?.supplierCode) {
       useSwalInfoAlert("Award Supplier", "Please enter Supplier Code first.");
@@ -2221,7 +2266,7 @@ export const CAN = () => {
   };
 
   const buildPurchaseOrderPayload = (rows = []) => {
-    const supplier = awardedSupplier || {};
+    const supplier = rows[0]?.sourceSupplier || awardedSupplier || {};
     const paytermValue = supplier.paytermCode || supplier.paymentTerms || supplier.paytermName || "";
     const today = useGetCurrentDayV2();
 
@@ -2259,7 +2304,8 @@ export const CAN = () => {
         dateNeeded: today,
         itemSpecs: row.itemSpecs || "",
         rrQty: 0,
-        canSupplierId: awardedSupplier?.canSupplierId || "",
+        canDt1Id: row.canDt1Id || "",
+        canSupplierId: supplier.canSupplierId || "",
         canSupplierDt1Id: row.canSupplierDt1Id || "",
         poLineKey: row.poLineKey || row.poKey || "",
       };
@@ -2311,6 +2357,7 @@ export const CAN = () => {
     const poAmount = grossTotal - discountTotal;
 
     return {
+      canId,
       branchCode: branchCode || "",
       poNo: "",
       poId: "",
@@ -2326,7 +2373,7 @@ export const CAN = () => {
       address3: "",
       vendContact: "",
       paytermCode: paytermValue,
-      poType: "",
+      poType: "PO11",
       delDate: today,
       currCode: companyInfo?.currCode || "PHP",
       currRate: parseFormattedNumber(companyInfo?.currRate || 1) || 1,
@@ -2419,7 +2466,7 @@ export const CAN = () => {
       return;
     }
 
-    if (!awardedSupplier?.canSupplierId) {
+    if (!poAwardedSuppliers.length) {
       useSwalInfoAlert("Generate Purchase Order", "Awarded supplier must be saved before generating Purchase Order.");
       return;
     }
@@ -2432,7 +2479,7 @@ export const CAN = () => {
     try {
       await apiClient.post("/can/approval/validate-po-lines", { json_data: {
         canId,
-        lineRows: selectedPORows.map((row) => ({ canDt1Id: row.canDt1Id })),
+        lineRows: selectedPORows.map((row) => ({ canDt1Id: row.canDt1Id, canSupplierDt1Id: row.canSupplierDt1Id, poLineKey: row.poLineKey })),
       }});
     } catch (error) {
       useSwalErrorAlert(
@@ -2453,7 +2500,13 @@ export const CAN = () => {
     updateState({ isLoading: true, showSpinner: true });
 
     try {
-      const rowGroups = [selectedPORows];
+      const groups = new Map();
+      selectedPORows.forEach((row) => {
+        const key = row.sourceSupplier.canSupplierId;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+      });
+      const rowGroups = [...groups.values()];
 
       const createdPOs = [];
 
@@ -2476,48 +2529,14 @@ export const CAN = () => {
           console.warn("PO upsert completed but no PO number/ID was returned.", response);
         }
 
-        createdPOs.push({
-          poNo: responsePoNo,
-          poId: responsePoId,
-          branchCode: responseRow?.branchCode || branchCode || "",
-        });
+        if (!responsePoId && !responsePoNo) throw new Error("PO save did not return a reference. Refresh before retrying.");
+
+        createdPOs.push({poId: responsePoId, poNo: responsePoNo, branchCode});
+        // Refresh after each successful supplier so a later failure preserves completed references.
+        await fetchCAN({canId, canNo, branchCode});
       }
 
-      const firstPO = createdPOs.find((row) => row?.poNo || row?.poId) || createdPOs[0] || null;
-      setGeneratedPOInfo(firstPO);
-
-      if (!firstPO?.poNo && !firstPO?.poId) {
-        useSwalErrorAlert(
-          "Generate Purchase Order",
-          "PO save was called, but the PO endpoint did not return poNo or poId. Please check the PO upsert response in the console/network tab."
-        );
-        return;
-      }
-
-      await callCAN("markPOLinesGenerated", {
-        canId,
-        canSupplierId: awardedSupplier.canSupplierId,
-        poId: firstPO?.poId || "",
-        poNo: firstPO?.poNo || "",
-        userCode: currentUserRow?.userCode || userCode || "",
-        lineRows: selectedPORows.map((row) => ({
-          canSupplierDt1Id: row.canSupplierDt1Id || "",
-          canDt1Id: row.canDt1Id || "",
-          canLn: row.canLn || "",
-          poLineKey: row.poLineKey || row.poKey || "",
-          prId: row.prId || "",
-          prNo: row.prNo || "",
-          groupId: row.groupId || "",
-          rcCode: row.rcCode || "",
-          rcName: row.rcName || "",
-          itemCode: row.itemCode || "",
-          invType: row.invType || "",
-          itemSpecs: row.itemSpecs || "",
-          quantity: num(row.quantity),
-        })),
-      });
-
-      setGeneratedPOInfo(firstPO);
+      setGeneratedPOInfo(createdPOs[0] || null);
 
       await fetchCAN({
         canId,
@@ -2954,15 +2973,18 @@ export const CAN = () => {
         <div className="global-tran-textbox-group-div-ui">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {[
-              ["PR Count", totals.prCount],
-              ["Items", totals.itemCount],
-              ["Suppliers", totals.supplierCount],
-              ["Total Quantity", totals.totalQty],
-              ["Best Offer", totals.bestOffer],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm">
-                <div className="text-[9px] font-semibold tracking-wide text-slate-500">{label}</div>
-                <div className="mt-1 text-sm text-right text-slate-900">{value}</div>
+              {label: "PR Count", value: totals.prCount, icon: faClipboardList, color: "bg-blue-50 text-blue-600"},
+              {label: "Items", value: totals.itemCount, icon: faListCheck, color: "bg-violet-50 text-violet-600"},
+              {label: "Suppliers", value: totals.supplierCount, icon: faSearch, color: "bg-cyan-50 text-cyan-600"},
+              {label: "Total Quantity", value: totals.totalQty, icon: faPlus, color: "bg-amber-50 text-amber-600"},
+              {label: "Best Offer", value: totals.bestOffer, icon: faTrophy, color: "bg-emerald-50 text-emerald-600"},
+            ].map((item) => (
+              <div key={item.label} className="flex min-h-[42px] min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${item.color}`}><FontAwesomeIcon icon={item.icon} className="text-xs" /></span>
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="max-w-[88px] whitespace-normal text-xs font-medium leading-4 text-slate-600">{item.label}</span>
+                  <span className="ml-auto whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-800">{item.value}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -3085,7 +3107,6 @@ export const CAN = () => {
   const renderItems = () => (
     <div className="rounded-b-2xl rounded-tr-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="mb-1 text-sm font-bold text-slate-700">Consolidated Items</h2>
-      <p className="mb-3 text-xs text-slate-500">Click the arrow to view PR breakdown per item.</p>
 
       <div className="overflow-auto rounded-xl border">
         <table className="min-w-[980px] w-full text-xs">
@@ -3444,7 +3465,7 @@ export const CAN = () => {
     const canGeneratePO =
       Boolean(canId) &&
       String(canStatus || "").toUpperCase() === "W" &&
-      Boolean(awardedSupplier?.canSupplierId) &&
+      poAwardedSuppliers.length > 0 &&
       poCandidateRows.length > 0;
     const selectedKeys = activePOSelectedKeys;
     const poStatusText = generatedPONoList.length > 0
@@ -3549,7 +3570,7 @@ export const CAN = () => {
       <section className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-slate-800">Generate Purchase Order</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700"><span className="h-4 w-1 shrink-0 rounded-full bg-blue-600" aria-hidden="true" />Generate Purchase Order</h2>
             <p className="text-xs text-slate-500">Item Details are split per PR No.; Item Summary appears only when grouping is needed.</p>
           </div>
         </div>
@@ -3558,20 +3579,20 @@ export const CAN = () => {
           <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500">Save the Canvass before generating Purchase Order.</div>
         ) : String(canStatus || "").toUpperCase() !== "W" ? (
           <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500">Award a supplier first before generating Purchase Order.</div>
-        ) : !awardedSupplier ? (
+        ) : !poAwardedSuppliers.length ? (
           <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500">No awarded supplier found.</div>
         ) : (
           <>
             <div className="mb-3 grid grid-cols-1 gap-2 text-xs md:grid-cols-3">
               <div className="rounded-lg border bg-slate-50 p-3">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Awarded Supplier</div>
-                <div className="mt-1 truncate text-slate-800" title={awardedSupplier.supplierName || awardedSupplier.supplierCode}>
-                  {awardedSupplier.supplierName || awardedSupplier.supplierCode || "-"}
+                <div className="mt-1 truncate text-slate-800" title={poAwardedSuppliers.map((row) => row.supplierName || row.supplierCode).join(", ")}>
+                  {poAwardedSuppliers.map((row) => row.supplierName || row.supplierCode).join(", ") || "-"}
                 </div>
               </div>
               <div className="rounded-lg border bg-slate-50 p-3">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Selected Offer Amount</div>
-                <div className="mt-1 text-right text-slate-800">{money(selectedOfferAmount || awardedSupplier.netAmount)}</div>
+                <div className="mt-1 text-right text-slate-800">{money(selectedOfferAmount || poAwardedSuppliers.reduce((sum, row) => sum + num(row.netAmount), 0))}</div>
               </div>
               <div className="rounded-lg border bg-slate-50 p-3">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">PO Status</div>
@@ -3643,7 +3664,7 @@ export const CAN = () => {
                                 type="checkbox"
                                 checked={!row.poNo && !row.poId && selectedKeys.includes(row.poKey)}
                                 onChange={() => togglePOItemSelection(row.poKey)}
-                                disabled={!canGeneratePO || isLoading || Boolean(row.poNo || row.poId || row.poGenerated)}
+                                disabled={!canGeneratePO || isLoading || !row.approvalEligible || Boolean(row.poNo || row.poId || row.poGenerated)}
                               />
                             </td>
                             {generatePODetailDataColumns.map((column) => renderGeneratePODetailCell(column.key, row, originalIndex))}
@@ -3733,7 +3754,7 @@ export const CAN = () => {
                 disabled={!canGeneratePO || selectedPORows.length === 0 || poCandidateRows.length === 0 || isLoading}
                 className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
               >
-                {poCandidateRows.length === 0 && poAllDetailRows.length > 0 ? "All Lines Generated" : hasGeneratedPO ? "PO Generated" : "Generate PO"}
+                {hasGeneratedPO ? "All Lines Generated" : poCandidateRows.length === 0 ? "No Approved Items Available" : "Generate PO"}
               </button>
             </div>
           </>
@@ -3742,29 +3763,65 @@ export const CAN = () => {
     );
   };
 
-  const renderStatusHistory = () => (
-    <div className="rounded-b-2xl rounded-tr-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="mb-3 text-sm font-bold text-slate-700">Status History</h2>
-      {statusHistory.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No status history yet.</div>
-      ) : (
-        <div className="space-y-3">
-          {statusHistory.map((row, index) => (
-            <div key={row.canStatusHistId || index} className="flex gap-3 rounded-xl border p-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">{index + 1}</div>
-              <div>
-                <div className="text-sm font-bold">{cleanDisplayText(row.statusName)}</div>
-                <div className="text-xs text-slate-500">
-                  {getStatusHistoryActionName(row)} • {safeDate(row.actionDate)}
+  const renderStatusHistory = () => {
+    const events = statusHistory.map((row) => ({
+      key: row.canStatusHistId,
+      label: cleanDisplayText(row.statusName) === "Submitted for Approval" ? "Submitted" : cleanDisplayText(row.statusName),
+      user: getStatusHistoryActionName(row), date: row.actionDate,
+      remarks: cleanDisplayText(row.remarks), items: [],
+    }));
+    const itemEvents = new Map();
+    itemApprovalComments.forEach((row) => {
+      const action = String(row.action || "").toUpperCase();
+      const label = ({APPROVE: `Approved L${row.approvalLevel}`, DISAPPROVE: `Disapproved L${row.approvalLevel}`, RECOMMEND: "Recommended", AWARD: "Items Awarded", "REMOVE AWARD": "Award Removed"})[action];
+      if (!label) return;
+      const groupedDate = action === "AWARD" ? String(row.actionDate || "").slice(0, 10) : row.actionDate;
+      const key = [action, row.approvalLevel, row.approverName, groupedDate].join("|");
+      if (!itemEvents.has(key)) itemEvents.set(key, {key, label, user: row.approverName, date: row.actionDate, remarks: row.remarks || "", items: [], rows: [], action});
+      const event = itemEvents.get(key);
+      event.rows.push(row);
+      if (row.itemCode && !event.items.includes(row.itemCode)) event.items.push(row.itemCode);
+    });
+    events.push(...itemEvents.values());
+    events.sort((left, right) => (new Date(left.date).getTime() || 0) - (new Date(right.date).getTime() || 0));
+    return (
+      <div className="rounded-b-2xl rounded-tr-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700"><span className="h-4 w-1 shrink-0 rounded-full bg-blue-600" aria-hidden="true" />Status History</h2>
+        {!events.length ? <div className="py-6 text-center text-sm text-slate-500">No status history yet.</div> : (
+          <ol className="flex items-start overflow-x-auto pb-5 pt-1" aria-label="Canvass transaction history">
+            {events.map((event, index) => {
+              const negative = /disapprov|cancel|removed/i.test(event.label);
+              const awarded = /award/i.test(event.label);
+              const approved = /approv/i.test(event.label);
+              const submitted = /submit/i.test(event.label);
+              const color = negative ? "border-red-200 bg-red-50 text-red-600"
+                : approved || awarded ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+                : submitted ? "border-amber-200 bg-amber-50 text-amber-600"
+                : "border-blue-200 bg-blue-50 text-blue-600";
+              const icon = negative ? faTrashAlt : awarded ? faTrophy : approved ? faListCheck : submitted ? faArrowRight : /recommend/i.test(event.label) ? faCircleInfo : faClipboardList;
+              const title = event.label.replace(/^Draft Created$/i, "Created").replace(/^Supplier Recommendation Changed$/i, "Recommendation Changed");
+              return <li key={event.key || index} className="w-[208px] shrink-0 pr-4 last:pr-0">
+                <div className="relative mb-3 flex h-8 items-center">
+                  {index > 0 && <span className="absolute -left-4 right-0 h-px bg-slate-200" aria-hidden="true" />}
+                  {index === 0 && events.length > 1 && <span className="absolute left-4 right-0 h-px bg-slate-200" aria-hidden="true" />}
+                  <span className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border ring-4 ring-white ${color}`}><FontAwesomeIcon icon={icon} className="text-xs" /></span>
                 </div>
-                {row.remarks && <div className="mt-1 whitespace-pre-wrap text-xs">{cleanDisplayText(row.remarks)}</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+                <article className="relative flex h-[140px] flex-col overflow-y-auto rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 shadow-[0_4px_12px_rgba(15,23,42,0.08)] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] focus-within:-translate-y-1 focus-within:border-blue-200 focus-within:shadow-[0_8px_20px_rgba(15,23,42,0.12)] motion-reduce:transform-none motion-reduce:transition-none">
+                  <h3 className="mb-2 min-h-8 text-xs font-semibold leading-4 text-slate-800">{title}{event.action === "AWARD" && <> · {new Set(event.rows.map((row) => row.canDt1Id || row.lineNo || row.itemCode)).size} items</>}</h3>
+                  <div className="break-words text-xs font-medium text-slate-700">{event.user || "—"}</div>
+                  <div className="mt-1 whitespace-nowrap text-xs tabular-nums text-slate-500">{safeDate(event.date)} {event.action !== "AWARD" && (String(event.date || "").match(/[T ](\d{2}:\d{2})/)?.[1] || "")}</div>
+                  <div className="mt-auto border-t border-slate-100 pt-2">
+                    {!!event.rows?.length ? <button type="button" onClick={() => setHistoryItems(event)} className="inline-flex h-5 items-center gap-1.5 text-xs font-normal text-blue-600 hover:text-blue-800 focus-visible:outline-blue-600"><FontAwesomeIcon icon={faListCheck} />View Items</button>
+                      : String(event.remarks || "").trim() ? <button type="button" onClick={() => setHistoryItems({...event, rows: [], detailsOnly: true})} className="inline-flex h-5 items-center gap-1.5 text-xs font-normal text-blue-600 hover:text-blue-800 focus-visible:outline-blue-600"><FontAwesomeIcon icon={faCircleInfo} />View Details</button> : <span className="block h-5" aria-hidden="true" />}
+                  </div>
+                </article>
+              </li>;
+            })}
+          </ol>
+        )}
+      </div>
+    );
+  };
 
 
   /* ---------------------------------------------------------------------------
@@ -3986,15 +4043,15 @@ export const CAN = () => {
         <div className={`relative flex flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl ${
           isSupplierCompareMaximized
             ? "h-screen w-screen rounded-none"
-            : "h-[78vh] w-[95vw] max-w-[1480px] rounded-xl"
+            : "h-[62.4vh] w-[76vw] max-w-[1184px] rounded-xl"
         }`}
           style={
             isSupplierCompareMaximized
               ? undefined
               : {
                   resize: "both",
-                  minWidth: "min(980px, calc(100vw - 16px))",
-                  minHeight: "520px",
+                  minWidth: "min(784px, calc(100vw - 16px))",
+                  minHeight: "min(416px, calc(100dvh - 16px))",
                   maxWidth: "calc(100vw - 16px)",
                   maxHeight: "calc(100dvh - 16px)",
                 }
@@ -4251,8 +4308,7 @@ export const CAN = () => {
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-800">1. Select Purchase Requisitions</h2>
-          <p className="text-xs text-slate-500">Approved open PRs are loaded by branch.</p>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700"><span className="h-4 w-1 shrink-0 rounded-full bg-blue-600" aria-hidden="true" />Purchase Requisitions</h2>
         </div>
         <button
           type="button"
@@ -4267,7 +4323,6 @@ export const CAN = () => {
 
       <div className="grid grid-cols-1 gap-4">
         <div>
-          <div className="mb-1 text-xs font-semibold text-slate-600">Select PRs</div>
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
               <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
@@ -4352,12 +4407,7 @@ export const CAN = () => {
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-800">2. Consolidated Item Canvass</h2>
-          <p className="text-xs text-slate-500">Set the quantity to include in this transaction.</p>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] font-medium text-blue-700">
-          <FontAwesomeIcon icon={faListCheck} />
-          <span>Click the arrow beside an item to view its source PR.</span>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700"><span className="h-4 w-1 shrink-0 rounded-full bg-blue-600" aria-hidden="true" />Consolidated Item Canvass</h2>
         </div>
       </div>
 
@@ -4467,8 +4517,7 @@ export const CAN = () => {
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-800">3. Supplier Offers</h2>
-          <p className="text-xs text-slate-500">Add and compare supplier offers for the consolidated items.</p>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700"><span className="h-4 w-1 shrink-0 rounded-full bg-blue-600" aria-hidden="true" />Supplier Offers</h2>
         </div>
         <button
           type="button"
@@ -4535,6 +4584,7 @@ export const CAN = () => {
                       {[
                         ["offer", "Offer"],
                         ["items", "Item Details"],
+                        ...(lineAwardEnabled ? [["comments", "Approver’s Comments per Item"]] : []),
                         ["attachments", `Attachments (${normalizeRows(supplier.attachments).length})`],
                       ].map(([tab, label]) => (
                         <button
@@ -4554,10 +4604,10 @@ export const CAN = () => {
                   </div>
 
                   <div className="flex items-center gap-2 lg:justify-end">
-                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isAwardedOrCancelled || isLocked || !supplier?.canSupplierId} className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-65 lg:flex-row lg:px-3 lg:py-2 lg:text-xs" title="Award Transaction">
+                    {!lineAwardEnabled && <button type="button" onClick={() => awardSupplier(supplier)} disabled={isAwardedOrCancelled || isLocked || !supplier?.canSupplierId} className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-65 lg:flex-row lg:px-3 lg:py-2 lg:text-xs" title="Award Transaction">
                       <FontAwesomeIcon icon={faTrophy} />
                       Award
-                    </button>
+                    </button>}
                     {!isLocked && (
                       <button type="button" onClick={() => removeSupplier(supplierIndex)} className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-red-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-red-700 lg:flex-row lg:px-3 lg:py-2 lg:text-xs" title="Remove Offer">
                         <FontAwesomeIcon icon={faTrashAlt} />
@@ -4693,6 +4743,10 @@ export const CAN = () => {
                       <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                         <thead className="global-tran-thead-div-ui sticky top-0 z-10">
                           <tr>
+                            {lineAwardEnabled && <>
+                              <th className="global-tran-th-ui whitespace-nowrap text-center" style={{width: 116, minWidth: 116}}>Item Award</th>
+                              <th className="global-tran-th-ui whitespace-nowrap text-center" style={{width: 124, minWidth: 124}}>Recommendation</th>
+                            </>}
                             {orderedCanSupplierItemColumns.map((column) =>
                               renderCanSupplierItemHeader(column.label, column.key, column.width, {
                                 orderedColumns: orderedCanSupplierItemColumns,
@@ -4703,13 +4757,29 @@ export const CAN = () => {
                         <tbody className="relative">
                           {sortedSupplierItemRows.length === 0 ? (
                             <tr className="global-tran-tr-ui">
-                              <td colSpan={orderedCanSupplierItemColumns.length} className="global-tran-td-ui text-center text-slate-500">
+                              <td colSpan={orderedCanSupplierItemColumns.length + (lineAwardEnabled ? 2 : 0)} className="global-tran-td-ui text-center text-slate-500">
                                 No item details yet.
                               </td>
                             </tr>
                           ) : (
                             sortedSupplierItemRows.map(({ row, originalIndex }) => (
                               <tr key={`${supplierIndex}-${row.canLn || originalIndex}`} className="global-tran-tr-ui">
+                                {lineAwardEnabled && <>
+                                  <td className="global-tran-td-ui text-center" style={{width: 116, minWidth: 116}}>
+                                    {row.finalAwarded && normalizeRows(row.poReferences).length > 0 ? (
+                                      <span title="This award is linked to a Purchase Order." className="inline-flex h-7 w-[100px] items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 text-[11px] font-semibold text-emerald-700"><FontAwesomeIcon icon={faTrophy} />Awarded</span>
+                                    ) : <button type="button" onClick={() => awardItem(supplier, row)} title={row.finalAwarded ? "Remove this item award" : "Award the approved recommended supplier"}
+                                      disabled={isLoading || canCancelled || (!row.finalAwarded && Number(row.awardPriority) !== 1) || normalizeRows(row.poReferences).length > 0 || !["A", "W"].includes(String(canStatus)) || !["A", "NA"].includes(String(detailRows.find((item) => String(item.canDt1Id) === String(row.canDt1Id))?.appStat || "P")) || (!row.finalAwarded && supplierRows.some((offer) => normalizeRows(offer.detailRows).some((item) => item.canDt1Id === row.canDt1Id && item.finalAwarded)))}
+                                      className={`inline-flex h-7 w-[100px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${row.finalAwarded ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100" : "border-blue-600 bg-blue-600 text-white hover:bg-blue-700"}`}>
+                                      <FontAwesomeIcon icon={row.finalAwarded ? faTrashAlt : faTrophy} className="text-[10px]" />{row.finalAwarded ? "Remove" : "Award"}
+                                    </button>}
+                                  </td>
+                                  <td className="global-tran-td-ui text-center" style={{width: 124, minWidth: 124}}>
+                                    {Number(row.awardPriority) === 1
+                                      ? <span className="inline-flex items-center whitespace-nowrap rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Recommended</span>
+                                      : <span className="text-slate-400">—</span>}
+                                  </td>
+                                </>}
                                 {orderedCanSupplierItemColumns.map((column) =>
                                   renderCanSupplierItemCell(column.key, row, originalIndex, supplierIndex)
                                 )}
@@ -4719,7 +4789,7 @@ export const CAN = () => {
                         </tbody>
                         <tfoot className="sticky bottom-0 bg-slate-50 font-bold z-10">
                           <tr className="h-8 bg-slate-100">
-                            <td colSpan={8} className="global-tran-td-ui text-right border-l py-1">Total</td>
+                            <td colSpan={8 + (lineAwardEnabled ? 2 : 0)} className="global-tran-td-ui text-right border-l py-1">Total</td>
                             <td className="global-tran-td-ui text-right py-1">{money(supplier.offerAmount)}</td>
                             <td className="global-tran-td-ui text-right py-1">{money(supplier.discountAmount)}</td>
                             <td className="global-tran-td-ui py-1" />
@@ -4730,6 +4800,14 @@ export const CAN = () => {
                       </table>
                       {renderCanSupplierItemHeaderContextMenu()}
                     </div>
+                  </div>
+                )}
+
+                {activeSupplierTab === "comments" && lineAwardEnabled && (
+                  <div className="overflow-auto rounded-lg border border-slate-200">
+                    <table className="min-w-full text-xs"><thead className="bg-blue-100 text-left"><tr>{["Item", "Level", "Approver", "Recommended Supplier", "Action", "Comments", "Date / Time"].map((label) => <th key={label} className="px-3 py-2">{label}</th>)}</tr></thead>
+                      <tbody>{approverComments.map((comment, index) => <tr key={index} className="border-t border-slate-100"><td className="px-3 py-2">{comment.itemCode}</td><td className="px-3 py-2">{comment.approvalLevel || "—"}</td><td className="px-3 py-2">{comment.approverName}</td><td className="px-3 py-2">{comment.supplierName || comment.supplierCode}</td><td className="px-3 py-2">{comment.action}</td><td className="px-3 py-2 whitespace-pre-wrap">{comment.remarks || "—"}</td><td className="px-3 py-2">{safeDate(comment.actionDate)} {String(comment.actionDate || "").match(/[T ](\d{2}:\d{2})/)?.[1] || ""}</td></tr>)}</tbody>
+                    </table>{!approverComments.length && <div className="p-5 text-center text-sm text-slate-500">No item approval comments recorded yet.</div>}
                   </div>
                 )}
 
@@ -4848,6 +4926,28 @@ export const CAN = () => {
 
       <div className={topTab === "details" ? "" : "hidden"}>{renderDetails()}</div>
       <div className={topTab === "history" ? "" : "hidden"}>{renderHistory()}</div>
+
+      <dialog ref={historyItemsDialogRef} onCancel={() => setHistoryItems(null)} onClose={() => setHistoryItems(null)} className={`m-auto max-h-[85vh] ${historyItems?.detailsOnly ? "w-[min(30rem,calc(100vw-2rem))]" : "w-[min(64rem,calc(100vw-2rem))]"} overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/40`} aria-labelledby="can-history-items-title">
+        {historyItems && <div className="flex max-h-[85vh] flex-col">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-3 py-2 sm:px-5">
+            <div className="min-w-0 flex-1"><h2 id="can-history-items-title" className={`global-lookup-headertext-ui truncate ${historyItems.detailsOnly ? "text-base" : "text-[19px]"}`}>{historyItems.label}{!historyItems.detailsOnly && <> · {new Set(historyItems.rows.map((row) => row.canDt1Id || row.lineNo || row.itemCode)).size} items</>}</h2></div>
+            <button type="button" autoFocus onClick={() => setHistoryItems(null)} aria-label="Close item history" className="shrink-0 p-2 text-slate-400 transition-colors hover:text-red-600">✕</button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+            {historyItems.detailsOnly ? <p className="min-h-12 whitespace-pre-wrap break-words px-1 py-2 text-sm leading-6 text-slate-700">{historyItems.remarks || "—"}</p> : <table className="w-full min-w-[780px] border-separate border-spacing-0 text-xs [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+              <thead className="global-tran-thead-div-ui sticky top-0 z-10 bg-blue-100 text-left text-slate-700"><tr>{["Line", "Item Code", "Item Name", "Supplier", "Date / Time", "Remarks"].map((label) => <th key={label} className="global-tran-th-ui whitespace-nowrap px-3 py-2 text-xs font-semibold">{label}</th>)}</tr></thead>
+              <tbody>{historyItems.rows.map((row, index) => <tr key={`${row.canDt1Id}-${row.actionDate}-${index}`} className="bg-white hover:bg-blue-50/40">
+                <td className="px-3 py-2 tabular-nums">{row.lineNo || "—"}</td><td className="whitespace-nowrap px-3 py-2 font-medium">{row.itemCode}</td>
+                <td className="px-3 py-2">{detailRows.find((item) => item.canDt1Id === row.canDt1Id)?.itemName || "—"}</td>
+                <td className="px-3 py-2"><div>{row.supplierName || "—"}</div><div className="mt-0.5 text-[11px] text-slate-500">{row.supplierCode}</div></td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{safeDate(row.actionDate)} {String(row.actionDate || "").match(/[T ](\d{2}:\d{2}:\d{2})/)?.[1] || ""}</td>
+                <td className="whitespace-pre-wrap px-3 py-2">{row.remarks || "—"}</td>
+              </tr>)}</tbody>
+            </table>}
+          </div>
+          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3"><span className="text-xs font-normal italic text-slate-400">User: {historyItems.user} · {safeDate(historyItems.date)}</span><button type="button" onClick={() => setHistoryItems(null)} className="h-9 rounded-md border border-slate-300 bg-white px-4 text-xs font-medium text-slate-700 hover:bg-slate-100">Close</button></footer>
+        </div>}
+      </dialog>
 
       {renderSupplierCompareModal()}
 

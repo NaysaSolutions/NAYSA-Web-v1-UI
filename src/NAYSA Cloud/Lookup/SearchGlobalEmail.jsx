@@ -13,6 +13,12 @@ const SearchGlobalEmail = ({
   isOpen,
   defaultSubject = "",
   defaultBody = "",
+  defaultTo = "",
+  defaultCc = "",
+  includeExcel = true,
+  onSaveBody,
+  savingBody = false,
+  sendingMessage,
   isSending = false,
   onClose,
   onSend,
@@ -29,12 +35,12 @@ const SearchGlobalEmail = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    setEmailTo("");
-    setEmailCc("");
+    setEmailTo(defaultTo);
+    setEmailCc(defaultCc);
     setEmailSubject(defaultSubject);
     setEmailBody(defaultBody);
     setIsMaximized(false);
-  }, [isOpen, defaultSubject, defaultBody]);
+  }, [isOpen, defaultSubject, defaultBody, defaultTo, defaultCc]);
 
   if (!isOpen) return null;
 
@@ -48,7 +54,7 @@ const SearchGlobalEmail = ({
   };
 
   const handleClose = () => {
-    if (isSending) return;
+    if (isSending || savingBody) return;
     setIsMaximized(false);
     onClose?.();
   };
@@ -77,7 +83,7 @@ const SearchGlobalEmail = ({
               <button
               type="button"
               onClick={() => setIsMaximized((prev) => !prev)}
-              disabled={isSending}
+              disabled={isSending || savingBody}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               title={isMaximized ? "Restore" : "Maximize"}
             >
@@ -87,7 +93,7 @@ const SearchGlobalEmail = ({
               <button
               type="button"
               onClick={handleClose}
-              disabled={isSending}
+              disabled={isSending || savingBody}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
               title="Close"
             >
@@ -115,7 +121,7 @@ const SearchGlobalEmail = ({
                       onChange={(e) => setEmailTo(e.target.value)}
                       placeholder="email1@company.com; email2@company.com"
                       className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      disabled={isSending}
+                      disabled={isSending || savingBody}
                     />
                   </div>
 
@@ -127,7 +133,7 @@ const SearchGlobalEmail = ({
                       onChange={(e) => setEmailCc(e.target.value)}
                       placeholder="Optional"
                       className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      disabled={isSending}
+                      disabled={isSending || savingBody}
                     />
                   </div>
                 </div>
@@ -144,7 +150,7 @@ const SearchGlobalEmail = ({
                       value={emailSubject}
                       onChange={(e) => setEmailSubject(e.target.value)}
                       className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      disabled={isSending}
+                      disabled={isSending || savingBody}
                     />
                   </div>
 
@@ -155,7 +161,7 @@ const SearchGlobalEmail = ({
                       onChange={(e) => setEmailBody(e.target.value)}
                       rows={isMaximized ? 17 : 10}
                       className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      disabled={isSending}
+                      disabled={isSending || savingBody}
                     />
                   </div>
                 </div>
@@ -182,10 +188,10 @@ const SearchGlobalEmail = ({
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Auto</span>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  {includeExcel && <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                     <span className="text-xs font-semibold text-slate-700">Excel Report</span>
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Auto</span>
-                  </div>
+                  </div>}
                 </div>
               </div>
 
@@ -202,10 +208,11 @@ const SearchGlobalEmail = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onSaveBody && <button type="button" disabled={isSending || savingBody} onClick={() => onSaveBody(emailBody)} className="inline-flex h-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-4 text-xs font-semibold text-blue-700 disabled:opacity-65">{savingBody ? "Saving..." : "Save Default Body"}</button>}
             <button
               type="button"
               onClick={handleClose}
-              disabled={isSending}
+              disabled={isSending || savingBody}
               className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-65"
             >
               Cancel
@@ -214,7 +221,7 @@ const SearchGlobalEmail = ({
             <button
               type="button"
               onClick={handleSend}
-              disabled={isSending}
+              disabled={isSending || savingBody}
               className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-65"
             >
               <FontAwesomeIcon icon={faEnvelope} className="text-[12px]" />
@@ -224,11 +231,11 @@ const SearchGlobalEmail = ({
         </div>
       </div>
 
-      {isSending && (
+      {(isSending || savingBody) && (
         <div className="fixed inset-0 z-[1000002] flex flex-col items-center justify-center bg-white/50 backdrop-blur-[2px]">
           <LoadingSpinner />
           <div className="mt-3 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-slate-700 shadow">
-            Generating PDF and Excel, then sending email...
+            {savingBody ? "Saving default email body..." : sendingMessage || (includeExcel ? "Generating PDF and Excel, then sending email..." : "Generating FINAL PDF, then sending email...")}
           </div>
         </div>
       )}

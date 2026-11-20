@@ -1,4 +1,6 @@
 import { createPortal } from "react-dom";
+import ReportColumnFilterModal from "./ReportColumnFilterModal.jsx";
+import { filterKind, isFilterActive, matchesColumnFilter, describeColumnFilter } from "./reportColumnFilters.mjs";
 import React, {
   useEffect,
   useMemo,
@@ -30,6 +32,7 @@ import {
   faIdCard,
   faSearch,
   faGripVertical,
+  faFilter,
 } from "@fortawesome/free-solid-svg-icons";
 
 import {
@@ -113,6 +116,7 @@ const SearchGlobalReportTable = forwardRef(
     const [expandedMobileCards, setExpandedMobileCards] = useState({});
 
     const [filters, setFilters] = useState(() => initialState?.filters || {});
+    const [filterEditor, setFilterEditor] = useState(null);
     const [globalSearch, setGlobalSearch] = useState(
       () => initialState?.globalSearch || "",
     );
@@ -223,7 +227,7 @@ const SearchGlobalReportTable = forwardRef(
     ]);
 
     const hasActiveFilters = useMemo(
-      () => Object.values(filters).some((v) => String(v || "").trim() !== ""),
+      () => Object.values(filters).some(isFilterActive),
       [filters],
     );
 
@@ -360,7 +364,7 @@ const SearchGlobalReportTable = forwardRef(
     const filteredData = useMemo(() => {
       let rows = Array.isArray(data) ? data : [];
       const activeF = Object.entries(filters).filter(
-        ([, v]) => String(v || "").trim() !== "",
+        ([, v]) => isFilterActive(v),
       );
 
       if (activeF.length) {
@@ -369,9 +373,7 @@ const SearchGlobalReportTable = forwardRef(
             const col = columns.find((c) => c.key === k);
             const cellValue = formatValue(r?.[k], col);
 
-            return String(cellValue ?? "")
-              .toLowerCase()
-              .includes(String(v ?? "").toLowerCase());
+            return matchesColumnFilter(r?.[k], cellValue, v, filterKind(col));
           }),
         );
       }
@@ -1930,9 +1932,10 @@ const SearchGlobalReportTable = forwardRef(
                           style={getCellWidthStyle(col)}
                           className="px-1 py-1 border-b border-gray-200 bg-gray-100"
                         >
+                          <div className="relative">
                           <input
                             type="text"
-                            value={filters[col.key] || ""}
+                            value={typeof filters[col.key] === "object" ? filters[col.key]?.value ?? "" : filters[col.key] ?? ""}
                             onChange={(e) => {
                               setFilters((prev) => ({
                                 ...prev,
@@ -1941,9 +1944,13 @@ const SearchGlobalReportTable = forwardRef(
                               setCurrentPage(1);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            placeholder="Filter..."
-                            className="w-full h-7 px-2 rounded border border-gray-300 text-[10px] font-normal text-gray-700 outline-none focus:ring-1 focus:ring-blue-300 bg-white"
+                            placeholder={typeof filters[col.key] === "object" ? filters[col.key]?.operator : "Filter..."}
+                            title={typeof filters[col.key] === "object" ? `${filters[col.key].operator}: ${filters[col.key].value || ""}${filters[col.key].endValue ? ` to ${filters[col.key].endValue}` : ""}. Typing resets to Contains.` : "Contains"}
+                            className="w-full h-7 pl-2 pr-7 rounded border border-gray-300 text-[10px] font-normal text-gray-700 outline-none focus:ring-1 focus:ring-blue-300 bg-white"
                           />
+                          <button type="button" title="Filter options" aria-label={`Filter options for ${col.label || col.key}`} onClick={(event) => { event.stopPropagation(); const saved = filters[col.key]; setFilterEditor({ column: col, operator: typeof saved === "object" ? saved?.operator || "contains" : filterKind(col) === "text" ? "contains" : "equals", value: typeof saved === "object" ? saved?.value ?? "" : saved ?? "", endValue: typeof saved === "object" ? saved?.endValue ?? "" : "", error: "" }); }} className={`absolute right-0 top-0 flex h-7 w-7 items-center justify-center rounded-r hover:bg-blue-100 ${isFilterActive(filters[col.key]) ? "text-blue-600" : "text-slate-400"}`}><FontAwesomeIcon icon={faFilter} className="text-[10px]" /></button>
+                          </div>
+                          {typeof filters[col.key] === "object" && isFilterActive(filters[col.key]) && <div title={describeColumnFilter(filters[col.key])} className="mt-0.5 truncate px-1 text-[9px] font-medium text-blue-600">{describeColumnFilter(filters[col.key])}</div>}
                         </th>
                       ))}
                     </tr>
@@ -2272,6 +2279,7 @@ const SearchGlobalReportTable = forwardRef(
           onClose={closeExportModal}
           onConfirm={handleExportConfirm}
         />
+        <ReportColumnFilterModal filterEditor={filterEditor} setFilterEditor={setFilterEditor} filters={filters} setFilters={setFilters} onApplied={() => setCurrentPage(1)} />
       </div>
     );
     return isMaximized

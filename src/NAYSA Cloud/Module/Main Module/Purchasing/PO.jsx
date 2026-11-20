@@ -31,6 +31,7 @@ import PostTranModal from "../../../Lookup/SearchPostRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
+import SearchGlobalEmail from "../../../Lookup/SearchGlobalEmail.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
@@ -193,6 +194,9 @@ const PO = () => {
   const { resetFlag } = useReset();
   const location = useLocation();
   const [isViewDocument, setIsViewDocument] = useState(false);
+  const [poEmail, setPoEmail] = useState(null);
+  const [sendingPOEmail, setSendingPOEmail] = useState(false);
+  const [savingPOEmailBody, setSavingPOEmailBody] = useState(false);
   const decQty = companyInfo?.itemDecqtyPur ?? 2;
   const decUPrice = companyInfo?.pur_decuprice ?? 2;
   const docType = docTypes?.PO || "PO";
@@ -875,6 +879,12 @@ const PO = () => {
       ? "text-rose-500 dark:text-rose-400 animate-pulse"
       : statusColor;
   const isApprovalComplete = ["A", "NA"].includes(currentApprovalStatus);
+  const canEmailPO = Boolean(documentID)
+    && getStatusCode(status) === "O"
+    && !["Y", "1", "TRUE"].includes(String(poCancelled || "").toUpperCase())
+    && isApprovalComplete
+    && detailRows.length > 0
+    && !detailRows.some((row) => parseFormattedNumber(row.rrQty || 0) > 0);
   const isDocumentLocked =
     isViewDocumentUrl ||
     ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
@@ -3528,6 +3538,44 @@ const PO = () => {
     updateState({ showSignatoryModal: true });
   };
 
+  const openPOEmail = async () => {
+    if (!canEmailPO) return;
+    updateState({showSpinner: true});
+    try {
+      const {data} = await apiClient.get('/po/email', {params: {poId: documentID}});
+      if (!data.success) throw new Error(data.message);
+      setPoEmail({...data.data, poId: documentID});
+    } catch (error) {
+      useSwalErrorAlert('Email PO', error.response?.data?.message || error.message);
+    } finally { updateState({showSpinner: false}); }
+  };
+
+  const sendPOEmail = async (message) => {
+    if (sendingPOEmail || savingPOEmailBody || !poEmail) return;
+    setSendingPOEmail(true);
+    try {
+      const {data} = await apiClient.post('/po/email', {...message, poId: poEmail.poId}, {timeout: 180000});
+      if (!data.success) throw new Error(data.message);
+      setPoEmail(null);
+      useSwalSuccessAlert('Email PO', data.message);
+    } catch (error) {
+      useSwalErrorAlert('Email PO', error.response?.data?.message || 'Unable to confirm sending. Check the mail server before retrying.');
+    } finally { setSendingPOEmail(false); }
+  };
+
+  const savePOEmailBody = async (body) => {
+    if (!poEmail || sendingPOEmail || savingPOEmailBody) return;
+    setSavingPOEmailBody(true);
+    updateState({showSpinner: true});
+    try {
+      const {data} = await apiClient.put('/po/email-body', {poId: poEmail.poId, body});
+      if (!data.success) throw new Error(data.message);
+      useSwalSuccessAlert('Email PO', 'Default email body saved.');
+    } catch (error) {
+      useSwalErrorAlert('Email PO', error.response?.data?.message || error.message);
+    } finally { setSavingPOEmailBody(false); updateState({showSpinner: false}); }
+  };
+
   const handleCancel = async () => {
     if (documentID && (documentStatus === "O" || documentStatus === "")) {
       updateState({ showCancelModal: true });
@@ -4799,6 +4847,23 @@ const PO = () => {
   return (
     <div className="global-tran-main-div-ui">
       {showSpinner && <LoadingSpinner />}
+      <SearchGlobalEmail
+        isOpen={Boolean(poEmail)}
+        title="Email Purchase Order"
+        subtitle="The FINAL PO PDF will be generated and attached automatically."
+        attachmentNote="Attachment: FINAL Purchase Order PDF."
+        defaultTo={poEmail?.to || ""}
+        defaultCc={poEmail?.cc || ""}
+        defaultSubject={poEmail?.subject || ""}
+        defaultBody={poEmail?.body || ""}
+        includeExcel={false}
+        sendingMessage="Generating FINAL PO PDF, then sending email..."
+        isSending={sendingPOEmail}
+        savingBody={savingPOEmailBody}
+        onSaveBody={savePOEmailBody}
+        onSend={sendPOEmail}
+        onClose={() => { if (!sendingPOEmail && !savingPOEmailBody) setPoEmail(null); }}
+      />
 
       <div className="global-tran-headerToolbar-ui">
         <Header
@@ -4806,6 +4871,9 @@ const PO = () => {
           pdfLink={pdfLink}
           videoLink={videoLink}
           onPrint={handlePrint}
+          showEmail={true}
+          onEmail={openPOEmail}
+          isEmailDisabled={!canEmailPO || isLoading || sendingPOEmail || savingPOEmailBody}
           printData={printData}
           onReset={handleReset}
           onSave={() => handleActivityOption("Upsert")}

@@ -1,4 +1,7 @@
 // SearchGlobalTranHistory.jsx
+import { createPortal } from "react-dom";
+import ReportColumnFilterModal from "./ReportColumnFilterModal.jsx";
+import { filterKind, isFilterActive, matchesColumnFilter, describeColumnFilter } from "./reportColumnFilters.mjs";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
@@ -346,6 +349,8 @@ const AllTranHistory = (props) => {
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [status, setStatus] = useState(() => normalizeStatus(statusProp));
   const [searchFields, setSearchFields] = useState(prefillProp || navState.prefillSearchFields || {});
+  const [filterEditor, setFilterEditor] = useState(null);
+  useEffect(() => { setFilterEditor(null); }, [activeTab]);
   const [tabData, setTabData] = useState({});
   const [tabConfigs, setTabConfigs] = useState({});
   const [exporting, setExporting] = useState(false);
@@ -369,6 +374,15 @@ const AllTranHistory = (props) => {
   const [columnChooserSearch, setColumnChooserSearch] = useState("");
   const [columnChooserDraftHidden, setColumnChooserDraftHidden] = useState([]);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  useEffect(() => {
+    if (!isMaximized) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event) => { if (event.key === "Escape") setIsMaximized(false); };
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", onKey); };
+  }, [isMaximized]);
 
   // New features mirrored from ReportTable
   const [globalSearch, setGlobalSearch] = useState("");
@@ -950,10 +964,9 @@ const AllTranHistory = (props) => {
   const filteredData = useMemo(() => {
   const base = currentRows.filter((row) =>
     Object.entries(searchFields).every(([key, value]) => {
-      if (!value) return true;
+      if (!isFilterActive(value)) return true;
 
       const col = baseColumns.find((c) => c.key === key);
-      const searchValue = String(value).toLowerCase().trim();
 
       let compareValue = "";
 
@@ -971,7 +984,7 @@ const AllTranHistory = (props) => {
         compareValue = String(row?.[key] ?? "").toLowerCase();
       }
 
-      return compareValue.includes(searchValue);
+      return matchesColumnFilter(row?.[key], compareValue, value, filterKind(col));
     })
   );
 
@@ -2019,9 +2032,9 @@ const handleExportConfirm = async (enteredFileName) => {
     );
   }, [visibleCols, grandTotals, groupBy.length]);
 
-  return (
+  const historyView = (
     <>
-      {showHeader && (
+      {showHeader && !isMaximized && (
         <>
           <Header
             activeTopTab="history"
@@ -2033,8 +2046,8 @@ const handleExportConfirm = async (enteredFileName) => {
         </>
       )}
 
-      <div className="fixed top-[55px] left-0 w-full z-30 bg-white dark:bg-slate-800 shadow-md">
-        {showHeader && (
+      <div className={`${isMaximized ? "flex h-full min-h-0 flex-col" : "fixed top-[55px] left-0 w-full z-30"} bg-white dark:bg-slate-800 shadow-md`}>
+        {showHeader && !isMaximized && (
           <div className="flex flex-col md:flex-row items-center justify-between px-4 py-2 gap-2 border-b border-gray-200 dark:border-gray-700">
             <div className="flex flex-wrap justify-center md:justify-start gap-1 lg:gap-2 w-full md:w-auto">
               <button
@@ -2159,7 +2172,7 @@ const handleExportConfirm = async (enteredFileName) => {
     </div>
   </div>
 ) : (
-          <div className="flex flex-col md:flex-row flex-wrap items-end gap-2 overflow-x-auto p-4 mt-10">
+          <div className={`flex shrink-0 flex-col md:flex-row flex-wrap items-end gap-2 overflow-x-auto p-4 ${isMaximized ? "mt-0" : "mt-10"}`}>
             <div className="flex-shrink-0 sm:min-w-[200px]">
               {/* <label className="block text-sm font-semibold text-gray-600 mb-1">Date Range:</label> */}
               <div className="flex items-center border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-700">
@@ -2287,7 +2300,7 @@ const handleExportConfirm = async (enteredFileName) => {
         </div>
       </div>
 
-        <div className="bg-white dark:bg-slate-800 shadow-md rounded-md overflow-visible px-2 pt-2 pb-0 mt-0 mb-4 mx-4">
+        <div className={`bg-white dark:bg-slate-800 shadow-md rounded-md px-2 pt-2 pb-0 mt-0 mb-4 mx-4 ${isMaximized ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "overflow-visible"}`}>
           {activeTab && visibleCols.length > 0  && (
             <div className="p-1 bg-white dark:bg-slate-800 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2 shrink-0 mb-0"
                  onDragOver={e => e.preventDefault()}
@@ -2329,6 +2342,13 @@ const handleExportConfirm = async (enteredFileName) => {
                   <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
                          placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 outline-none h-8 md:w-48 px-3 text-xs" />
                 </div>
+                <label className="inline-flex h-8 shrink-0 cursor-pointer select-none items-center" title={isMaximized ? "Restore (Esc)" : "Maximize history"}>
+                  <input type="checkbox" checked={isMaximized} onChange={() => setIsMaximized((value) => !value)} className="sr-only" aria-label="Maximize history" />
+                  <span className={`relative h-8 w-[92px] rounded-full transition-colors ${isMaximized ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"}`}>
+                    <span className={`absolute top-[2px] h-7 w-7 rounded-full bg-white shadow-md transition-all ${isMaximized ? "left-[62px]" : "left-[2px]"}`} />
+                    <span className={`absolute inset-0 flex items-center text-[11px] font-medium ${isMaximized ? "justify-start pl-2" : "justify-end pr-2"}`}>Maximize</span>
+                  </span>
+                </label>
 
                 {isMobile && (
                   <div className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm shrink-0">
@@ -2546,7 +2566,7 @@ const handleExportConfirm = async (enteredFileName) => {
 
           <div
             ref={tableScrollRef}
-            className={`overflow-auto bg-white dark:bg-slate-700 rounded-md max-h-[60vh] relative custom-scrollbar ${autoFillGridState ? "overflow-x-hidden" : ""}`}
+            className={`overflow-auto bg-white dark:bg-slate-700 rounded-md ${isMaximized ? "min-h-0 flex-1 max-h-none" : "max-h-[60vh]"} relative custom-scrollbar ${autoFillGridState ? "overflow-x-hidden" : ""}`}
           >
             {loading ? (
               <div className="text-center py-6 text-gray-500 dark:text-slate-400">Loading data and configurations...</div>
@@ -2671,13 +2691,17 @@ const handleExportConfirm = async (enteredFileName) => {
                             }`}
                             style={style}
                           >
+                            <div className="relative">
                             <input
                               type="text"
-                              value={searchFields[col.key] || ""}
+                              value={typeof searchFields[col.key] === "object" ? searchFields[col.key]?.value ?? "" : searchFields[col.key] ?? ""}
                               onChange={(e) => handleSearchChange(e, col.key)}
                               placeholder="Filter..."
-                              className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 text-[10px]"
+                              className="w-full pl-1.5 pr-7 py-0.5 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 text-[10px]"
                             />
+                            <button type="button" aria-label={`Filter options for ${col.label || col.key}`} title="Filter options" onClick={(event) => { event.stopPropagation(); const saved = searchFields[col.key]; setFilterEditor({ column: col, operator: typeof saved === "object" ? saved?.operator || "contains" : filterKind(col) === "text" ? "contains" : "equals", value: typeof saved === "object" ? saved?.value ?? "" : saved ?? "", endValue: typeof saved === "object" ? saved?.endValue ?? "" : "", values: typeof saved === "object" && Array.isArray(saved?.values) ? saved.values : null, match: typeof saved === "object" ? saved?.match || "any" : "any", error: "" }); }} className={`absolute right-0 top-0 flex h-full w-6 items-center justify-center rounded-r hover:bg-blue-100 ${isFilterActive(searchFields[col.key]) ? "text-blue-600" : "text-slate-400"}`}><FontAwesomeIcon icon={faFilter} className="text-[10px]" /></button>
+                            </div>
+                            {typeof searchFields[col.key] === "object" && isFilterActive(searchFields[col.key]) && <div title={describeColumnFilter(searchFields[col.key])} className="mt-0.5 truncate px-1 text-left text-[9px] font-medium text-blue-600">{describeColumnFilter(searchFields[col.key])}</div>}
                           </td>
                         );
                       })}
@@ -3293,11 +3317,15 @@ const handleExportConfirm = async (enteredFileName) => {
         onConfirm={handleExportConfirm}
       />
 
+      <ReportColumnFilterModal filterEditor={filterEditor} setFilterEditor={setFilterEditor} filters={searchFields} setFilters={setSearchFields} />
       {(loading || exporting) && (
         <LoadingDots label={exporting ? "Exporting, please wait..." : "Loading, please wait..."} fullScreen />
       )}
     </>
   );
+  return isMaximized
+    ? createPortal(<div className="fixed inset-0 z-[9999] flex flex-col overflow-hidden bg-white p-3 dark:bg-slate-800">{historyView}</div>, document.body)
+    : historyView;
 };
 
 export default AllTranHistory;

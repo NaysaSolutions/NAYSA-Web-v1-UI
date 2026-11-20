@@ -6,6 +6,7 @@ import {
   faSave,
   faUndo,
   faPrint,
+  faEnvelope,
   faTimesCircle,
   faCopy,
   faInfoCircle,
@@ -50,6 +51,8 @@ const Header = ({
   showCancelAction = true,
   showUpload = false,
   showNotify = false,
+  showEmail = false,
+  isEmailDisabled = false,
   isPrintDisabled = false,
   isPrintBIRDisabled,
   isSaveDisabled = false,   
@@ -65,6 +68,7 @@ const Header = ({
   pdfLink,
   videoLink,
   onPrint,
+  onEmail,
   onBatchPrint,
   showBatchPrint = false,
   onPrintBIR,
@@ -422,6 +426,19 @@ const Header = ({
                 <FontAwesomeIcon icon={faPrint} />
                 <span className={mobileLabelClass}>Print</span>
                 <span className={desktopLabelClass}>Print</span>
+              </button>
+            )}
+            {showEmail && (
+              <button
+                type="button"
+                onClick={() => onEmail?.()}
+                disabled={isEmailDisabled}
+                className={getBlueButtonClass(isEmailDisabled)}
+                title="Email"
+              >
+                <FontAwesomeIcon icon={faEnvelope} />
+                <span className={mobileLabelClass}>Email</span>
+                <span className={desktopLabelClass}>Email</span>
               </button>
             )}
             {showPrintCheck && (

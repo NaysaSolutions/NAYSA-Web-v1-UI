@@ -21,6 +21,9 @@ import {
   faEraser,
   faInbox,
   faPause,
+  faTrashAlt,
+  faXmark,
+  faCoins,
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
@@ -211,9 +214,9 @@ export default function CWTMonitoring() {
 
         checkbox.dataset.cwtKey = rowKey;
         checkbox.checked = isSelected;
-        checkbox.disabled = String(
+        checkbox.disabled = ["R", "JVR"].includes(String(
           matchingRow?.originalDocStatus || matchingRow?.docStatus || ""
-        ).trim().toUpperCase() === "R";
+        ).trim().toUpperCase()) || !!String(matchingRow?.jvNo || "").trim();
       });
     };
 
@@ -755,6 +758,25 @@ const doGenerateCWTReversal = useCallback(
   // 🔹 When gear/actions button is clicked in table → OPEN MODAL
   const handleRowActionsClick = useCallback(
     (row) => {
+      if (selectedCwtKeys.length > 1) {
+        const selectedSet = new Set(selectedCwtKeys);
+        const selectedRows = rows.filter((item) => selectedSet.has(`${item?.tran_id || ""}::${item?.atcCode || ""}`));
+        if (new Set(selectedRows.map((item) => String(item.custCode || "").trim().toUpperCase())).size !== 1) {
+          Swal.fire("Select One Customer", "Select invoices for one customer only. Clear the selection before choosing another customer.", "info");
+          return;
+        }
+        if (selectedRows.some((item) => ["R", "JVR"].includes(String(item.originalDocStatus || item.docStatus || "").trim().toUpperCase()) || String(item.jvNo || "").trim())) {
+          Swal.fire("Invalid Selection", "Select only invoices that have not been received and have no journal voucher.", "info");
+          return;
+        }
+        setActionModal({
+          open: true, row: selectedRows[0], rows: selectedRows,
+          isBatch: true, batchStatus: "R", status: "R", originalStatus: "",
+          receivedBy: user?.userName || currentUserRow?.userName || "",
+          receivedDate: useGetCurrentDay(), remarks: "",
+        });
+        return;
+      }
       const defaultUserName = user?.userName || currentUserRow?.userName || "";
 
       const rawStatus = (
@@ -790,11 +812,22 @@ const doGenerateCWTReversal = useCallback(
         remarks: row?.extRemarks || "",
       });
     },
-    [user?.userName, currentUserRow?.userName]
+    [user?.userName, currentUserRow?.userName, selectedCwtKeys, rows]
   );
 
   const handleActionModalCancel = () => {
     setActionModal((prev) => ({ ...prev, open: false, row: null, rows: [] }));
+  };
+
+  const removeBatchInvoice = (item) => {
+    if (isLoading || actionModal.rows.length <= 1) return;
+    const removedKey = `${item.tran_id || ""}::${item.atcCode || ""}`;
+    setActionModal((previous) => {
+      if (previous.rows.length <= 1) return previous;
+      const remaining = previous.rows.filter((row) => `${row.tran_id || ""}::${row.atcCode || ""}` !== removedKey);
+      return remaining.length ? { ...previous, rows: remaining, row: remaining[0] } : previous;
+    });
+    setSelectedCwtKeys((previous) => previous.filter((key) => key !== removedKey));
   };
 
   const openBatchStatusModal = useCallback((batchStatus) => {
@@ -805,6 +838,15 @@ const doGenerateCWTReversal = useCallback(
 
     if (selectedRows.length === 0) {
       Swal.fire("No Selection", "Select at least one CWT document.", "info");
+      return;
+    }
+
+    if (new Set(selectedRows.map((row) => String(row.custCode || "").trim().toUpperCase())).size !== 1) {
+      Swal.fire("Select One Customer", "Select invoices for one customer only. Clear the selection before choosing another customer.", "info");
+      return;
+    }
+    if (selectedRows.some((row) => ["R", "JVR"].includes(String(row.originalDocStatus || row.docStatus || "").trim().toUpperCase()) || String(row.jvNo || "").trim())) {
+      Swal.fire("Invalid Selection", "Select only invoices that have not been received and have no journal voucher.", "info");
       return;
     }
 
@@ -900,6 +942,10 @@ const doGenerateCWTReversal = useCallback(
     const { row, rows: selectedRows, isBatch, status, batchStatus, receivedBy, receivedDate, remarks } =
       actionModal;
     const newStatus = isBatch ? batchStatus : status;
+    if (newStatus === "R" && (!String(receivedBy || "").trim() || !receivedDate)) {
+      Swal.fire("Receiving Details", "Received By and Received Date are required.", "warning");
+      return;
+    }
 
     // Remarks mandatory when status = 'H'
     if (newStatus === "H" && !String(remarks || "").trim()) {
@@ -985,6 +1031,17 @@ const doGenerateCWTReversal = useCallback(
 
 
   const selectedRow = actionModal.row || {};
+  const selectedCwtSummary = useMemo(() => {
+    const keys = new Set(selectedCwtKeys);
+    return rows.reduce((summary, row) => {
+      if (keys.has(`${row?.tran_id || ""}::${row?.atcCode || ""}`)) {
+        summary.count += 1;
+        summary.base += parseFormattedNumber(row.baseAmount || 0) || 0;
+        summary.cwt += parseFormattedNumber(row.atcAmount || 0) || 0;
+      }
+      return summary;
+    }, { count: 0, base: 0, cwt: 0 });
+  }, [rows, selectedCwtKeys]);
   const isLocked = actionModal.originalStatus === "R";
   const isRemarksRequired =
     actionModal.status === "H" && !String(actionModal.remarks || "").trim();
@@ -1342,13 +1399,17 @@ const doGenerateCWTReversal = useCallback(
       {/* Detailed Table ONLY */}
       <div className="global-tran-tab-div-ui">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-              Detailed
-            </button>
-            <span className="text-xs text-slate-500">
-              Selected: {selectedCwtKeys.length}
-            </span>
+          <div className="flex w-full flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3" aria-live="polite">
+              {[
+                { label: "Selected Invoices", value: selectedCwtSummary.count, icon: faListCheck, color: "bg-blue-50 text-blue-600" },
+                { label: "Selected Base Amount", value: formatNumber(selectedCwtSummary.base), icon: faCoins, color: "bg-violet-50 text-violet-600" },
+                { label: "Selected CWT Amount", value: formatNumber(selectedCwtSummary.cwt), icon: faFileLines, color: "bg-emerald-50 text-emerald-600" },
+              ].map((item) => <div key={item.label} className="flex min-h-[42px] items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${item.color}`}><FontAwesomeIcon icon={item.icon} className="text-xs" /></span>
+                <div className="flex flex-1 items-center justify-between gap-2"><span className="max-w-[64px] whitespace-normal text-[10px] font-medium leading-3 text-slate-500">{item.label}</span><span className="ml-auto whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-800">{item.value}</span></div>
+              </div>)}
+            </div>
           </div>
         </div>
 
@@ -1391,9 +1452,57 @@ const doGenerateCWTReversal = useCallback(
       )}
 
       {/* Actions Modal (for single row status update) */}
-      {actionModal.open && (
+      {actionModal.open && actionModal.isBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="cwt-receive-title" className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-100 px-5 py-3">
+              <h2 id="cwt-receive-title" className="text-base font-semibold text-blue-700">{actionModal.batchStatus === "R" ? "Receive Selected Invoices" : "Hold Selected Invoices"}</h2>
+              <button type="button" aria-label="Close selected invoices" title="Close" disabled={isLoading} onClick={handleActionModalCancel} className="flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-40"><FontAwesomeIcon icon={faXmark} /></button>
+            </div>
+            <div className="grid min-h-0 grid-cols-1 gap-4 overflow-auto p-5 md:grid-cols-6">
+              <fieldset className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/60 px-4 pb-4 pt-3 md:col-span-3">
+                <legend className="px-2 text-xs font-semibold text-blue-700">Customer Details</legend>
+                <dl className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-3 text-xs">
+                  <dt className="text-slate-500">Customer Code</dt><dd className="font-semibold">{selectedRow.custCode}</dd>
+                  <dt className="text-slate-500">Customer Name</dt><dd className="font-semibold">{selectedRow.custName}</dd>
+                  <dt className="text-slate-500">Selected Invoices</dt><dd className="font-semibold">{actionModal.rows.length}</dd>
+                </dl>
+              </fieldset>
+              <fieldset className="min-w-0 rounded-lg border border-slate-200 px-4 pb-4 pt-3 md:col-span-3">
+                <legend className="px-2 text-xs font-semibold text-blue-700">Receiving Details</legend>
+                <div className="grid grid-cols-1 gap-4 pt-2 text-xs sm:grid-cols-2">
+                  <div className="space-y-4">
+                  <FieldRenderer id="cwt-batch-status" label="Receive Status" type="text" value={actionModal.batchStatus === "R" ? "Received" : "Hold"} readOnly disabled />
+                  <FieldRenderer id="cwt-batch-by" label="Received By" type="text" required={actionModal.batchStatus === "R"} maxLength={50} hideClearButton disabled={isLoading} value={actionModal.receivedBy} onChange={(value) => setActionModal((prev) => ({ ...prev, receivedBy: value }))} />
+                  <FieldRenderer id="cwt-batch-date" label="Received Date" type="date" required={actionModal.batchStatus === "R"} disabled={isLoading} value={actionModal.receivedDate || ""} onChange={(value) => setActionModal((prev) => ({ ...prev, receivedDate: value }))} />
+                  </div>
+                  <div className="space-y-4">
+                    <FieldRenderer id="cwt-batch-base-total" label="Total Base Amount" type="amount" value={formatNumber(actionModal.rows.reduce((total, item) => total + (parseFormattedNumber(item.baseAmount || 0) || 0), 0))} readOnly disabled />
+                    <FieldRenderer id="cwt-batch-total" label="Total CWT Amount" type="amount" value={formatNumber(actionModal.rows.reduce((total, item) => total + (parseFormattedNumber(item.atcAmount || 0) || 0), 0))} readOnly disabled />
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset className="min-w-0 rounded-lg border border-slate-200 px-3 pb-3 pt-2 md:col-span-4">
+                <legend className="px-2 text-xs font-semibold text-blue-700">Invoice Details</legend>
+                <div className="h-48 overflow-auto rounded-md">
+                  <table className="w-full text-left text-xs"><thead className="sticky top-0 bg-blue-100 text-slate-700"><tr><th className="px-2 py-2 font-semibold">Invoice No.</th><th className="px-2 py-2 font-semibold">Invoice Date</th><th className="px-2 py-2 text-right font-semibold">Base Amount</th><th className="px-2 py-2 text-right font-semibold">CWT Amount</th><th className="w-10 px-2 py-2 text-center font-semibold">Action</th></tr></thead><tbody>{actionModal.rows.map((item) => <tr key={`${item.tran_id}::${item.atcCode}`} className="border-t border-slate-100"><td className="whitespace-nowrap px-2 py-1">{item.docCode} {item.docNo}</td><td className="whitespace-nowrap px-2 py-1">{item.docDate ? useFormatToDate(item.docDate) : "—"}</td><td className="px-2 py-1 text-right">{formatNumber(item.baseAmount || 0)}</td><td className="px-2 py-1 text-right">{formatNumber(item.atcAmount || 0)}</td><td className="px-2 py-1 text-center"><button type="button" title={actionModal.rows.length <= 1 ? "Keep at least one invoice" : "Remove from selected invoices"} aria-label={`Remove ${item.docNo}`} disabled={isLoading || actionModal.rows.length <= 1} onClick={() => removeBatchInvoice(item)} className="inline-flex h-6 w-6 items-center justify-center rounded border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-30"><FontAwesomeIcon icon={faTrashAlt} className="text-xs" /></button></td></tr>)}</tbody></table>
+                </div>
+              </fieldset>
+              <fieldset className={`flex min-w-0 flex-col rounded-lg border bg-slate-50/40 px-3 pb-3 pt-2 transition-colors focus-within:border-blue-400 md:col-span-2 ${isRemarksRequired ? "border-red-400" : "border-slate-200"}`}>
+                <legend className="px-2 text-xs font-semibold text-blue-700">Receiving Remarks</legend>
+                <textarea aria-label="Receiving Remarks" maxLength={255} disabled={isLoading} value={actionModal.remarks} onChange={(e) => setActionModal((prev) => ({ ...prev, remarks: e.target.value }))} className="h-48 w-full resize-none border-0 bg-transparent px-1 py-2 text-xs shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:outline-none focus:ring-0" placeholder="Enter remarks…" />
+              </fieldset>
+            </div>
+            <div className="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button type="button" onClick={handleActionModalCancel} disabled={isLoading} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-600 disabled:opacity-40">Cancel</button>
+              <button type="button" onClick={handleActionModalApply} disabled={isLoading || isRemarksRequired} className="rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white disabled:opacity-40">Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {actionModal.open && !actionModal.isBatch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-5">
-          <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-lg sm:max-h-[calc(100dvh-2.5rem)]">
+          <div className={`flex max-h-[calc(100dvh-1.5rem)] w-full ${actionModal.isBatch ? "max-w-4xl" : "max-w-2xl"} flex-col overflow-hidden rounded-lg bg-white shadow-lg sm:max-h-[calc(100dvh-2.5rem)]`}>
             <div className="overflow-y-auto p-3 sm:p-4">
             {/* Header with document info */}
             <div className="mb-3 border-b pb-3">
@@ -1407,7 +1516,7 @@ const doGenerateCWTReversal = useCallback(
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-gray-800">
-                      {isLocked ? "View CWT Status" : "Update CWT Status"}
+                      {isLocked ? "View CWT Status" : actionModal.isBatch ? (actionModal.batchStatus === "R" ? "Receive Selected Invoices" : "Hold Selected Invoices") : "Update CWT Status"}
                     </p>
                     <p className="text-[10px] leading-4 text-gray-500 sm:text-[11px]">
                       {isLocked
@@ -1437,6 +1546,17 @@ const doGenerateCWTReversal = useCallback(
                 </span>}
               </div>
 
+              {actionModal.isBatch && <div className="mt-4 space-y-3">
+                <div className="grid gap-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs sm:grid-cols-4">
+                  <div><div className="text-slate-500">Customer Code</div><div className="mt-1 font-semibold">{selectedRow.custCode}</div></div>
+                  <div><div className="text-slate-500">Customer Name</div><div className="mt-1 font-semibold">{selectedRow.custName}</div></div>
+                  <div><div className="text-slate-500">Selected Invoices</div><div className="mt-1 font-semibold text-blue-700">{actionModal.rows.length}</div></div>
+                  <div><div className="text-slate-500">Total CWT Amount</div><div className="mt-1 font-semibold text-blue-700">{formatNumber(actionModal.rows.reduce((total, item) => total + (parseFormattedNumber(item.atcAmount ?? 0) || 0), 0))}</div></div>
+                </div>
+                <div className="max-h-56 overflow-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-left text-xs"><thead className="sticky top-0 bg-blue-100 text-slate-700"><tr>{["Invoice No.", "Invoice Date", "ATC Code", "Base Amount", "CWT Amount"].map((label, index) => <th key={label} className={`px-3 py-2 font-semibold ${index > 2 ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{actionModal.rows.map((item) => <tr key={`${item.tran_id}::${item.atcCode}`} className="border-t border-slate-100"><td className="px-3 py-2">{item.docCode} {item.docNo}</td><td className="px-3 py-2">{item.docDate ? useFormatToDate(item.docDate) : "—"}</td><td className="px-3 py-2">{item.atcCode}</td><td className="px-3 py-2 text-right">{formatNumber(item.baseAmount || 0)}</td><td className="px-3 py-2 text-right">{formatNumber(item.atcAmount || 0)}</td></tr>)}</tbody></table>
+                </div>
+              </div>}
               {!actionModal.isBatch && (
               <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:mt-4 sm:grid-cols-2 sm:gap-3 md:grid-cols-3">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 sm:p-3">
@@ -1503,70 +1623,10 @@ const doGenerateCWTReversal = useCallback(
             </div>
 
             {/* Body fields */}
-            <div className="space-y-3 text-xs">
-              {/* Status */}
-              <div>
-                <label className="block mb-1 text-gray-700">Status</label>
-                <select
-                  value={actionModal.status}
-                  onChange={(e) => {
-                    const newStatus = e.target.value;
-                    setActionModal((prev) => ({
-                      ...prev,
-                      status: newStatus,
-                      receivedDate:
-                        newStatus === "H"
-                          ? ""
-                          : prev.receivedDate || useGetCurrentDay(),
-                    }));
-                  }}
-                  disabled={isLocked || actionModal.isBatch}
-                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
-                >
-                  <option value="R">R - Received</option>
-                  <option value="H">H - Hold</option>
-                </select>
-              </div>
-
-              {/* Received By */}
-              <div>
-                <label className="block mb-1 text-gray-700">
-                  Received By
-                </label>
-                <input
-                  type="text"
-                  value={actionModal.receivedBy}
-                  onChange={(e) =>
-                    setActionModal((prev) => ({
-                      ...prev,
-                      receivedBy: e.target.value,
-                    }))
-                  }
-                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
-                  readOnly={isLocked}
-                  disabled={isLocked}
-                />
-              </div>
-
-              {/* Received Date */}
-              <div>
-                <label className="block mb-1 text-gray-700">
-                  Received Date
-                </label>
-                <input
-                  type="date"
-                  value={actionModal.receivedDate || ""}
-                  onChange={(e) =>
-                    setActionModal((prev) => ({
-                      ...prev,
-                      receivedDate: e.target.value,
-                    }))
-                  }
-                  readOnly={isLocked}
-                  disabled={isLocked}
-                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
-                />
-              </div>
+            <div className="space-y-4 pt-2 text-xs">
+              <FieldRenderer id="cwt-single-status" label="Status" type="select" value={actionModal.status} options={[{ value: "R", label: "Received" }, { value: "H", label: "Hold" }]} disabled={isLocked || isLoading} onChange={(value) => setActionModal((prev) => ({ ...prev, status: value, receivedDate: value === "H" ? "" : prev.receivedDate || useGetCurrentDay() }))} />
+              <FieldRenderer id="cwt-single-by" label="Received By" type="text" required={actionModal.status === "R"} hideClearButton maxLength={50} value={actionModal.receivedBy} disabled={isLocked || isLoading} onChange={(value) => setActionModal((prev) => ({ ...prev, receivedBy: value }))} />
+              <FieldRenderer id="cwt-single-date" label="Received Date" type="date" required={actionModal.status === "R"} value={actionModal.receivedDate || ""} disabled={isLocked || isLoading} onChange={(value) => setActionModal((prev) => ({ ...prev, receivedDate: value }))} />
 
               {/* Extended Remarks */}
               <div>
