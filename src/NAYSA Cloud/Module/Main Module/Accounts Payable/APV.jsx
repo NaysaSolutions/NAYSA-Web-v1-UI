@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
 import { useLocation } from "react-router-dom";
@@ -4907,7 +4908,7 @@ const APV = () => {
 
           <div className="global-tran-headerstat-div-ui">
             <div>
-              <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+              <DocumentStatusTrigger docType={docType} tranId={state.documentID} docNo={state.documentNo} docDate={header.apvDate} status={normalizedStatus} branchCode={state.branchCode} />
               <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{normalizedStatus}</h1>
             </div>
           </div>

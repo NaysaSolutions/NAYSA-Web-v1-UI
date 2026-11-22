@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { useLocation } from "react-router-dom";
@@ -1056,7 +1057,7 @@ export default function WO() {
               variant="transaction"
             />
             <div className="text-center">
-              <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+              <DocumentStatusTrigger docType={docType} tranId={hd.woId} docNo={hd.woNo} docDate={hd.woDate} status={displayStatus} branchCode={hd.branchCode} />
               <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
             </div>
           </div>

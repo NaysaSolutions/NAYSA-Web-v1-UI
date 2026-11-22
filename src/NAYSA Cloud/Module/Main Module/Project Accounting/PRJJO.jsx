@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMagnifyingGlass, faPlus, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
@@ -755,7 +756,7 @@ const PRJJO = () => {
               isFullAccess={isFullAccess}
             />
             <div>
-              <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+              <DocumentStatusTrigger docType={DOC_TYPE} tranId={state.documentID} docNo={state.documentNo} docDate={state.documentDate} status={state.status} branchCode={state.branchCode} />
               <h1
                 className={`global-tran-stat-text-ui uppercase ${
                   isCancelled ? "text-red-600" : "text-blue-700"

@@ -33,6 +33,7 @@ import ExcelBatchUploadModal from "../../../Lookup/SearchGlobalExcelBatchUpload.
 import BarcodeQrReaderModal from "../../../Lookup/SearchGlobalQRBarCodeReader.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
+import GlobalDocumentStatus from "@/NAYSA Cloud/Approval/GlobalDocumentStatus.jsx";
 
 // Configuration
 import {  apiClient,fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
@@ -199,6 +200,8 @@ const resolveDecimalPlaces = (...values) => {
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
   const defaultHeaderDateNeeded = addDaysToDateValue(useGetCurrentDayV2(), 1);
+
+  const [showDocumentStatus, setShowDocumentStatus] = useState(false);
 
   const [state, setState] = useState({
     // HS Option / Currency
@@ -2280,6 +2283,8 @@ const renderPrDetailColumn = (columnKey, row, index) => {
       {showSpinner && <LoadingSpinner />}
 
       <div className="global-tran-headerToolbar-ui">
+        <GlobalDocumentStatus isOpen={showDocumentStatus} onClose={() => setShowDocumentStatus(false)}
+          docType={docType} tranId={documentID} docNo={documentNo} docDate={documentDate} status={displayStatus} branchCode={branchCode} />
         <Header
           docType={docType} 
           pdfLink={pdfLink} 
@@ -2349,7 +2354,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             </div>
           )}
           <div>
-            <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+            <button type="button" disabled={!documentID} onClick={() => setShowDocumentStatus(true)} className="global-tran-headerstat-text-ui rounded px-1 transition-colors hover:bg-sky-50 hover:text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-200 disabled:cursor-default" title="View document audit trail">Transaction Status</button>
             <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
           </div>
         </div>

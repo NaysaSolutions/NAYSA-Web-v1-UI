@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -1395,9 +1396,7 @@ const CJO = () => {
 
           <div className="global-tran-headerstat-div-ui">
             <div>
-              <p className="global-tran-headerstat-text-ui">
-                Transaction Status
-              </p>
+              <DocumentStatusTrigger docType={docType} tranId={state.documentID} docNo={state.documentNo} docDate={state.documentDate} status={displayStatus} branchCode={state.branchCode} />
               <h1
                 className={`global-tran-stat-text-ui uppercase ${statusClass}`}
               >

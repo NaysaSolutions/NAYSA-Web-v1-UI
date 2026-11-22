@@ -26,6 +26,7 @@ import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast.jsx";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
+import GlobalDocumentStatus from "@/NAYSA Cloud/Approval/GlobalDocumentStatus.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import { useResizableTableColumns } from "@/NAYSA Cloud/Global/datatable.jsx";
 import { Maximize2, Minimize2 } from "lucide-react";
@@ -317,6 +318,8 @@ export const CAN = () => {
      This state mirrors the CAN transaction returned by sproc_PHP_CAN GetCAN.
      Keep field names aligned with the stored procedure JSON aliases.
   --------------------------------------------------------------------------- */
+
+  const [showDocumentStatus, setShowDocumentStatus] = useState(false);
   const [state, setState] = useState({
     canId: "",
     canNo: "",
@@ -2891,7 +2894,7 @@ export const CAN = () => {
           </div>
         )}
         <div>
-          <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+          <button type="button" disabled={!canId} onClick={() => setShowDocumentStatus(true)} className="global-tran-headerstat-text-ui rounded px-1 transition-colors hover:bg-sky-50 hover:text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-200 disabled:cursor-default" title="View document audit trail">Transaction Status</button>
           <h1 className={`global-tran-stat-text-ui ${statusTextColor}`}>{displayStatus}</h1>
         </div>
       </div>
@@ -4884,6 +4887,8 @@ export const CAN = () => {
       {showSpinner && <LoadingSpinner />}
 
       <div className="global-tran-headerToolbar-ui">
+        <GlobalDocumentStatus isOpen={showDocumentStatus} onClose={() => setShowDocumentStatus(false)}
+          docType={docType} tranId={canId} docNo={canNo} docDate={canDate} status={displayStatus} branchCode={branchCode} />
         <Header
           docType={docType}
           pdfLink={pdfLink}

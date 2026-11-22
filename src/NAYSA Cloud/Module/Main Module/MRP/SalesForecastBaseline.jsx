@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -1496,9 +1497,7 @@ const SalesForecastBaseline = (item) => {
 
         <div className="global-tran-headerstat-div-ui">
           <div>
-            <p className="global-tran-headerstat-text-ui">
-              Transaction Status
-            </p>
+            <DocumentStatusTrigger docType={docType} tranId={state.documentID} docNo={state.documentNo} docDate={state.sfbDate} status={displayStatus} branchCode={state.branchCode} />
             <h1
               className={`global-tran-stat-text-ui uppercase ${statusColor}`}
             >

@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -1378,7 +1379,7 @@ const VSO = () => {
           </div>
           <div className="global-tran-headerstat-div-ui">
             <div>
-              <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+              <DocumentStatusTrigger docType={docType} tranId={state.documentID} docNo={state.documentNo} docDate={state.vsoDate} status={displayStatus} branchCode={state.branchCode} />
               <h1 className={`global-tran-stat-text-ui uppercase ${displayStatus === "OPEN" ? "global-tran-stat-text-open-ui" : displayStatus === "CANCELLED" ? "global-tran-stat-text-cancelled-ui" : "global-tran-stat-text-posted-ui"}`}>
                 {displayStatus}
               </h1>

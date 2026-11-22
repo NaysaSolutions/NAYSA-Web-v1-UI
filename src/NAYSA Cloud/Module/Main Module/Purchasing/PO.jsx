@@ -43,6 +43,7 @@ import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
+import GlobalDocumentStatus from "@/NAYSA Cloud/Approval/GlobalDocumentStatus.jsx";
 
 // Configuration
 import {
@@ -222,6 +223,8 @@ const PO = () => {
     summaryKey: "",
     data: [],
   });
+
+  const [showDocumentStatus, setShowDocumentStatus] = useState(false);
 
   const [state, setState] = useState({
     // HS Option / Currency
@@ -4866,6 +4869,8 @@ const PO = () => {
       />
 
       <div className="global-tran-headerToolbar-ui">
+        <GlobalDocumentStatus isOpen={showDocumentStatus} onClose={() => setShowDocumentStatus(false)}
+          docType={docType} tranId={documentID} docNo={documentNo} docDate={poDate} status={displayStatus} branchCode={branchCode} />
         <Header
           docType={docType}
           pdfLink={pdfLink}
@@ -4949,9 +4954,7 @@ const PO = () => {
               </div>
             )}
             <div>
-              <p className="global-tran-headerstat-text-ui">
-                Transaction Status
-              </p>
+              <button type="button" disabled={!documentID} onClick={() => setShowDocumentStatus(true)} className="global-tran-headerstat-text-ui rounded px-1 transition-colors hover:bg-sky-50 hover:text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-200 disabled:cursor-default" title="View document audit trail">Transaction Status</button>
               <h1 className={`global-tran-stat-text-ui ${statusColor}`}>
                 {displayStatus}
               </h1>

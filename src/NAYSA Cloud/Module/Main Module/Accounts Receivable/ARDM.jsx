@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import { Fragment, useState, useEffect,useRef,useCallback,useMemo } from "react";
 import Swal from 'sweetalert2';
 import { useNavigate,useLocation  } from "react-router-dom";
@@ -2182,7 +2183,7 @@ const renderArdmGlColumn = (columnKey, row, index) => {
             </div>
             <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
               <div>
-                <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+                <DocumentStatusTrigger docType={docType} tranId={state.documentID} docNo={state.documentNo} docDate={state.documentDate} status={displayStatus} branchCode={state.branchCode} />
                 <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
               </div>
             </div>

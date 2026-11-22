@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
@@ -2641,7 +2642,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
           </div>
           <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
             <div>
-              <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+              <DocumentStatusTrigger docType={docType} tranId={state.documentID} docNo={state.farrNo} docDate={state.farrDate} status={displayStatus} branchCode={state.branchCode} />
               <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
             </div>
           </div>

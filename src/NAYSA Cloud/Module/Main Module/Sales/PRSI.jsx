@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -785,7 +786,7 @@ const PRSI = () => {
           </div>
           <div className="global-tran-headerstat-div-ui">
             <div>
-              <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+              <DocumentStatusTrigger docType={DOC_TYPE} tranId={form.prsiId} docNo={form.prsiNo} docDate={form.prsiDate} status={form.docStatus} branchCode={form.branchCode} />
               <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{form.docStatus}</h1>
             </div>
           </div>

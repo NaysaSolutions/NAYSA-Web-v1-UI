@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBoxOpen, faMagnifyingGlass, faPlus, faTableCellsLarge, faTrashAlt, faWarehouse } from "@fortawesome/free-solid-svg-icons";
@@ -443,7 +444,7 @@ const PRJMT = () => {
     <div className={topTab === "details" ? "" : "hidden"}>
       <div className="global-tran-header-ui">
         <div className="global-tran-headertext-div-ui"><h1 className="global-tran-headertext-ui">{documentTitle}</h1></div>
-        <div className="global-tran-headerstat-div-ui flex items-center gap-6"><PermissionBadge permission={pagePermission} isReadOnly={isReadOnly} isFullAccess={isFullAccess}/><div><p className="global-tran-headerstat-text-ui">Transaction Status</p><h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{statusLabel}</h1></div></div>
+        <div className="global-tran-headerstat-div-ui flex items-center gap-6"><PermissionBadge permission={pagePermission} isReadOnly={isReadOnly} isFullAccess={isFullAccess}/><div><DocumentStatusTrigger docType={DOC_TYPE} tranId={state.documentID} docNo={state.documentNo} docDate={state.documentDate} status={statusLabel} branchCode={state.branchCode} /><h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{statusLabel}</h1></div></div>
       </div>
 
       <section className="global-tran-header-div-ui">

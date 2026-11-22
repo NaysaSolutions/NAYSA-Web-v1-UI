@@ -1,3 +1,4 @@
+import DocumentStatusTrigger from "@/NAYSA Cloud/Approval/DocumentStatusTrigger.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { useLocation } from "react-router-dom";
@@ -260,6 +261,7 @@ const MJO = () => {
   }, []);
 
   const [state, setState] = useState({
+    documentID: "",
     documentNo: "",
     documentDate: getToday(),
     documentStatus: "O",
@@ -445,7 +447,8 @@ const MJO = () => {
 
   const handleReset = useCallback(() => {
     updateState({
-      documentNo: "",
+      documentID: "",
+    documentNo: "",
       documentDate: getToday(),
       documentStatus: "O",
       status: "",
@@ -1278,6 +1281,7 @@ const MJO = () => {
         documentNo;
 
       updateState({
+        documentID: row?.mjoId || response?.data?.mjoId || state.documentID,
         documentNo: savedNo || documentNo,
         status: "OPEN",
       });
@@ -1363,6 +1367,7 @@ const MJO = () => {
           : [];
 
         updateState({
+          documentID: header.mjoId || "",
           documentNo: header.mjoNo || docNo,
           documentDate: useformatToDatev2(header.mjoDate) || header.mjoDate || "",
           documentStatus: header.joHStatus || header.joStatus || "O",
@@ -1658,7 +1663,7 @@ const MJO = () => {
 
           <div className="global-tran-headerstat-div-ui">
             <div>
-              <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+              <DocumentStatusTrigger docType={docType} tranId={state.documentID} docNo={state.documentNo} docDate={state.documentDate} status={displayStatus} branchCode={state.branchCode} />
               <h1 className={`global-tran-stat-text-ui uppercase ${statusClass}`}>
                 {displayStatus}
               </h1>
