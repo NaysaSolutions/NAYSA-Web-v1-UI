@@ -1,3 +1,4 @@
+import AttachmentFileIcon, { ATTACHMENT_MAX_BYTES } from "./AttachmentFileIcon.jsx";
 // src/NAYSA Cloud/Lookup/SearchAttachment.jsx
 import { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -149,6 +150,12 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
 
     if (!DocumentID) {
       await useSwalErrorAlert("Error", "Document ID is required before uploading files.");
+      return;
+    }
+
+    const oversized = Array.from(rawFiles).filter((file) => file.size >= ATTACHMENT_MAX_BYTES);
+    if (oversized.length) {
+      await useSwalErrorAlert("File Size Limit", `Each file must be less than 5 MB. Upload cancelled: ${oversized.map((file) => file.name).join(", ")}`);
       return;
     }
 
@@ -455,7 +462,7 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
                       <tr key={item.id} className={rowBgClass}>
                         <td className="px-3 py-2.5 text-gray-800 dark:text-gray-100 font-medium">
                           <div className="flex min-w-0 items-center space-x-2">
-                            <FontAwesomeIcon icon={faFile} className="shrink-0 text-gray-400" />
+                            <AttachmentFileIcon fileName={item.fileName} />
                             <span className="min-w-0 truncate" title={item.fileName}>{item.fileName}</span>
                           </div>
                         </td>
@@ -509,7 +516,8 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+          <span className="text-xs text-slate-500">Each file must be less than 5 MB.</span>
           <div className="flex flex-wrap justify-end gap-2">
             {!viewOnly && (
               <>

@@ -3560,7 +3560,11 @@ const PO = () => {
       const {data} = await apiClient.post('/po/email', {...message, poId: poEmail.poId}, {timeout: 180000});
       if (!data.success) throw new Error(data.message);
       setPoEmail(null);
-      useSwalSuccessAlert('Email PO', data.message);
+      if (data.auditRecorded !== true) {
+        useSwalErrorAlert('Email PO — Check Audit Trail', data.auditRecorded === false ? data.message : 'Email was accepted, but this API version did not confirm audit recording. Update the API controller and check the audit trail. Do not resend the email.');
+      } else {
+        useSwalSuccessAlert('Email PO', data.message);
+      }
     } catch (error) {
       useSwalErrorAlert('Email PO', error.response?.data?.message || 'Unable to confirm sending. Check the mail server before retrying.');
     } finally { setSendingPOEmail(false); }
@@ -4860,6 +4864,7 @@ const PO = () => {
         defaultSubject={poEmail?.subject || ""}
         defaultBody={poEmail?.body || ""}
         includeExcel={false}
+        lightSendingBackdrop
         sendingMessage="Generating FINAL PO PDF, then sending email..."
         isSending={sendingPOEmail}
         savingBody={savingPOEmailBody}

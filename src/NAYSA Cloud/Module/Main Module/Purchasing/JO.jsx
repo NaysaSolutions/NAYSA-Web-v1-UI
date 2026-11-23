@@ -1309,7 +1309,11 @@ const handleDeleteRow = (index) => {
       const {data} = await apiClient.post('/jo/email', {...message, joId: joEmail.joId}, {timeout: 180000});
       if (!data.success) throw new Error(data.message);
       setJoEmail(null);
-      useSwalSuccessAlert('Email JO', data.message);
+      if (data.auditRecorded !== true) {
+        useSwalErrorAlert('Email JO — Check Audit Trail', data.auditRecorded === false ? data.message : 'Email was accepted, but this API version did not confirm audit recording. Update the API controller and check the audit trail. Do not resend the email.');
+      } else {
+        useSwalSuccessAlert('Email JO', data.message);
+      }
     } catch (error) {
       useSwalErrorAlert('Email JO', error.response?.data?.message || 'Unable to confirm sending. Check the mail server before retrying.');
     } finally { setSendingJOEmail(false); }
@@ -1977,6 +1981,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
         defaultSubject={joEmail?.subject || ""}
         defaultBody={joEmail?.body || ""}
         includeExcel={false}
+        lightSendingBackdrop
         sendingMessage="Generating FINAL JO PDF, then sending email..."
         isSending={sendingJOEmail}
         savingBody={savingJOEmailBody}

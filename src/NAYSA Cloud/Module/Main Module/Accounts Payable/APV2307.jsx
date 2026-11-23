@@ -1235,14 +1235,19 @@ export default function APV2307({
   const [outputMode, setOutputMode] = useState("print");
   const [signatureImage, setSignatureImage] = useState(null);
   const [signatureLoading, setSignatureLoading] = useState(true);
-  const [assetsLoading, setAssetsLoading] = useState(true);
+  const [readyAssets, setReadyAssets] = useState(null);
+  const [assetError, setAssetError] = useState(null);
+  const assetsMatch = (assets) => assets?.backgroundSrc === backgroundSrc && assets?.signatureImage === signatureImage;
+  const assetsLoading = !assetsMatch(readyAssets) && !assetsMatch(assetError);
+  const previewLoading = isLoading || signatureLoading || assetsLoading;
+  const previewError = (assetsMatch(assetError) && assetError.message) || errorMessage;
+  const previewReady = !previewLoading && !previewError;
   useEffect(() => {
     let active = true;
-    setAssetsLoading(true);
-    if (isLoading || signatureLoading) return () => { active = false; };
+    const assets = { backgroundSrc, signatureImage };
     const loadImage = (source) => new Promise((resolve, reject) => {
       const image = new Image();
-      image.onload = () => resolve();
+      image.onload = () => resolve(image.decode?.());
       image.onerror = () => reject(new Error("Unable to load a BIR 2307 image. Please reload the preview."));
       image.src = source;
     });
@@ -1250,11 +1255,13 @@ export default function APV2307({
       loadImage(backgroundSrc),
       ...(signatureImage ? [loadImage(signatureImage)] : []),
       document.fonts?.ready || Promise.resolve(),
-    ]).then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-      .catch((error) => { if (active) setErrorMessage(error.message); })
-      .finally(() => { if (active) setAssetsLoading(false); });
+    ]).then(() => {
+      if (active) setReadyAssets(assets);
+    }).catch(() => {
+      if (active) setAssetError({ ...assets, message: "Unable to load a BIR 2307 image. Please reload the preview." });
+    });
     return () => { active = false; };
-  }, [isLoading, signatureLoading, backgroundSrc, signatureImage]);
+  }, [backgroundSrc, signatureImage]);
   useEffect(() => {
     let active = true;
     apiClient.get("/getCompany2307Signature").then(({ data: response }) => {
@@ -1575,6 +1582,7 @@ export default function APV2307({
   };
 
   const handlePrimaryOutput = () => {
+    if (!previewReady || isGeneratingPdf) return;
     if (outputMode === "pdf") {
       handleDownloadPdf();
       return;
@@ -1891,7 +1899,7 @@ export default function APV2307({
         }
       `}</style>
 
-      {isLoading || signatureLoading || assetsLoading || isGeneratingPdf ? <LoadingSpinner /> : null}
+      {previewLoading || isGeneratingPdf ? <LoadingSpinner /> : null}
 
       {showToolbar ? (
         <div className="ap2307-toolbar">
@@ -1976,7 +1984,7 @@ export default function APV2307({
               type="button"
               className="ap2307-output-button"
               onClick={handlePrimaryOutput}
-              disabled={isLoading || signatureLoading || assetsLoading || isGeneratingPdf || printPages.length === 0}
+              disabled={!previewReady || isGeneratingPdf || printPages.length === 0}
             >
               {isGeneratingPdf
                 ? "Generating PDF..."
@@ -1989,16 +1997,16 @@ export default function APV2307({
       ) : null}
       {showToolbar ? <div className="ap2307-toolbar-placeholder" aria-hidden="true" /> : null}
 
-      {!isLoading && errorMessage ? (
-        <div className="ap2307-message ap2307-message-error">{errorMessage}</div>
+      {!previewLoading && previewError ? (
+        <div className="ap2307-message ap2307-message-error">{previewError}</div>
       ) : null}
 
-      {!isLoading && !errorMessage && printPages.length === 0 ? (
+      {previewReady && printPages.length === 0 ? (
         <div className="ap2307-message">No BIR 2307 form is available.</div>
       ) : null}
 
       <div className="ap2307-preview-scroll">
-        {printPages.map((form) => (
+        {previewReady && printPages.map((form) => (
           <BIR2307Page
             key={form.pageKey}
             form={form}

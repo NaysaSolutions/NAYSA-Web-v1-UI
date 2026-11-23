@@ -45,43 +45,54 @@
 
 
 
-// export const useHandleFileDownload = async (id) => {
+// export const useHandleFileDownload = async (id, fallbackName = "download") => {
 //   try {
-//     const response = await apiClient.get(`/downloadFile/${id}`, {
-//       responseType: "blob", // 👈 important for file downloads
+//     const response = await apiClient.get(`/downloadFile/${encodeURIComponent(id)}`, {
+//       responseType: "blob",
 //     });
-
 //     const blob = response.data;
-//     const contentDisposition = response.headers["content-disposition"];
-//     let filename = "download";
-
-//     if (contentDisposition) {
-//       const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-//       if (filenameMatch?.[1]) {
-//         filename = filenameMatch[1];
-//       }
+//     const disposition = response.headers["content-disposition"] || "";
+//     const contentType = response.headers["content-type"] || blob.type || "";
+//     const isAttachment = /(?:^|;)\s*attachment(?:;|$)/i.test(disposition);
+    // File bytes are always binary. Do not reinterpret legitimate JSON/text attachments as Base64.
+//     if (!isAttachment && /application\/(?:problem\+)?json|text\/html/i.test(contentType)) {
+//       const text = await blob.text();
+//       let message = "Server returned an error instead of the attachment.";
+//       try {
+//         const result = JSON.parse(text);
+//         message = result.message || result.error || message;
+//       } catch { /* An HTML error page is not a downloadable attachment. */ }
+//       throw new Error(message);
 //     }
 
+//     let filename = fallbackName;
+//     const extended = disposition.match(/filename\*\s*=\s*(?:UTF-8'[^']*')([^;]+)/i);
+//     const ordinary = disposition.match(/(?:^|;)\s*filename\s*=\s*("(?:[^"\\]|\\.)*"|[^;]+)/i);
+//     if (extended) {
+//       try { filename = decodeURIComponent(extended[1].trim().replace(/^"|"$/g, "")); }
+//       catch { filename = fallbackName; }
+//     } else if (ordinary) {
+//       filename = ordinary[1].trim().replace(/^"|"$/g, "").replace(/\\(.)/g, "$1");
+      // Compatibility with earlier API headers that used a generic fallback without an extension.
+//       if (filename === "attachment" && fallbackName !== "download") filename = fallbackName;
+//     }
+//     filename = String(filename || fallbackName).split(/[\\/]/).pop().replace(/[\x00-\x1f]/g, "") || "download";
+
 //     const url = window.URL.createObjectURL(blob);
-//     const a = document.createElement("a");
-//     a.href = url;
-//     a.download = filename;
-//     document.body.appendChild(a);
-//     a.click();
-
-//     window.URL.revokeObjectURL(url);
-//     a.remove();
-
+//     const link = document.createElement("a");
+//     link.href = url;
+//     link.download = filename;
+//     document.body.appendChild(link);
+//     link.click();
+//     link.remove();
+    // Let the browser consume the Blob before releasing its URL.
+//     setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 //     return { success: true, message: "Download triggered" };
-//   } catch (err) {
-//     console.error("❌ Download failed:", err);
-//     throw err;
+//   } catch (error) {
+//     console.error("Download failed:", error);
+//     throw error;
 //   }
 // };
-
-
-
-
 
 // export const useHandleFileDownloadAll = async (documentID) => {
 //   try {
@@ -178,7 +189,10 @@ export const usehandleFileUpload = async (files, documentID) => {
 
 export const useHandleFileDelete = async (id) => {
   try {
-    const { data: result } = await apiClient.delete(`/deleteFile/${id}`);
+    const { data: result } = await apiClient.delete(`/deleteFile/${encodeURIComponent(id)}`);
+    if (result?.success !== true) {
+      throw new Error(result?.message || "The server did not confirm attachment deletion.");
+    }
     return result;
   } catch (err) {
     console.error("Delete failed:", err);
@@ -188,74 +202,53 @@ export const useHandleFileDelete = async (id) => {
 
 export const useHandleFileDownload = async (id, fallbackName = "download") => {
   try {
-    const response = await apiClient.get(`/downloadFile/${id}`, {
-      responseType: "blob", 
+    const response = await apiClient.get(`/downloadFile/${encodeURIComponent(id)}`, {
+      responseType: "blob",
     });
-
-    let blob = response.data;
-    const text = await blob.text();
-
-    // 1. SAFETY CHECK: Did the server send JSON instead of a file?
-    if (text.trim().startsWith("{") || text.trim().startsWith("[")) {
+    const blob = response.data;
+    const disposition = response.headers["content-disposition"] || "";
+    const contentType = response.headers["content-type"] || blob.type || "";
+    const isAttachment = /(?:^|;)\s*attachment(?:;|$)/i.test(disposition);
+    // File bytes are always binary. Do not reinterpret legitimate JSON/text attachments as Base64.
+    if (!isAttachment && /application\/(?:problem\+)?json|text\/html/i.test(contentType)) {
+      const text = await blob.text();
+      let message = "Server returned an error instead of the attachment.";
       try {
-        const jsonData = JSON.parse(text);
-        
-        // If the backend sent an error message
-        if (jsonData.message || jsonData.error) {
-          throw new Error(jsonData.message || jsonData.error);
-        }
-
-        // If the backend sent the file as a Base64 string inside JSON (e.g., { "file": "JVBER..." })
-        const base64Data = jsonData.file || jsonData.data || jsonData.base64;
-        if (base64Data) {
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          blob = new Blob([byteArray]); // Rebuild the raw file
-        } else {
-          throw new Error("Server returned JSON, but no file data was found.");
-        }
-      } catch (e) {
-        if (e.message.includes("Server returned JSON")) throw e;
-        // Not JSON, just continue
-      }
+        const result = JSON.parse(text);
+        message = result.message || result.error || message;
+      } catch { /* An HTML error page is not a downloadable attachment. */ }
+      throw new Error(message);
     }
 
-    // EXTRACT FILENAME
-    const contentDisposition = response.headers["content-disposition"];
     let filename = fallbackName;
-
-    if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-      if (filenameMatch && filenameMatch[1]) {
-        filename = decodeURIComponent(filenameMatch[1].replace(/['"]/g, ''));
-      }
+    const extended = disposition.match(/filename\*\s*=\s*(?:UTF-8'[^']*')([^;]+)/i);
+    const ordinary = disposition.match(/(?:^|;)\s*filename\s*=\s*("(?:[^"\\]|\\.)*"|[^;]+)/i);
+    if (extended) {
+      try { filename = decodeURIComponent(extended[1].trim().replace(/^"|"$/g, "")); }
+      catch { filename = fallbackName; }
+    } else if (ordinary) {
+      filename = ordinary[1].trim().replace(/^"|"$/g, "").replace(/\\(.)/g, "$1");
+      // Compatibility with earlier API headers that used a generic fallback without an extension.
+      if (filename === "attachment" && fallbackName !== "download") filename = fallbackName;
     }
+    filename = String(filename || fallbackName).split(/[\\/]/).pop().replace(/[\x00-\x1f]/g, "") || "download";
 
-    // APPLY MIME TYPE
-    const fileType = response.headers['content-type'] || blob.type;
-    const secureBlob = new Blob([blob], { type: fileType });
-
-    // TRIGGER DOWNLOAD
-    const url = window.URL.createObjectURL(secureBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-
-    window.URL.revokeObjectURL(url);
-    a.remove();
-
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Let the browser consume the Blob before releasing its URL.
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000);
     return { success: true, message: "Download triggered" };
-  } catch (err) {
-    console.error("❌ Download failed:", err);
-    throw err;
+  } catch (error) {
+    console.error("Download failed:", error);
+    throw error;
   }
 };
+
 
 export const useHandleFileDownloadAll = async (documentID) => {
   try {

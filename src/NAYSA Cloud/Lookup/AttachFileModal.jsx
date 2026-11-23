@@ -1,3 +1,4 @@
+import AttachmentFileIcon, { ATTACHMENT_MAX_BYTES } from "./AttachmentFileIcon.jsx";
 // src/NAYSA Cloud/Global/AttachFileModal.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -92,6 +93,12 @@ const AttachFileModal = ({
   }, [isOpen, documentNo]);
 
   const handleFileChange = async (e) => {
+    const oversized = Array.from(e.target.files || []).filter((file) => file.size >= ATTACHMENT_MAX_BYTES);
+    if (oversized.length) {
+      e.target.value = "";
+      await useSwalErrorAlert("File Size Limit", `Each file must be less than 5 MB. Upload cancelled: ${oversized.map((file) => file.name).join(", ")}`);
+      return;
+    }
     setIsUploading(true);
     const selectedFiles = Array.from(e.target.files).map((file) => ({
       file,
@@ -317,7 +324,7 @@ const AttachFileModal = ({
                         className={`hover:bg-blue-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                       >
                         <td className="p-2 border-b border-gray-100 flex items-center gap-2">
-                          <FontAwesomeIcon icon={faFile} className="text-gray-400" />
+                          <AttachmentFileIcon fileName={r.fileName} />
                           <span>{safeText(r.fileName)}</span>
                         </td>
                         <td className="p-2 border-b border-gray-100">
@@ -361,6 +368,7 @@ const AttachFileModal = ({
             </div>
           </div>
 
+          <p className="mt-2 text-xs text-slate-500">Each file must be less than 5 MB.</p>
           {/* FOOTER BUTTONS */}
           <div className="flex gap-2 mt-3">
             <label

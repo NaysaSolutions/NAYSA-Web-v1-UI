@@ -16,6 +16,7 @@ const SearchGlobalEmail = ({
   defaultTo = "",
   defaultCc = "",
   includeExcel = true,
+  lightSendingBackdrop = false,
   onSaveBody,
   savingBody = false,
   sendingMessage,
@@ -232,11 +233,8 @@ const SearchGlobalEmail = ({
       </div>
 
       {(isSending || savingBody) && (
-        <div className="fixed inset-0 z-[1000002] flex flex-col items-center justify-center bg-white/50 backdrop-blur-[2px]">
+        <div className={`fixed inset-0 z-[1000002] flex flex-col items-center justify-center ${lightSendingBackdrop && isSending ? "bg-transparent" : "bg-white/50 backdrop-blur-[2px]"}`}>
           <LoadingSpinner />
-          <div className="mt-3 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-slate-700 shadow">
-            {savingBody ? "Saving default email body..." : sendingMessage || (includeExcel ? "Generating PDF and Excel, then sending email..." : "Generating FINAL PDF, then sending email...")}
-          </div>
         </div>
       )}
     </div>
