@@ -51,6 +51,7 @@ export const pageRegistry = {
   PO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx")),
   JO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/JO.jsx")),
   JobCodeRef: lazyPage(() => import("./NAYSA Cloud/Reference File/JobCodeRef.jsx")),
+  PODeliveryMonitoring: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/PODeliveryMonitoring.jsx")),
 
   // Sales
   SO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/SO.jsx")),

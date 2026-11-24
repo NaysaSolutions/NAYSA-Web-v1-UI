@@ -5525,6 +5525,7 @@ export default function HeartStrong() {
         "/initialize",
         {
           mode: "Initialize",
+          password,
           params: {
             user_code: user?.USER_CODE,
           },
