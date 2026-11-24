@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { apiClient, getTenant } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -52,6 +52,13 @@ import {
 
 const DOC_TYPE = "Branch";
 
+const REGION_LABELS = {
+  "01": "I", "02": "II", "03": "III", "04": "IV-A", "05": "V",
+  "06": "VI", "07": "VII", "08": "VIII", "09": "IX", "10": "X",
+  "11": "XI", "12": "XII", "13": "NCR", "14": "CAR", "16": "XIII",
+  "17": "MIMAROPA", "18": "NIR", "19": "BARMM",
+};
+
 const BRANCH_TYPE_OPTIONS = [
   { value: "Main", label: "Main" },
   { value: "Branch", label: "Branch" },
@@ -79,6 +86,7 @@ const INITIAL_FORM = {
   branchAddr3: "",
   branchTin: "",
   telNo: "",
+  regionCode: "",
   zipCode: "",
   main: "Branch", // Main / Branch / Company Store / Franchisee
   active: "Y", // Y/N
@@ -99,6 +107,30 @@ const BranchRef = () => {
   const guideRef = useRef(null);
   const pdfLink = reftablesPDFGuide[DOC_TYPE];
   const videoLink = reftablesVideoGuide[DOC_TYPE];
+
+  const { data: regionOptions = [], isError: regionLoadFailed } = useQuery({
+    queryKey: ["branchRegionOptions", getTenant()],
+    queryFn: async () => {
+      const { data } = await apiClient.post("/getHSDropdown", {
+        json_data: { dropdownColumn: "REGION_CODE", docCode: "BRANCH_REF" },
+      });
+      const result = data?.data?.[0]?.result;
+      const rows = typeof result === "string" ? JSON.parse(result) : result;
+      if (!Array.isArray(rows)) throw new Error("Unable to load branch regions.");
+      return rows.map((row) => {
+        const code = String(row.dropdownCode ?? row.DROPDOWN_CODE ?? "");
+        const name = row.dropdownName ?? row.DROPDOWN_NAME;
+        const shortLabel = REGION_LABELS[code];
+        let label = name ?? code;
+        if (name && shortLabel) {
+          if (code === "17") label = "MIMAROPA (Region IV-B)";
+          else if (["13", "14", "18", "19"].includes(code)) label = `${name} (${shortLabel})`;
+          else label = `Region ${shortLabel} (${code === "01" ? "Ilocos" : name})`;
+        }
+        return { value: code, label };
+      }).filter(({ value }) => value);
+    },
+  });
 
   const [formData, setFormData] = useState(INITIAL_FORM);
   const [registrationInfo, setRegistrationInfo] = useState(INITIAL_REG);
@@ -228,6 +260,7 @@ const BranchRef = () => {
       branchAddr3: row.branchAddr3 ?? "",
       branchTin: row.branchTin ?? "",
       telNo: row.telNo ?? "",
+      regionCode: row.regionCode ?? "",
       zipCode: row.zipCode ?? "",
       main: normalizeBranchType(row.main),
       active: String(row.active ?? "Y").toUpperCase() === "Y" ? "Y" : "N",
@@ -397,6 +430,14 @@ const BranchRef = () => {
         width: 350,
         minWidth: 100,
         render: (row) => getAddress(row),
+      },
+      {
+        key: "regionCode",
+        label: "Region",
+        sortable: true,
+        width: 100,
+        minWidth: 85,
+        render: (row) => REGION_LABELS[row.regionCode] ?? row.regionCode ?? "",
       },
       {
         key: "zipCode",
@@ -652,14 +693,25 @@ const BranchRef = () => {
               maxLength={getMax("TEL_NO")}
             />
 
-            <FieldRenderer
-              label="Zip Code"
-              type="text"
-              value={formData.zipCode}
-              disabled={!isEditing}
-              onChange={(v) => updateForm({ zipCode: v })}
-              maxLength={getMax("ZIP_CODE")}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <FieldRenderer
+                label="Region"
+                type="select"
+                value={formData.regionCode}
+                disabled={!isEditing || regionOptions.length === 0}
+                options={[{ value: "__none__", label: "—" }, ...regionOptions]}
+                onChange={(v) => updateForm({ regionCode: v === "__none__" ? "" : v })}
+              />
+              <FieldRenderer
+                label="ZIP Code"
+                type="text"
+                value={formData.zipCode}
+                disabled={!isEditing}
+                onChange={(v) => updateForm({ zipCode: v })}
+                maxLength={getMax("ZIP_CODE")}
+              />
+              {regionLoadFailed && <span className="col-span-2 text-xs text-red-600">Unable to load regions.</span>}
+            </div>
 
             <FieldRenderer
               label="Branch Type"

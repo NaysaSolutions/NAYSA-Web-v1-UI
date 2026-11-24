@@ -17,6 +17,7 @@ import { faMagnifyingGlass, faXmark, faPlus, faTrashAlt, faFileLines, faChevronD
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
+import APAdvancePOLookupModal from "../../../Lookup/SearchAPAdvancePO.jsx";
 import CurrLookupModal from "../../../Lookup/SearchCurrRef.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
@@ -295,6 +296,7 @@ const APV = () => {
   const receivingRequestRef = useRef(false);
   const receivingContextRef = useRef("");
   const [topTab, setTopTab] = useState("details");
+  const [caPoLookup, setCaPoLookup] = useState(null);
   const [state, setState] = useState({
     // HS Option
     glCurrMode: companyInfo?.glCurrMode || "",
@@ -793,7 +795,12 @@ const APV = () => {
         ...extraPayload,
       },
     });
-    return extractOpenRRResponseRows(response);
+    const rows = extractOpenRRResponseRows(response);
+    if (!lookupVendCode) return rows;
+    const payeeCode = lookupVendCode.toUpperCase();
+    return rows.filter((row) =>
+      String(row.vendCode || row.payeeCode || "").trim().toUpperCase() === payeeCode,
+    );
   };
 
 
@@ -3781,6 +3788,60 @@ const APV = () => {
   };
 
 
+  const openCaPoLookup = async (index) => {
+    const row = detailRows[index];
+    if (isFormDisabled || selectedApType !== "APV01" || row?.invType !== "CA" || row.sourceId || row.apAdvId || row.advpoNo) return;
+    const payeeCode = String(row.slCode || "").trim();
+    if (!payeeCode) {
+      useSwalErrorAlert("AP Advances", "Select the payee in this invoice row first.");
+      return;
+    }
+    updateState({ isLoading: true, showSpinner: true });
+    try {
+      const response = await fetchData("getAPAdvances", {
+        json_data: { json_data: { branchCode, vendCode: payeeCode, status: "Open", viewMode: "Summary" } },
+      });
+      if (!response?.success) throw new Error("Unable to load AP Advances.");
+      const result = response?.data?.[0]?.result;
+      const parsed = typeof result === "string" ? JSON.parse(result) : result;
+      if (!Array.isArray(parsed?.[0]?.dt2)) throw new Error("Invalid AP Advances response.");
+      const poBalances = new Map();
+      for (const item of parsed[0].dt2) {
+        const balance = parseFormattedNumber(item.balance);
+        const poNo = String(item.docNo || "").trim();
+        if (!(balance > 0) || !poNo || String(item.vendCode || "").trim().toUpperCase() !== payeeCode.toUpperCase() || String(item.branchCode || "").trim().toUpperCase() !== String(branchCode || "").trim().toUpperCase()) continue;
+        // Keep currencies separate when multiple advance records share a PO.
+        const currCode = String(item.currCode || "").trim().toUpperCase();
+        const key = JSON.stringify([poNo, currCode]);
+        const existing = poBalances.get(key);
+        poBalances.set(key, { groupId: key, poNo, currCode, balance: (existing?.balance || 0) + balance });
+      }
+      if (!poBalances.size) {
+        useSwalErrorAlert("AP Advances", "No PO numbers with remaining balance found for the selected payee.");
+        return;
+      }
+      setCaPoLookup({ index, row, branchCode, documentID, rows: [...poBalances.values()] });
+    } catch {
+      useSwalErrorAlert("AP Advances", "Unable to load PO numbers from AP Advances. Please try again.");
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  const selectCaPo = (records) => {
+    const selected = records?.[0];
+    if (!selected || !caPoLookup) return;
+    const context = caPoLookup;
+    setCaPoLookup(null);
+    if (isFormDisabled || selectedApType !== "APV01" || context.branchCode !== branchCode || context.documentID !== documentID || detailRows[context.index] !== context.row) {
+      useSwalErrorAlert("AP Advances", "The invoice row changed. Open the PO lookup again.");
+      return;
+    }
+    updateInvoiceDetails(detailRows.map((row, index) =>
+      index === context.index ? { ...row, poNo: selected.poNo, autoAdv: "Y" } : row,
+    ));
+  };
+
   const handleDetailChange = async (index, field, value, runCalculations = true) => {
     const updatedRows = [...detailRows];
     if (field === "autoAdv" && updatedRows[index]?.autoAdv !== "N" && value === "N") {
@@ -5360,6 +5421,7 @@ const APV = () => {
                                   <option value="RM">RM</option>
                                   <option value="VE">VE</option>
                                   {selectedApType === "APV01" && <option value="JO">JO</option>}
+                                  {(isPurchasesAPType || isAdvancesAPType) && <option value="CA">CA</option>}
                                   {isAdvancesAPType && <option value="PO">PO</option>}
                                   {isAdvancesAPType && <option value="JO">JO</option>}
                                 </select>
@@ -5379,14 +5441,24 @@ const APV = () => {
                             )}
                             {fieldVisibility.poNo && (
                               <td data-apv-column-key="poNo" className="global-tran-td-ui">
+                                <div className="relative flex items-center">
                                 <input
                                   type="text"
-                                  className="w-[100px] global-tran-td-inputclass-ui"
+                                  className={`w-[100px] global-tran-td-inputclass-ui ${isPurchasesAPType && row.invType === "CA" ? "pr-8" : ""}`}
                                   value={row.poNo || ""}
                                   maxLength={25}
                                   onChange={(e) => handleDetailChange(index, "poNo", e.target.value, false)}
                                   disabled={isFormDisabled || isLcSourcedImportationRow(row) || isRfpSourcedRow(row) || Boolean(row.apAdvId || row.advpoNo)}
                                 />
+                                  {isPurchasesAPType && row.invType === "CA" && (
+                                    <button type="button" aria-label="Search AP Advances PO No." title="Search AP Advances PO No."
+                                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      disabled={isFormDisabled || Boolean(row.sourceId || row.apAdvId || row.advpoNo)}
+                                      onClick={() => openCaPoLookup(index)}>
+                                      <FontAwesomeIcon icon={faMagnifyingGlass} />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             )}
                             {fieldVisibility.siNo && !isAdvancesAPType && (
@@ -6587,6 +6659,14 @@ const APV = () => {
         </div>
 
         {/* Modals */}
+        {caPoLookup && (
+          <APAdvancePOLookupModal
+            rows={caPoLookup.rows}
+            onSelect={(row) => selectCaPo([row])}
+            onClose={() => setCaPoLookup(null)}
+          />
+        )}
+
         {branchModalOpen && <BranchLookupModal isOpen={branchModalOpen} onClose={handleCloseBranchModal} />}
 
         {currencyModalOpen && <CurrLookupModal isOpen={currencyModalOpen} onClose={handleCloseCurrencyModal} />}
