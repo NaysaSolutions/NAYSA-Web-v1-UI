@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faTimes,
@@ -11,7 +11,8 @@ import {
   faChevronLeft,
   faChevronRight,
 } from "@fortawesome/free-solid-svg-icons";
-import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { apiClient, getTenant } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // Debounce hook for smooth filtering
 function useDebounce(value, delay) {
@@ -27,9 +28,11 @@ const BranchLookupModal = ({
   isOpen,
   onClose,
   customParam = "",
+  branchMode = "UserBranch",
   title = "Search Branch Code",
   withPagination = false, // New parameter: defaults to false
 }) => {
+  const { user } = useAuth();
   const [filters, setFilters] = useState({
     branchCode: "",
     branchName: "",
@@ -67,11 +70,12 @@ const BranchLookupModal = ({
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ["lookupBranch", customParam],
+    queryKey: ["lookupBranch", getTenant(), user?.USER_CODE, branchMode, customParam],
     queryFn: async () => {
       const { data: result } = await apiClient.get("/lookupBranch", {
         params: {
           PARAMS: JSON.stringify({
+            lookupBranchMode: branchMode,
             search: "",
             page: 1,
             pageSize: 5000, // Fetching a large set for comprehensive client-side handling
@@ -83,8 +87,6 @@ const BranchLookupModal = ({
       return Array.isArray(rawData) ? rawData : JSON.parse(rawData);
     },
     enabled: isOpen,
-    staleTime: 1000 * 60 * 5,
-    placeholderData: keepPreviousData,
   });
 
   // Client-side Filter and Sort Logic

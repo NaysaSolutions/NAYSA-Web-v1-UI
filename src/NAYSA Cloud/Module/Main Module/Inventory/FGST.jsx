@@ -1088,7 +1088,12 @@ const FGST = () => {
       try {
         const { data: result } = await apiClient.get("/lookupBranch", {
           params: {
-            PARAMS: JSON.stringify({ search: "", page: 1, pageSize: 5000 }),
+            PARAMS: JSON.stringify({
+              lookupBranchMode: "AllBranch",
+              search: "",
+              page: 1,
+              pageSize: 5000,
+            }),
           },
         });
         const raw = result?.data?.[0]?.result || "[]";
@@ -4533,6 +4538,7 @@ const FGST = () => {
         {toBranchModalOpen && (
           <BranchLookupModal
             isOpen={toBranchModalOpen}
+            branchMode={isIntransitToBranch() ? "UserBranch" : "AllBranch"}
             onClose={handleCloseToBranchModal}
           />
         )}

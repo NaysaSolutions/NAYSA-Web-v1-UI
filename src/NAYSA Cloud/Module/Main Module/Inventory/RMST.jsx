@@ -4455,6 +4455,7 @@ if (field === "itemCode") {
         {toBranchModalOpen && (
           <BranchLookupModal
             isOpen={toBranchModalOpen}
+            branchMode={isIntransitToBranch() ? "UserBranch" : "AllBranch"}
             onClose={handleCloseToBranchModal}
           />
         )}

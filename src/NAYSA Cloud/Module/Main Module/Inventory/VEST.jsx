@@ -4275,6 +4275,7 @@ const VEST = () => {
         {toBranchModalOpen && (
           <BranchLookupModal
             isOpen={toBranchModalOpen}
+            branchMode={isIntransitToBranch() ? "UserBranch" : "AllBranch"}
             onClose={handleCloseToBranchModal}
           />
         )}
