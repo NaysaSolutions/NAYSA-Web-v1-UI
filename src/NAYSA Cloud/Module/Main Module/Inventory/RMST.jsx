@@ -35,7 +35,7 @@ import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 
 // Configuration
-import { postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import { apiClient, postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -104,6 +104,54 @@ import {
 import Header from "@/NAYSA Cloud/Components/Header";
 import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
 import { User, Warehouse } from "lucide-react";
+
+const transferLookupKey = (value) => String(value ?? "").trim().toUpperCase();
+
+async function loadMasterRows(endpoint) {
+  try {
+    const { data } = await apiClient.get(endpoint);
+    const result = data?.data?.[0]?.result ?? data?.data;
+    const rows = typeof result === "string" ? JSON.parse(result) : result;
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadStockTransferNames() {
+  const [warehouses, locations] = await Promise.all([
+    loadMasterRows("warehouse/warehouse"),
+    loadMasterRows("location/location"),
+  ]);
+  return {
+    warehouses: Object.fromEntries(warehouses.map((row) => [
+      transferLookupKey(row.whCode ?? row.WHOUSE_CODE ?? row.WH_CODE), row.whName ?? row.WHOUSE_NAME ?? row.WH_NAME,
+    ])),
+    locations: Object.fromEntries(locations.map((row) => [
+      JSON.stringify([transferLookupKey(row.whCode ?? row.WH_CODE), transferLookupKey(row.locCode ?? row.LOC_CODE)]),
+      row.locName ?? row.LOC_NAME,
+    ])),
+  };
+}
+
+function formatTransferLookup(code, name) {
+  const cleanCode = String(code ?? "").trim();
+  const cleanName = String(name ?? "").trim();
+  if (!cleanCode) return cleanName;
+  if (!cleanName || transferLookupKey(cleanName) === transferLookupKey(cleanCode)) return cleanCode;
+  if (transferLookupKey(cleanName).startsWith(transferLookupKey(cleanCode) + " - ")) return cleanName;
+  return `${cleanCode} - ${cleanName}`;
+}
+
+function warehouseDisplay(names, code, name) {
+  return formatTransferLookup(code, name || names?.warehouses[transferLookupKey(code)]);
+}
+
+function locationDisplay(names, warehouseCode, locationCode) {
+  const locationKey = JSON.stringify([transferLookupKey(warehouseCode), transferLookupKey(locationCode)]);
+  return formatTransferLookup(locationCode, names?.locations[locationKey]);
+}
+
 
 
 const toDateInputValue = (value) => {
@@ -354,6 +402,7 @@ const RMST = () => {
     refDocNo1: "",
     refDocNo2: "",
     fromWhCode: "",
+    transferNames: null,
     fromWhName: "",
     toWhCode: "",
     toWhName: "",
@@ -450,6 +499,7 @@ const RMST = () => {
     refDocNo1,
     refDocNo2,
     fromWhCode,
+    transferNames,
     fromWhName,
     toWhCode,
     toWhName,
@@ -951,7 +1001,8 @@ const isFormDisabled =
       documentDate: useGetCurrentDayV2(),
 
       fromWhCode: "",
-      fromWhName: "",
+      transferNames: null,
+    fromWhName: "",
       toWhCode: "",
       toWhName: "",
       toBranchCode: "",
@@ -1102,7 +1153,9 @@ const isFormDisabled =
         creditFx2: formatNumber(glRow.creditFx2),
       }));
 
+      const transferNames = await loadStockTransferNames();
       updateState({
+        transferNames,
         documentStatus: data.rmstStatus,
         status: data.docStatus,
         noReprints: data.noReprints,
@@ -3015,7 +3068,7 @@ if (field === "itemCode") {
                     label="From Warehouse"
                     type={isIntransitTransfer() ? "text" : "lookup"}
                     required
-                    value={fromWhName ? fromWhName : fromWhCode || ""}
+                    value={warehouseDisplay(transferNames, fromWhCode, fromWhName)}
                     readOnly
                     placeholder=" "
                     disabled={isFormDisabled || isIntransitTransfer()}
@@ -3037,7 +3090,7 @@ if (field === "itemCode") {
                     label="To Warehouse"
                     type="lookup"
                     required
-                    value={toWhName ? toWhName : toWhCode || ""}
+                    value={warehouseDisplay(transferNames, toWhCode, toWhName)}
                     readOnly
                     placeholder=" "
                     disabled={isFormDisabled || isInterWarehouseOrInterBranch()}
@@ -3470,7 +3523,7 @@ if (field === "itemCode") {
                           <input
                             type="text"
                             className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.whouseCode || ""}
+                            value={warehouseDisplay(transferNames, row.whouseCode)}
                             readOnly
                           />
                           {/* FOOLPROOF CHECK: IW = Inter-Warehouse, IB = Inter-Branch */}
@@ -3495,7 +3548,7 @@ if (field === "itemCode") {
                           <input
                             type="text"
                             className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.toWHcode || ""}
+                            value={warehouseDisplay(transferNames, row.toWHcode)}
                             readOnly
                           />
                           {!isFormDisabled && row.operation !== "S" && !isInterWarehouseOrInterBranch() && (
@@ -3519,7 +3572,7 @@ if (field === "itemCode") {
                           <input
                             type="text"
                             className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.locCode || ""}
+                            value={locationDisplay(transferNames, row.whouseCode, row.locCode)}
                             readOnly
                           />
                           {!isFormDisabled && row.operation !== "S" && !hideFromWarehouseAndLocationSearch() && !isIntransitWarehouse(row.whouseCode) && (
@@ -3543,7 +3596,7 @@ if (field === "itemCode") {
                           <input
                             type="text"
                             className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.tolocCode || ""}
+                            value={locationDisplay(transferNames, row.toWHcode, row.tolocCode)}
                             readOnly
                           />
                          {!isFormDisabled && row.operation !== "S" && !isIntransitWarehouse(row.toWHcode) && !isWarehouseTransfer(selectedTranType, tranTypes) && (
