@@ -20,6 +20,7 @@ import {
   faCheck,
   faEye,
   faArrowLeft,
+  faBuilding,
 } from "@fortawesome/free-solid-svg-icons";
 
 import {
@@ -41,6 +42,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import UsersTab from "./UserAccessRightsTabs/UsersTab";
 import RolesTab from "./UserAccessRightsTabs/RolesTab";
 import RoleAccessTab from "./UserAccessRightsTabs/RoleAccessTab";
+import UserBranchTab from "./UserAccessRightsTabs/UserBranchTab";
 // import UserRoleTab from "./UserAccessRightsTabs/UserRoleTab";
 
 const getUserType = (row = {}) =>
@@ -97,6 +99,7 @@ const UserAccessRights = () => {
   const rolesTabRef = useRef(null);
   const roleAccessTabRef = useRef(null);
   const userAccessTabRef = useRef(null);
+  const userBranchTabRef = useRef(null);
 
   const exportRef = useRef(null);
   const guideRef = useRef(null);
@@ -106,6 +109,7 @@ const UserAccessRights = () => {
 
   const [roles, setRoles] = useState([]);
   const [users, setUsers] = useState([]);
+  const [userBranchEnabled, setUserBranchEnabled] = useState(false);
   const [appliedUserRoles, setAppliedUserRoles] = useState(new Set());
 
   const [loading, setLoading] = useState(false);
@@ -136,11 +140,12 @@ const UserAccessRights = () => {
   // ─── Tabs definition ─────────────────────────────────────────────────────
   const tabs = useMemo(
     () => [
+      ...(userBranchEnabled ? [{ id: "userBranch", label: "User Branch Access", icon: faBuilding }] : []),
       { id: "userRoles", label: "User Roles", icon: faUsers },
-      { id: "roleUserMatch", label: "User-Role Matching", icon: faUserShield },
+      { id: "roleUserMatch", label: "Role Matching", icon: faUserShield },
       { id: "roleAccess", label: "Role Access Rights", icon: faShield },
     ],
-    []
+    [userBranchEnabled]
   );
 
   // ─── Data fetchers ───────────────────────────────────────────────────────
@@ -259,6 +264,25 @@ const UserAccessRights = () => {
     return request;
   }, []);
 
+  // Fail closed: do not display the tab if configuration cannot be loaded.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await apiClient.get("/getUserBranchSetup");
+        if (alive) {
+          const enabled = data?.success === true && String(data?.mode ?? "D").trim().toUpperCase() === "E";
+          setUserBranchEnabled(enabled);
+          if (enabled) setActiveTab(previous => previous === "userRoles" ? "userBranch" : previous);
+        }
+      } catch (error) {
+        console.error("Unable to load USERBRANCH_MODE", error);
+        if (alive) setUserBranchEnabled(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   // ─── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
     fetchRoles();
@@ -267,7 +291,7 @@ const UserAccessRights = () => {
   // Avoid repeated calls on render / tab switches. The ref guards also prevent
   // duplicate requests in React StrictMode and while another load is running.
   useEffect(() => {
-    if (activeTab !== "roleUserMatch" && activeTab !== "userAccess") return;
+    if (activeTab !== "roleUserMatch" && activeTab !== "userAccess" && activeTab !== "userBranch") return;
     const loadTabData = async () => {
       if (!usersFetched.current) await fetchUsers();
       if (activeTab === "roleUserMatch" && !userRolesFetched.current) {
@@ -341,6 +365,10 @@ const UserAccessRights = () => {
         rows: [],
         columns: [],
       };
+    }
+
+    if (activeTab === "userBranch") {
+      return userBranchTabRef.current?.getExportData?.() || { fileName: "User Branch Access", rows: [], columns: [] };
     }
 
     if (activeTab === "roleAccess") {
@@ -520,6 +548,10 @@ const UserAccessRights = () => {
     callRefMethod(roleAccessTabRef, "saveAccess");
   }, [callRefMethod]);
 
+  const handleUserBranchView = useCallback(() => callRefMethod(userBranchTabRef, "view"), [callRefMethod]);
+  const handleUserBranchSave = useCallback(() => callRefMethod(userBranchTabRef, "save"), [callRefMethod]);
+  const handleUserBranchReset = useCallback(() => callRefMethod(userBranchTabRef, "reset"), [callRefMethod]);
+
   // ─── Style constants ──────────────────────────────────────────────────────
   const primaryBtn =
     "flex items-center justify-center h-7 w-14 sm:w-auto sm:h-7 sm:px-3 text-[10px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all";
@@ -607,6 +639,14 @@ const UserAccessRights = () => {
           </>
         );
 
+      case "userBranch":
+        return (
+          <>
+            <button type="button" className={primaryBtn} onClick={handleUserBranchView}><FontAwesomeIcon icon={faEye} /><span className="ml-1">View Branches</span></button>
+            <button type="button" className={primaryBtn} onClick={handleUserBranchSave}><FontAwesomeIcon icon={faSave} /><span className="ml-1">Save Access</span></button>
+            <button type="button" className={primaryBtn} onClick={handleUserBranchReset}><FontAwesomeIcon icon={faUndo} /><span className="ml-1">Reset</span></button>
+          </>
+        );
       default:
         return null;
     }
@@ -710,6 +750,14 @@ const UserAccessRights = () => {
           </>
         );
 
+      case "userBranch":
+        return (
+          <>
+            <button type="button" className={mobileIconBtn} onClick={handleUserBranchView} title="View Branches"><FontAwesomeIcon icon={faEye} /></button>
+            <button type="button" className={mobileIconBtn} onClick={handleUserBranchSave} title="Save Access"><FontAwesomeIcon icon={faSave} /></button>
+            <button type="button" className={mobileIconBtn} onClick={handleUserBranchReset} title="Reset"><FontAwesomeIcon icon={faUndo} /></button>
+          </>
+        );
       default:
         return null;
     }
@@ -752,6 +800,10 @@ const UserAccessRights = () => {
           tableSize={tableSize}
         />
       );
+    }
+
+    if (activeTab === "userBranch" && userBranchEnabled) {
+      return <UserBranchTab ref={userBranchTabRef} users={users} user={user} tableSize={tableSize} />;
     }
 
     if (activeTab === "userAccess") {
