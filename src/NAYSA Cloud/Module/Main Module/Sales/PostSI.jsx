@@ -130,7 +130,7 @@ const PostSI = ({ isOpen, onClose, userCode }) => {
       return { success: false, code: "PICKING_REQUIRED" };
     }
 
-    await useHandlePostTran(selectedData, userPw, "SI", userCode, setLoading, onClose);
+    await useHandlePostTran(selectedData, userPw, "SI", userCode, () => {}, onClose);
   };
 
   const pickDocAndBranch = (row) => {
@@ -177,6 +177,7 @@ const PostSI = ({ isOpen, onClose, userCode }) => {
           onPost={handlePost}
           onViewDocument={handleViewDocument}
           remoteLoading={loading}
+          postingProgressMessage="Waiting for the posting result. If ESRS runs during posting, PDF preparation and ZIP upload may take longer."
         />
       )}
 

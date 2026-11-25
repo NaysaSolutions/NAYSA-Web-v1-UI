@@ -60,7 +60,7 @@ const PostSVI = ({ isOpen, onClose, userCode }) => {
   }, [isOpen, onClose]);
 
   const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, "SVI", userCode, setLoading, onClose);
+    await useHandlePostTran(selectedData, userPw, "SVI", userCode, () => {}, onClose);
   };
 
  
@@ -116,6 +116,7 @@ return (
       onPost={handlePost}
       onViewDocument={handleViewDocument}
       remoteLoading={loading}
+      postingProgressMessage="Waiting for the server to finalize the selected invoices."
       />
     )}
 

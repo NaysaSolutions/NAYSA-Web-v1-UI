@@ -58,7 +58,7 @@ const PostVSI = ({ isOpen, onClose, userCode }) => {
   }, [isOpen, onClose]);
 
   const handlePost = async (selectedData, password) => {
-    await useHandlePostTran(selectedData, password, "VSI", userCode, setLoading, onClose);
+    await useHandlePostTran(selectedData, password, "VSI", userCode, () => {}, onClose);
   };
 
   const handleViewDocument = (row) => {
@@ -82,6 +82,7 @@ const PostVSI = ({ isOpen, onClose, userCode }) => {
       onPost={handlePost}
       onViewDocument={handleViewDocument}
       remoteLoading={loading}
+      postingProgressMessage="Waiting for the server to finalize the selected invoices."
     />}
     {ReactDOM.createPortal(loading ? <LoadingSpinner /> : null, document.body)}
   </>;

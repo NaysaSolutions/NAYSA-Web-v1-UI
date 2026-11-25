@@ -62,7 +62,7 @@ const PostARCM = ({ isOpen, onClose,userCode }) => {
 
 
   const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData,userPw,"ARCM",userCode,setLoading,onClose)
+    await useHandlePostTran(selectedData,userPw,"ARCM",userCode,() => {},onClose)
   }
 
   
@@ -109,6 +109,7 @@ return (
       onPost={handlePost} 
       onViewDocument={handleViewDocument}
       remoteLoading={loading}
+        postingProgressMessage="Waiting for the server to finalize the selected credit memos."
       />
     )}
 

@@ -973,10 +973,7 @@ useEffect(() => {
           bbDate: formatDateOnly(item.bbDate || item.bb_date),
           qtyHand: formatNumber(qtyHandValue, 6),
           qtyOnHand: formatNumber(qtyHandValue, 6),
-          whouseCode: getFirstValue(item.whouseCode, item.whCode, item.whouse_code, item.WHCode, data.whCode, data.whouseCode),
-          whouseName: getFirstValue(item.whouseName, item.whName, item.whouse_name, item.WHName, data.whName, data.whouseName, data.whCode, data.whouseCode),
-          locCode: getFirstValue(item.locCode, item.LocCode, item.loc_code, data.locCode, data.LocCode),
-          locName: getFirstValue(item.locName, item.LocName, item.loc_name, data.locName, data.LocName, data.locCode, data.LocCode),
+          ...getDetailStockLocation(item),
           acctCode: getFirstValue(item.acctCode, item.acct_code, item.drAcctCode),
           drAcctCode: getFirstValue(item.drAcctCode, item.acctCode, item.acct_code),
           drAcctName: getFirstValue(item.drAcctName, item.acctName, item.acct_name),
@@ -1204,7 +1201,15 @@ useEffect(() => {
     }[invType] || "getInvLookupFG";
   };
 
+  const getDetailStockLocation = (row = {}) => ({
+    whouseCode: getFirstValue(row.whouseCode, row.whCode, row.warehouseCode, row.whouse_code, row.WHCode, row.WH_CODE, row.WHOUSE_CODE),
+    whouseName: getFirstValue(row.whouseName, row.whName, row.warehouseName, row.whouse_name, row.WHName, row.WH_NAME, row.WHOUSE_NAME),
+    locCode: getFirstValue(row.locCode, row.locationCode, row.LocCode, row.loc_code, row.LOC_CODE),
+    locName: getFirstValue(row.locName, row.locationName, row.LocName, row.loc_name, row.LOC_NAME),
+  });
+
   const normalizeWOInventoryRow = (row = {}, index = 0, issueItem = {}) => {
+    const stockLocation = getDetailStockLocation(row);
     const qtyHandValue = getFirstValue(row.qtyHand, row.QTY_HAND, row.qtyOnHand, row.QTY_ON_HAND, row.onHandQty, row.ON_HAND_QTY, 0);
     const qtyAllocatedValue = getFirstValue(row.qtyAllocated, row.QTY_ALLOCATED, row.qtyAlloc, row.allocatedQty, row.ALLOCATED_QTY, 0);
     const qtyAvailableValue = getFirstValue(row.qtyAvailable, row.QTY_AVAILABLE, row.remainingAvailable, row.REMAINING_AVAILABLE, qtyHandValue);
@@ -1214,9 +1219,8 @@ useEffect(() => {
       ...row,
       lnNo: getFirstValue(row.lnNo, row.lineNo, row.line_no, row.priorityNo, index + 1),
       itemCode: getFirstValue(row.itemCode, row.item_code, row.ITEM_CODE, issueItem.itemCode),
-      whCode: getFirstValue(row.whCode, row.WH_CODE, row.whouseCode, row.warehouseCode, state.WHcode),
-      whouseCode: getFirstValue(row.whouseCode, row.whCode, row.warehouseCode, state.WHcode),
-      locCode: getFirstValue(row.locCode, row.LOC_CODE, row.locationCode, state.locCode),
+      whCode: stockLocation.whouseCode,
+      ...stockLocation,
       lotNo: getFirstValue(row.lotNo, row.LOT_NO),
       controlNo: getFirstValue(row.controlNo, row.CONTROL_NO, row.uniqueKey, row.unique_key),
       bbDate: formatDateOnly(getFirstValue(row.bbDate, row.BB_DATE, row.bestBeforeDate)),
@@ -1396,9 +1400,9 @@ useEffect(() => {
       const response = await fetchDataJson(endpoint, {
         userCode: state.userCode || user?.USER_CODE || user?.userCode || "",
         branchCode: state.branchCode || "",
-        whouseCode: item.whouseCode || item.whCode || state.WHcode || "",
-        whCode: item.whouseCode || item.whCode || state.WHcode || "",
-        locCode: item.locCode || state.locCode || "",
+        whouseCode: item.whouseCode || item.whCode || "",
+        whCode: item.whouseCode || item.whCode || "",
+        locCode: item.locCode || "",
         itemCode,
         search: itemCode,
         docType: "FGIS",
@@ -1553,10 +1557,7 @@ useEffect(() => {
           bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
           itemStat: item?.qstatCode ?? item?.itemStat ?? "",
 
-          whouseCode: item?.whouseCode ?? item?.whCode ?? state.WHcode ?? "",
-          whouseName: item?.whouseName ?? item?.whName ?? state.WHname ?? "",
-          locCode: item?.locCode ?? state.locCode ?? "",
-          locName: item?.locName ?? state.locName ?? "",
+          ...getDetailStockLocation(item),
 
           qtyOnHand: formatNumber(rawQtyHand, 6),
           uniqueKey: item?.uniqueKey ?? "",
@@ -1573,6 +1574,7 @@ useEffect(() => {
       })
     );
 
+    setShowTypeDropdown(false);
     setState((prev) => {
       const updated = [...(prev.detailRows || []), ...newRows];
       const totalQty = updated.reduce(
@@ -1743,8 +1745,9 @@ useEffect(() => {
     try {
       const response = await fetchDataJson("getInvLookupFG", {
         userCode: state.userCode,
+        branchCode: state.branchCode || "",
         whouseCode: state.WHcode || "",
-        locCode: state.locCode || "",
+        locCode: "",
         docType: "FGIS",
         tranType: "IL",
       });
@@ -1761,7 +1764,7 @@ useEffect(() => {
         Swal.fire({
           icon: "info",
           title: "FG Location Balance",
-          text: "No items with Quantity on Hand were found for the selected warehouse/location.",
+          text: "No items with Quantity on Hand were found for the selected warehouse.",
           timer: 3000,
           showConfirmButton: false,
         });
@@ -2201,8 +2204,8 @@ useEffect(() => {
             // FGIS sproc/table uses qty_hand as quantity.
             qtyHand: quantityValue,
 
-            whouseCode: row.whouseCode || WHcode || "",
-            locCode: row.locCode || locCode || "",
+            whouseCode: row.whouseCode || "",
+            locCode: row.locCode || "",
 
             acctCode: detailAcctCode || "",
             drAcctCode: wipDrAcctCode || "",
@@ -2772,10 +2775,7 @@ useEffect(() => {
       quantityPicked: formatNumber(getFirstValue(row.quantityPicked, row.qtyPicked, row.qty_picked, row.QTY_PICKED, 0), 6),
       balance: formatNumber(getFirstValue(row.balance, row.BALANCE, Math.max((parseFormattedNumber(quantityValue) || 0) - (parseFormattedNumber(getFirstValue(row.qtyPicked, row.quantityPicked, 0)) || 0), 0)), 6),
       pickingAllocations: Array.isArray(row.pickingAllocations) ? row.pickingAllocations : [],
-      whouseCode: getFirstValue(row.whouseCode, row.whCode, row.whouse_code, row.WHCode, state.WHcode),
-      whouseName: getFirstValue(row.whouseName, row.whName, row.whouse_name, row.WHName, state.WHname),
-      locCode: getFirstValue(row.locCode, row.LocCode, row.loc_code, state.locCode),
-      locName: getFirstValue(row.locName, row.LocName, row.loc_name, state.locName),
+      ...getDetailStockLocation(row),
       acctCode: getFirstValue(
         row.wipAcct,
         row.wip_acct,
@@ -3066,6 +3066,8 @@ useEffect(() => {
         ? allocationAmount / pickedQty
         : parseFormattedNumber(itemUnitCostValue) || 0;
     const firstAllocation = allocations[0] || {};
+    const allocationLocation = getDetailStockLocation(firstAllocation);
+    const itemLocation = getDetailStockLocation(item);
     const normalizedItem = normalizeWODetailRow(
       {
         ...item,
@@ -3084,10 +3086,7 @@ useEffect(() => {
         qstatCode: getFirstValue(firstAllocation.qualityStatus, firstAllocation.qstatCode, firstAllocation.qcStatus, item.qstatCode, item.itemStat),
         itemStat: getFirstValue(firstAllocation.qualityStatus, firstAllocation.qstatCode, firstAllocation.qcStatus, item.itemStat, item.qstatCode),
         bbDate: getFirstValue(firstAllocation.bestBeforeDate, firstAllocation.bbDate, firstAllocation.BB_DATE, item.bbDate, item.BB_DATE),
-        whouseCode: getFirstValue(firstAllocation.warehouseCode, firstAllocation.whouseCode, firstAllocation.whCode, item.whouseCode, item.whCode, state.WHcode),
-        whouseName: getFirstValue(firstAllocation.warehouseName, firstAllocation.whouseName, item.whouseName, state.WHname),
-        locCode: getFirstValue(firstAllocation.locationCode, firstAllocation.locCode, item.locCode, state.locCode),
-        locName: getFirstValue(firstAllocation.locationName, firstAllocation.locName, item.locName, state.locName),
+        ...(allocationLocation.whouseCode || allocationLocation.locCode ? allocationLocation : itemLocation),
       },
       selectedIndex,
     );
@@ -3626,10 +3625,7 @@ useEffect(() => {
       lotNo: "",
       bbDate: "",
       itemStat: "",
-      whouseCode: state.WHcode || "",
-      whouseName: state.WHname || "",
-      locCode: state.locCode || "",
-      locName: state.locName || "",
+      ...getDetailStockLocation(),
       drAcctCode: "",
       drAcctName: "",
       rcCode: rcCode || "",
@@ -3804,8 +3800,8 @@ useEffect(() => {
       lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: rowLocked })}</td>,
       bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={row.bbDate || ""} readOnly={rowLocked} disabled={rowLocked} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, "bbDate", { readOnly: rowLocked })} /></td>,
       itemStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemStat", { readOnly: rowLocked })}</td>,
-      whouseCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("whouseCode", { readOnly: true, value: row.whouseName ?? row.whName ?? row.whouseCode ?? row.WHname ?? row.WHcode ?? "" })}</td>,
-      locCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("locCode", { readOnly: true, value: row.locName ?? row.locCode ?? "" })}</td>,
+      whouseCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("whouseCode", { readOnly: true, value: getFirstValue(row.whouseName, row.whName, row.whouseCode) })}</td>,
+      locCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("locCode", { readOnly: true, value: getFirstValue(row.locName, row.locCode) })}</td>,
       drAcctCode: () => lookupCell("drAcctCode", row.drAcctCode || "", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "drAcct" })),
       rcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcCode", { readOnly: rowLocked, value: row.rcCode || rcCode || "" })}</td>,
       slCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slCode", { readOnly: rowLocked })}</td>,

@@ -48,6 +48,7 @@ const GlobalGLPostingModalv1 = ({
   onPost,
   onViewDocument,
   remoteLoading = false,
+  postingProgressMessage,
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -64,6 +65,9 @@ const GlobalGLPostingModalv1 = ({
   const [mobileViewMode, setMobileViewMode] = useState("card");
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [postingStartedAt, setPostingStartedAt] = useState(null);
+  const [estimatedProgress, setEstimatedProgress] = useState(5);
+  const postingInFlight = useRef(false);
   const hasPasswordValue = String(userPassword ?? "").length > 0;
 
   const firstFocusableRef = useRef(null);
@@ -91,10 +95,20 @@ const GlobalGLPostingModalv1 = ({
   }, [selected]);
 
   const handleClose = useCallback(() => {
+    if (postingInFlight.current) return;
     setIsMinimized(false);
     setIsMaximized(false);
     onClose?.();
   }, [onClose]);
+
+  useEffect(() => {
+    if (postingStartedAt === null) return;
+    const timer = window.setInterval(() => {
+      const elapsed = Date.now() - postingStartedAt;
+      setEstimatedProgress(Math.min(90, 5 + Math.floor(85 * (1 - Math.exp(-elapsed / 16000)))));
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, [postingStartedAt]);
 
 useEffect(() => {
   firstFocusableRef.current?.focus();
@@ -255,8 +269,14 @@ useEffect(() => {
   const clearAllFilters = () => setFilters({});
 
   const handleGetSelected = async () => {
+    if (postingInFlight.current) return;
     if (!selected.length) return useSwalErrorAlert("Please select at least one transaction to post.");
     if (!String(userPassword ?? "").trim()) return useSwalErrorAlert("Password is required.");
+    if (postingProgressMessage) {
+      postingInFlight.current = true;
+      setEstimatedProgress(5);
+      setPostingStartedAt(Date.now());
+    }
     try {
       const result = await onPost?.(selected, userPassword);
       if (result === false || (result?.success === false && /incorrect password/i.test(result?.message || ""))) {
@@ -266,6 +286,11 @@ useEffect(() => {
     } catch (error) {
       useSwalErrorAlert(error?.response?.data?.message || "Failed to post transaction.");
       setUserPassword("");
+    } finally {
+      if (postingProgressMessage) {
+        postingInFlight.current = false;
+        setPostingStartedAt(null);
+      }
     }
   };
 
@@ -371,6 +396,23 @@ useEffect(() => {
         {/* INLINE LOADING OVERLAY (PREVENTS BLACK BACKGROUND) */}
         {isLoading && (
           <LoadingSpinner />
+        )}
+        {postingStartedAt !== null && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-slate-950/15 p-4">
+            <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+              <div className="flex items-center justify-between gap-3" role="status">
+                <span className="font-semibold text-slate-800">Posting transaction</span>
+                <span className="text-sm tabular-nums text-blue-700">Est. {estimatedProgress}%</span>
+              </div>
+              <progress
+                aria-label="Estimated posting progress"
+                className="mt-3 h-2 w-full accent-blue-600"
+                max={100}
+                value={estimatedProgress}
+              />
+              <p className="mt-2 text-xs text-slate-600">{postingProgressMessage}</p>
+            </div>
+          </div>
         )}
 
         <div className="sticky top-0 z-20">
@@ -577,7 +619,7 @@ useEffect(() => {
                   />
                   <button type="button" disabled={selected.length === 0} onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1.5 text-gray-400 disabled:cursor-not-allowed"><FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} /></button>
                 </div>
-                <button disabled={selected.length === 0} onClick={handleGetSelected} className="px-4 py-1.5 bg-blue-600 text-white rounded-md disabled:opacity-50 hover:bg-blue-700 transition">{btnCaption} {selected.length ? `(${selected.length})` : ""}</button>
+                <button disabled={selected.length === 0 || postingStartedAt !== null} onClick={handleGetSelected} className="px-4 py-1.5 bg-blue-600 text-white rounded-md disabled:opacity-50 hover:bg-blue-700 transition">{btnCaption} {selected.length ? `(${selected.length})` : ""}</button>
                 <button onClick={handleClose} className="px-4 py-1.5 bg-gray-100 text-gray-800 border rounded-md hover:bg-gray-200">Cancel</button>
               </div>
             </div>
